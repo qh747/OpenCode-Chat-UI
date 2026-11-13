@@ -17,16 +17,27 @@ export function App({ state, send, composerHandleRef }: Props) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickToBottom = useRef(true);
   const consumedPicks = useRef(new Set<string>());
+  const consumedImages = useRef(new Set<string>());
 
   // Feed file-picker results into composer chips.
   useEffect(() => {
     for (const [requestId, paths] of Object.entries(state.pickedPaths)) {
       if (!consumedPicks.current.has(requestId)) {
         consumedPicks.current.add(requestId);
-        composerHandleRef.current?.setChips(paths);
+        composerHandleRef.current?.setChips(paths.map((path) => ({ path })));
       }
     }
   }, [state.pickedPaths, composerHandleRef]);
+
+  // Feed staged paste/drop images into composer chips.
+  useEffect(() => {
+    for (const [requestId, image] of Object.entries(state.stagedImages)) {
+      if (!consumedImages.current.has(requestId)) {
+        consumedImages.current.add(requestId);
+        composerHandleRef.current?.setChips([{ path: image.path, name: image.name, image: true }]);
+      }
+    }
+  }, [state.stagedImages, composerHandleRef]);
 
   // Auto-scroll while streaming (only if the user is near the bottom).
   useEffect(() => {
@@ -50,6 +61,12 @@ export function App({ state, send, composerHandleRef }: Props) {
 
   const activeModel = state.model ?? state.catalog.defaultModel;
   const agent = state.agent ?? state.catalog.agents[0]?.id;
+  const activeModelInfo = activeModel
+    ? state.catalog.models.find(
+        (m) => m.providerID === activeModel.providerID && m.modelID === activeModel.id,
+      )
+    : undefined;
+  const variants = activeModelInfo?.variants ?? [];
 
   return (
     <div className="app">
@@ -79,7 +96,7 @@ export function App({ state, send, composerHandleRef }: Props) {
             onChange={(event) => {
               const [providerID, id] = event.target.value.split("/");
               if (providerID && id) {
-                send({ kind: "setModel", providerID, id });
+                send({ kind: "setModel", providerID, id, variant: undefined });
               }
             }}
             title="Model"
@@ -95,6 +112,31 @@ export function App({ state, send, composerHandleRef }: Props) {
             ))}
           </select>
         )}
+        {state.connection === "connected" && variants.length > 0 && (
+          <select
+            className="picker"
+            value={state.model?.variant ?? ""}
+            onChange={(event) => {
+              if (!activeModel) {
+                return;
+              }
+              send({
+                kind: "setModel",
+                providerID: activeModel.providerID,
+                id: activeModel.id,
+                variant: event.target.value || undefined,
+              });
+            }}
+            title="Reasoning effort"
+          >
+            <option value="">effort: default</option>
+            {variants.map((v) => (
+              <option key={v.id} value={v.id}>
+                effort: {v.id}
+              </option>
+            ))}
+          </select>
+        )}
         <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title="New session">
           ＋
         </button>
@@ -102,6 +144,9 @@ export function App({ state, send, composerHandleRef }: Props) {
 
       {state.connection === "starting" && (
         <div className="banner info">Starting opencode server…</div>
+      )}
+      {state.connection === "connected" && state.compatWarning && (
+        <div className="banner warn">{state.compatWarning}</div>
       )}
       {state.connection === "error" && (
         <div className="banner error">
@@ -128,7 +173,11 @@ export function App({ state, send, composerHandleRef }: Props) {
             stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
           }}
         >
-          <MessageList messages={state.messages} busy={state.busy} onRetry={() => undefined} />
+          <MessageList
+          messages={state.messages}
+          busy={state.busy}
+          onRewind={(messageID) => send({ kind: "rewindTo", messageID })}
+        />
         </div>
       )}
 

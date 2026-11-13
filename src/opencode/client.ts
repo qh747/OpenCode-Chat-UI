@@ -186,11 +186,24 @@ export class OpencodeClient {
   }
 
   async setModel(id: string, model: ModelRef): Promise<void> {
+    const ref: Record<string, string> = { providerID: model.providerID, id: model.id };
+    if (model.variant) {
+      ref.variant = model.variant;
+    }
     await this.request<unknown>(
       "POST",
       `/api/session/${encodeURIComponent(id)}/model`,
-      { model: { providerID: model.providerID, id: model.id } },
+      { model: ref },
     );
+  }
+
+  /** Fork (copy) a session; returns the new session. */
+  async forkSession(id: string): Promise<SessionInfo> {
+    const result = await this.request<{ data: SessionInfo }>(
+      "POST",
+      `/api/session/${encodeURIComponent(id)}/fork`,
+    );
+    return result.data;
   }
 
   async agents(): Promise<{ data: AgentInfo[] }> {
@@ -245,6 +258,27 @@ export class OpencodeClient {
     return this.request<AssistantMessage>(
       "GET",
       `/api/session/${encodeURIComponent(sessionID)}/message/${encodeURIComponent(messageID)}`,
+    );
+  }
+
+  /** Stage a revert of everything after the given message (call commit after). */
+  async revertStage(
+    sessionID: string,
+    messageID: string,
+  ): Promise<{ data: { messageID: string; files?: FileDiffInfo[] } }> {
+    return this.request(
+      "POST",
+      `/api/session/${encodeURIComponent(sessionID)}/revert/stage`,
+      { messageID },
+    );
+  }
+
+  /** Commit the previously staged revert (rolls back files and messages). */
+  async revertCommit(sessionID: string): Promise<void> {
+    await this.request<unknown>(
+      "POST",
+      `/api/session/${encodeURIComponent(sessionID)}/revert/commit`,
+      {},
     );
   }
 }

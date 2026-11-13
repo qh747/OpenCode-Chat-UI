@@ -28,7 +28,8 @@ export interface Snapshot {
 }
 
 export type HostToWeb =
-  | { kind: "state"; state: ConnectionState; version?: string; error?: string }
+  | { kind: "state"; state: ConnectionState; version?: string; error?: string; compatWarning?: string }
+  | { kind: "imageStaged"; requestId: string; path: string; name: string }
   | { kind: "snapshot"; snapshot: Snapshot }
   | { kind: "sessionMeta"; sessionID?: string; title?: string; agent?: string; model?: ModelRef; busy?: boolean }
   | { kind: "textStarted"; sessionID: string; messageID: string }
@@ -50,7 +51,9 @@ export type WebToHost =
   | { kind: "newSession" }
   | { kind: "switchSession"; id: string }
   | { kind: "setAgent"; agent: string }
-  | { kind: "setModel"; providerID: string; id: string }
+  | { kind: "setModel"; providerID: string; id: string; variant?: string }
+  | { kind: "stageImage"; requestId: string; name: string; dataBase64: string }
+  | { kind: "rewindTo"; messageID: string }
   | { kind: "permissionReply"; requestID: string; decision: "once" | "always" | "reject" }
   | { kind: "openDiff"; file: string }
   | { kind: "keepFile"; file: string }

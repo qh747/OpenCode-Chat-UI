@@ -128,7 +128,7 @@ function ReasoningBlock({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ message }: { message: MessageInfo }) {
+function UserMessage({ message, onRewind }: { message: MessageInfo; onRewind: (messageID: string) => void }) {
   if (message.type !== "user") {
     return null;
   }
@@ -141,6 +141,13 @@ function UserMessage({ message }: { message: MessageInfo }) {
           📄 {file.name ?? file.source?.type}
         </span>
       ))}
+      <button
+        className="rewind-btn"
+        onClick={() => onRewind(user.id)}
+        title="Rewind to before this message (removes later messages, reverts their file changes)"
+      >
+        ⏪
+      </button>
     </div>
   );
 }
@@ -148,10 +155,10 @@ function UserMessage({ message }: { message: MessageInfo }) {
 interface Props {
   messages: MessageInfo[];
   busy: boolean;
-  onRetry: () => void;
+  onRewind: (messageID: string) => void;
 }
 
-export function MessageList({ messages, busy }: Props) {
+export function MessageList({ messages, busy, onRewind }: Props) {
   const visible = messages.filter(
     (m) => m.type === "user" || m.type === "assistant",
   );
@@ -159,7 +166,7 @@ export function MessageList({ messages, busy }: Props) {
     <div className="message-list" id="message-list">
       {visible.map((message) =>
         message.type === "user" ? (
-          <UserMessage key={message.id} message={message} />
+          <UserMessage key={message.id} message={message} onRewind={onRewind} />
         ) : (
           <AssistantMessage
             key={message.id}

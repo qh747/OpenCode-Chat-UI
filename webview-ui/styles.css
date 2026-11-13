@@ -83,6 +83,10 @@ body {
 .banner.info {
   color: var(--muted);
 }
+.banner.warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
 .banner.error {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 8%, transparent);
@@ -561,6 +565,32 @@ body {
 }
 .chip-remove:hover {
   color: var(--danger);
+}
+.image-notice {
+  color: var(--warn);
+  font-size: 11px;
+  padding: 4px 2px 0;
+}
+
+/* rewind button on user messages */
+.rewind-btn {
+  display: block;
+  margin-top: 4px;
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.msg.user:hover .rewind-btn {
+  opacity: 1;
+}
+.rewind-btn:hover {
+  color: #ffffff;
 }
 .composer-box {
   position: relative;

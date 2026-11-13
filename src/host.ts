@@ -36,6 +36,7 @@ export class OpencodeHost {
   readonly onError = this.errorEmitter.event;
 
   private lastErrorDetail: string | undefined;
+  private compatWarningDetail: string | undefined;
 
   constructor(private readonly options: HostOptions) {
     this.folderPath = toServerPath(options.folder.uri.fsPath);
@@ -90,6 +91,11 @@ export class OpencodeHost {
     return this.lastErrorDetail;
   }
 
+  /** Non-blocking warning when the connected server major version is untested. */
+  get compatWarning(): string | undefined {
+    return this.compatWarningDetail;
+  }
+
   log(line: string): void {
     this.options.output.appendLine(line);
   }
@@ -107,6 +113,12 @@ export class OpencodeHost {
         baseUrl: server.url,
         password: server.password,
       });
+      // Warn (but keep working) when the server major version is outside the
+      // range this extension was verified against (v2.x API surface).
+      const major = Number.parseInt(server.version, 10);
+      this.compatWarningDetail = Number.isNaN(major) || major === 2
+        ? undefined
+        : `This extension targets the opencode v2 API but server reports v${server.version}. Things may break — consider updating the extension.`;
       this.eventStream = new OpencodeEventStream({
         baseUrl: server.url,
         password: server.password,

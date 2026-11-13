@@ -11,10 +11,11 @@ export interface ChatState {
   connection: ConnectionState;
   version?: string;
   connectionError?: string;
+  compatWarning?: string;
   sessionID?: string;
   title?: string;
   agent?: string;
-  model?: { providerID: string; id: string };
+  model?: { providerID: string; id: string; variant?: string };
   busy: boolean;
   messages: MessageInfo[];
   pending: PermissionRequest[];
@@ -23,6 +24,7 @@ export interface ChatState {
   errors: string[];
   fileResults: Record<string, { path: string; name: string }[]>;
   pickedPaths: Record<string, string[]>;
+  stagedImages: Record<string, { path: string; name: string }>;
 }
 
 export const initialState: ChatState = {
@@ -35,6 +37,7 @@ export const initialState: ChatState = {
   errors: [],
   fileResults: {},
   pickedPaths: {},
+  stagedImages: {},
 };
 
 function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
@@ -62,6 +65,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         connection: message.state,
         version: message.version ?? state.version,
         connectionError: message.error,
+        compatWarning: message.compatWarning,
       };
     }
     case "snapshot":
@@ -173,6 +177,14 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       return { ...state, fileResults: { ...state.fileResults, [message.requestId]: message.results } };
     case "pickedPaths":
       return { ...state, pickedPaths: { ...state.pickedPaths, [message.requestId]: message.paths } };
+    case "imageStaged":
+      return {
+        ...state,
+        stagedImages: {
+          ...state.stagedImages,
+          [message.requestId]: { path: message.path, name: message.name },
+        },
+      };
     default:
       return state;
   }

@@ -91,11 +91,15 @@ export function Welcome({ version }: { version?: string }) {
   return (
     <div className="welcome">
       <div className="welcome-logo" aria-hidden="true">
+        {/* OpenCode mark: nested square frame + solid center block */}
         <svg width="72" height="72" viewBox="0 0 24 24" fill="none">
-          <rect x="2.5" y="2.5" width="19" height="19" rx="4.5" stroke="currentColor" strokeWidth="1.4" />
-          <path d="M9.3 9.3 6.9 12l2.4 2.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M14.7 9.3 17.1 12l-2.4 2.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M11.2 15.6h1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M6 6h12v12H6V6Zm2.2 2.2v7.6h7.6V8.2H8.2Z"
+            fill="currentColor"
+          />
+          <rect x="9.4" y="9.4" width="5.2" height="5.2" fill="currentColor" />
         </svg>
       </div>
       <h1 className="welcome-title">OpenCode</h1>

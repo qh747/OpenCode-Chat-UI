@@ -1,3 +1,9 @@
+export interface ChipInput {
+  path: string;
+  name?: string;
+  image?: boolean;
+}
+
 export interface ComposerHandle {
-  setChips: (paths: string[]) => void;
+  setChips: (items: ChipInput[]) => void;
 }

@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
+import { promises as fsp } from "node:fs";
+import * as os from "node:os";
+import * as nodePath from "node:path";
 import type { OpencodeHost } from "../host";
 import { toServerPath } from "../host";
 import type {
@@ -8,6 +11,7 @@ import type {
   MessageInfo,
   PermissionRequest,
   PromptFileAttachment,
+  UserMessage,
 } from "../opencode/types";
 import { reverseApply } from "../util/diffapply";
 import type { HostToWeb, WebToHost } from "./protocol";
@@ -34,7 +38,7 @@ export class ChatController implements vscode.Disposable {
   private busy = false;
   private title: string | undefined;
   private agent: string | undefined;
-  private model: { providerID: string; id: string } | undefined;
+  private model: { providerID: string; id: string; variant?: string } | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private permissionTimer: ReturnType<typeof setInterval> | undefined;
   private fileCache: { path: string; name: string }[] | undefined;
@@ -108,8 +112,18 @@ export class ChatController implements vscode.Disposable {
         break;
       case "setModel":
         await this.safeCall(() =>
-          this.client()?.setModel(this.sessionId ?? "", { providerID: web.providerID, id: web.id }),
+          this.client()?.setModel(this.sessionId ?? "", {
+            providerID: web.providerID,
+            id: web.id,
+            variant: web.variant,
+          }),
         );
+        break;
+      case "stageImage":
+        await this.stageImage(web.requestId, web.name, web.dataBase64);
+        break;
+      case "rewindTo":
+        await this.rewindTo(web.messageID);
         break;
       case "permissionReply":
         await this.replyPermission(web.requestID, web.decision);
@@ -172,6 +186,7 @@ export class ChatController implements vscode.Disposable {
       state: this.host.currentState,
       version: this.host.server?.version,
       error: this.host.lastError,
+      compatWarning: this.host.compatWarning,
     });
   }
 
@@ -297,6 +312,109 @@ export class ChatController implements vscode.Disposable {
     await this.send("Proceed with the plan.", []);
   }
 
+  /** Persist a pasted/dropped image to a temp file the server can read. */
+  private async stageImage(requestId: string, name: string, dataBase64: string): Promise<void> {
+    try {
+      const dir = nodePath.join(os.tmpdir(), "opencode-vscode-attachments");
+      await fsp.mkdir(dir, { recursive: true });
+      const safeName = name.replace(/[^\w.-]/g, "_") || "image.png";
+      const file = nodePath.join(dir, `${Date.now()}-${randomBytes(4).toString("hex")}-${safeName}`);
+      await fsp.writeFile(file, Buffer.from(dataBase64, "base64"));
+      this.post({ kind: "imageStaged", requestId, path: file, name: safeName });
+    } catch (error) {
+      this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  /** Rewind the session to just before the given message, reverting its file changes. */
+  private async rewindTo(messageID: string): Promise<void> {
+    const client = this.client();
+    if (!client || !this.sessionId) {
+      return;
+    }
+    const confirm = await vscode.window.showWarningMessage(
+      "Rewind to before this message? Later messages are removed and their file changes are reverted.",
+      { modal: true },
+      "Rewind",
+    );
+    if (confirm !== "Rewind") {
+      return;
+    }
+    await this.safeCall(async () => {
+      await client.revertStage(this.sessionId ?? "", messageID);
+      await client.revertCommit(this.sessionId ?? "");
+      this.textBuffers.clear();
+      this.reasoningBuffers.clear();
+      this.dismissed.clear();
+      await this.refreshMessages();
+      await this.refreshDiffs();
+    });
+  }
+
+  /** Fork (copy) a session and switch to the copy. */
+  async forkSession(id: string): Promise<void> {
+    const client = this.client();
+    if (!client) {
+      return;
+    }
+    try {
+      const forked = await client.forkSession(id);
+      await this.switchSession(forked.id);
+      void vscode.commands.executeCommand("opencode.chat.focus");
+    } catch (error) {
+      this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  /** Export the session transcript as a Markdown file. */
+  async exportSession(id: string): Promise<void> {
+    const client = this.client();
+    if (!client) {
+      return;
+    }
+    try {
+      const page = await client.listMessages(id);
+      const lines: string[] = [`# OpenCode session`, ""];
+      for (const message of page.data) {
+        if (message.type === "user") {
+          const user = message as UserMessage;
+          lines.push(`## 🧑 User`, "", user.text, "");
+          for (const file of user.files ?? []) {
+            if (file.name) {
+              lines.push(`- 📄 \`${file.name}\``);
+            }
+          }
+          lines.push("");
+        } else if (message.type === "assistant") {
+          const assistant = message as AssistantMessage;
+          lines.push(`## 🤖 Assistant`, "");
+          for (const part of assistant.content) {
+            if (part.type === "text" && part.text) {
+              lines.push(part.text, "");
+            } else if (part.type === "reasoning" && part.text) {
+              lines.push(`<details><summary>Thinking</summary>`, "", part.text, "", `</details>`, "");
+            } else if (part.type === "tool") {
+              const summary = toolLine(part.name, part.state.input);
+              lines.push(`- \`${part.name}\` ${summary}`);
+            }
+          }
+          lines.push("");
+        }
+      }
+      const target = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.joinPath(this.folder.uri, "opencode-session.md"),
+        filters: { Markdown: ["md"] },
+      });
+      if (!target) {
+        return;
+      }
+      await vscode.workspace.fs.writeFile(target, Buffer.from(lines.join("\n"), "utf8"));
+      void vscode.window.showInformationMessage(`Session exported to ${target.fsPath}`);
+    } catch (error) {
+      this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   // --- event handling ---------------------------------------------------
 
   private handleEvent(event: { type: string; data: Record<string, unknown> }): void {
@@ -391,9 +509,9 @@ export class ChatController implements vscode.Disposable {
           typeof data.model === "object" &&
           data.model !== null
         ) {
-          const model = data.model as { providerID?: string; id?: string };
+          const model = data.model as { providerID?: string; id?: string; variant?: string };
           if (model.providerID && model.id) {
-            this.model = { providerID: model.providerID, id: model.id };
+            this.model = { providerID: model.providerID, id: model.id, variant: model.variant };
             this.post({ kind: "sessionMeta", sessionID: this.sessionId, model: this.model });
           }
         }
@@ -775,6 +893,18 @@ function pathBasename(p: string): string {
   const normalized = p.replace(/\\/g, "/");
   const index = normalized.lastIndexOf("/");
   return index >= 0 ? normalized.slice(index + 1) : normalized;
+}
+
+function toolLine(tool: string, input: Record<string, unknown> | undefined): string {
+  const candidates = ["file_path", "path", "command", "description", "pattern", "url"];
+  for (const key of candidates) {
+    const value = input?.[key];
+    if (typeof value === "string" && value) {
+      const short = value.length > 100 ? `${value.slice(0, 100)}…` : value;
+      return `— ${short}`;
+    }
+  }
+  return "";
 }
 
 function relativeTo(p: string, folder: string): string {

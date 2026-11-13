@@ -61,12 +61,17 @@ export interface ProviderInfo {
   canonical?: string;
 }
 
+export interface ModelVariant {
+  id: string;
+}
+
 export interface ModelInfo {
   providerID: string;
   modelID: string;
   name: string;
   family?: string;
   type?: string;
+  variants?: ModelVariant[];
 }
 
 /** POST /api/session/{id}/prompt body attachment (only `uri` is required). */

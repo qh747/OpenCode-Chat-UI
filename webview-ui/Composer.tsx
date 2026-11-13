@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "./state";
-import type { ComposerHandle } from "./composerTypes";
+import type { ChipInput, ComposerHandle } from "./composerTypes";
+
+const MAX_IMAGES = 6;
 
 interface ComposerProps {
   dispatch: Dispatch;
@@ -13,13 +15,14 @@ interface ComposerProps {
   handleRef?: (handle: ComposerHandle) => void;
 }
 
-interface Chip {
-  path: string;
+interface Chip extends ChipInput {
+  key: string;
 }
 
 export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort, handleRef }: ComposerProps) {
   const [text, setText] = useState("");
   const [chips, setChips] = useState<Chip[]>([]);
+  const [imageNotice, setImageNotice] = useState<string | undefined>();
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionResults, setMentionResults] = useState<{ path: string; name: string }[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -28,10 +31,13 @@ export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort,
 
   useEffect(() => {
     handleRef?.({
-      setChips: (paths) => {
+      setChips: (items) => {
         setChips((current) => {
           const known = new Set(current.map((c) => c.path));
-          return [...current, ...paths.filter((p) => !known.has(p)).map((p) => ({ path: p }))];
+          const additions = items
+            .filter((item) => !known.has(item.path))
+            .map((item) => ({ ...item, key: `${item.path}-${Date.now()}-${Math.random()}` }));
+          return [...current, ...additions];
         });
         textareaRef.current?.focus();
       },
@@ -82,9 +88,52 @@ export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort,
     setText((current) => current.replace(/@([^\s@]*)$/, ""));
     setMentionOpen(false);
     setChips((current) =>
-      current.some((c) => c.path === result.path) ? current : [...current, { path: result.path }],
+      current.some((c) => c.path === result.path) ? current : [...current, { ...result, key: result.path }],
     );
     textareaRef.current?.focus();
+  };
+
+  /** Read an image File and ask the host to stage it as an attachable temp file. */
+  const stageImageFile = (file: File) => {
+    const imageChips = chips.filter((c) => c.image).length;
+    if (imageChips >= MAX_IMAGES) {
+      setImageNotice(`Maximum ${MAX_IMAGES} images per message.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+      const requestId = `img-${counter.current++}`;
+      dispatch({
+        kind: "stageImage",
+        requestId,
+        name: file.name || `pasted-image.${file.type.split("/")[1] ?? "png"}`,
+        dataBase64: base64,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    for (const item of event.clipboardData.items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          event.preventDefault();
+          stageImageFile(file);
+        }
+      }
+    }
+  };
+
+  const onDrop = (event: React.DragEvent<HTMLTextAreaElement>) => {
+    for (const file of event.dataTransfer.files) {
+      if (file.type.startsWith("image/")) {
+        event.preventDefault();
+        stageImageFile(file);
+      }
+    }
   };
 
   const doSend = () => {
@@ -96,6 +145,7 @@ export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort,
     setText("");
     setChips([]);
     setMentionOpen(false);
+    setImageNotice(undefined);
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -118,11 +168,11 @@ export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort,
       {chips.length > 0 && (
         <div className="chips-row">
           {chips.map((chip) => (
-            <span key={chip.path} className="chip" title={chip.path}>
-              📄 {fileName(chip.path)}
+            <span key={chip.key} className="chip" title={chip.path}>
+              {chip.image ? "🖼" : "📄"} {chip.name ?? fileName(chip.path)}
               <button
                 className="chip-remove"
-                onClick={() => setChips((current) => current.filter((c) => c.path !== chip.path))}
+                onClick={() => setChips((current) => current.filter((c) => c.key !== chip.key))}
                 aria-label="Remove attachment"
               >
                 ×
@@ -137,7 +187,9 @@ export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort,
           value={text}
           onChange={(event) => handleChange(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Build anything…  (@ to attach files)"
+          onPaste={onPaste}
+          onDrop={onDrop}
+          placeholder="Build anything…  (@ files, paste images)"
           rows={1}
           disabled={!canSend}
         />
@@ -165,6 +217,7 @@ export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort,
             </button>
           )}
         </div>
+        {imageNotice && <div className="image-notice">{imageNotice}</div>}
         {mentionOpen && (
           <div className="mention-list">
             {mentionResults.length === 0 ? (

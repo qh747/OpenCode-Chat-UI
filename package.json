@@ -2,12 +2,13 @@
   "name": "opencode-vscode",
   "displayName": "OpenCode for VS Code",
   "description": "A chat panel for your local opencode CLI: streaming replies, sessions tree, native diffs and permission prompts. Reuses your existing opencode login (including OpenCode Go subscriptions).",
-  "version": "0.1.0",
-  "publisher": "opencode-community",
+  "version": "0.2.0",
+  "publisher": "qh747",
   "license": "MIT",
+  "icon": "icons/marketplace.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/opencode-community/opencode-vscode"
+    "url": "https://github.com/qh747/opencode-vscode-plugin.git"
   },
   "engines": {
     "vscode": "^1.106.0"
@@ -34,13 +35,6 @@
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "opencode",
-          "title": "OpenCode",
-          "icon": "icons/activity.svg"
-        }
-      ],
       "secondarySidebar": [
         {
           "id": "opencode-secondary",
@@ -50,13 +44,11 @@
       ]
     },
     "views": {
-      "opencode": [
+      "opencode-secondary": [
         {
           "id": "opencode.sessions",
           "name": "Sessions"
-        }
-      ],
-      "opencode-secondary": [
+        },
         {
           "id": "opencode.chat",
           "type": "webview",
@@ -96,6 +88,14 @@
       {
         "command": "opencode.deleteSession",
         "title": "OpenCode: Delete Session"
+      },
+      {
+        "command": "opencode.forkSession",
+        "title": "OpenCode: Fork Session"
+      },
+      {
+        "command": "opencode.exportSession",
+        "title": "OpenCode: Export Session as Markdown"
       },
       {
         "command": "opencode.openCLI",
@@ -140,6 +140,16 @@
           "command": "opencode.deleteSession",
           "when": "view == opencode.sessions && viewItem == opencode.session",
           "group": "inline@2"
+        },
+        {
+          "command": "opencode.forkSession",
+          "when": "view == opencode.sessions && viewItem == opencode.session",
+          "group": "opencode.session@1"
+        },
+        {
+          "command": "opencode.exportSession",
+          "when": "view == opencode.sessions && viewItem == opencode.session",
+          "group": "opencode.session@2"
         }
       ],
       "commandPalette": [
@@ -195,7 +205,8 @@
     "lint": "eslint src webview-ui test",
     "test": "node esbuild.mjs --tests && node out/tests.cjs",
     "vscode:prepublish": "npm run typecheck && npm run lint && npm run compile",
-    "package": "vsce package"
+    "package": "node scripts/release.mjs",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

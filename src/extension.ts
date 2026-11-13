@@ -101,6 +101,16 @@ export function activate(context: vscode.ExtensionContext): void {
         void tree.load();
       }
     }),
+    vscode.commands.registerCommand("opencode.forkSession", (node?: { session: SessionInfo }) => {
+      if (node) {
+        void chat.forkSession(node.session.id);
+      }
+    }),
+    vscode.commands.registerCommand("opencode.exportSession", (node?: { session: SessionInfo }) => {
+      if (node) {
+        void chat.exportSession(node.session.id);
+      }
+    }),
     vscode.commands.registerCommand("opencode.showLogs", () => output.show(true)),
     vscode.commands.registerCommand("opencode.restartServer", async () => {
       await host.restart();
