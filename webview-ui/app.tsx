@@ -100,7 +100,7 @@ export function App({ state, send, composerHandleRef }: Props) {
         {variants.length > 0 && activeModel && (
           <span className={`effort-wrap${effortOpen ? " open" : ""}`}>
             <Dropdown
-              value={state.model?.variant ?? ""}
+              value={variants.some((v) => v.id === state.model?.variant) ? (state.model?.variant ?? "") : ""}
               options={effortOptions}
               onChange={(value) =>
                 send({

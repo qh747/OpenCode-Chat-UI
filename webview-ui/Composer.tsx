@@ -59,6 +59,7 @@ export function Composer({
   const [mentionSuppressed, setMentionSuppressed] = useState(false);
   const [active, setActive] = useState<ActiveList>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const counter = useRef(0);
   const mentionRequestId = useRef("");
 
@@ -115,6 +116,14 @@ export function Composer({
       setActive(undefined);
     }
   }, [commandMode, mentionOpen, commandList.length, mentionList.length]);
+
+  // Keyboard navigation must scroll the highlighted row into view.
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    listRef.current?.querySelector(".mention-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   const requestMention = (query: string) => {
     const requestId = `mention-${counter.current++}`;
@@ -356,7 +365,7 @@ export function Composer({
         </div>
         {imageNotice && <div className="image-notice">{imageNotice}</div>}
         {commandMode && (
-          <div className="mention-list">
+          <div className="mention-list" ref={listRef}>
             {commandList.length === 0 ? (
               <div className="mention-empty">No matching commands</div>
             ) : (
@@ -374,7 +383,7 @@ export function Composer({
           </div>
         )}
         {mentionOpen && (
-          <div className="mention-list">
+          <div className="mention-list" ref={listRef}>
             {mentionList.length === 0 ? (
               <div className="mention-empty">No matching skills or files</div>
             ) : (

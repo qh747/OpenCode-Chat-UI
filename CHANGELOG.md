@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3
+
+- Slash-command and mention lists now scroll the keyboard-highlighted row into view.
+- Reasoning-effort picker shows "Default" instead of a placeholder when the session's variant does not exist on the newly selected model; styling matches the model picker with content-sized width.
+
 ## 0.3.2
 
 - Marketplace icon: center block switched to light gray (#CFCECD, the official ornate-light gray) so the nested-frame mark reads white frame / light-gray block on the white tile.
