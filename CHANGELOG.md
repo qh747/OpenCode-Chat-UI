@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed: agent picker was stuck on a single "build" entry — opencode 2.3.0's `/api/agent` (and the other location-scoped catalog endpoints) only return data for the deepObject query `?location[directory]=…`; the plain `?directory=` form returns empty lists (verified live). Fallback labels are capitalized (Build/Plan).
+- Composer action bar restyled: dropdowns are borderless/transparent with hover highlight, and their width grows with the model name instead of truncating.
+- Menu item styling unified across the agent / model / effort pickers.
+- `@` mention list no longer shows icons, matching the `/` command list style.
+
 ## 0.3.0
 
 Composer reworked to mirror the opencode desktop input:

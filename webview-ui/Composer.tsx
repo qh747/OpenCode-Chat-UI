@@ -384,7 +384,6 @@ export function Composer({
                   className={`mention-item${active?.kind === "mentions" && active.index === index ? " active" : ""}`}
                   onClick={() => acceptMention(option)}
                 >
-                  <span className="mention-icon">{option.kind === "skill" ? "📖" : "📄"}</span>
                   <span className="mention-name">
                     {option.kind === "skill" ? `@${option.label}` : option.label}
                   </span>

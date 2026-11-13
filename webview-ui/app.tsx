@@ -60,12 +60,18 @@ export function App({ state, send, composerHandleRef }: Props) {
   const variants = activeModelInfo?.variants ?? [];
 
   const agentWeight = (id: string): number => (id === "build" ? 0 : id === "plan" ? 1 : 2);
+  const capitalizeLabel = (id: string): string => (id ? `${id.charAt(0).toUpperCase()}${id.slice(1)}` : id);
   const agentOptions =
     state.catalog.agents.length > 0
       ? [...state.catalog.agents]
           .sort((a, b) => agentWeight(a.id) - agentWeight(b.id))
           .map((a) => ({ value: a.id, label: a.name }))
-      : [{ value: agent ?? "build", label: agent ?? "build" }];
+      : [
+          {
+            value: agent ?? "build",
+            label: capitalizeLabel(agent ?? "build"),
+          },
+        ];
   const effortOptions = [
     { value: "", label: "Default" },
     ...variants.map((v) => ({ value: v.id, label: v.id ? `${v.id.charAt(0).toUpperCase()}${v.id.slice(1)}` : v.id })),

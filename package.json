@@ -2,7 +2,7 @@
   "name": "opencode-vscode",
   "displayName": "OpenCode for VS Code",
   "description": "A chat panel for your local opencode CLI: streaming replies, sessions tree, native diffs and permission prompts. Reuses your existing opencode login (including OpenCode Go subscriptions).",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "qh747",
   "license": "MIT",
   "icon": "icons/marketplace.png",
