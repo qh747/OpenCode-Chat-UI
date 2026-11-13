@@ -40,7 +40,7 @@ npm run release      # typecheck + lint + tests + compile + VSIX
 The artifact lands at `dist/opencode-vscode-<version>.vsix`. Install it with:
 
 ```bash
-code --install-extension dist/opencode-vscode-0.2.0.vsix
+code --install-extension dist/opencode-vscode-<version>.vsix
 ```
 
 ## Settings

@@ -14,12 +14,15 @@ import { fileURLToPath } from "node:url";
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const SIZE = 256;
-// Official favicon.svg colors / geometry (512-canvas ratios):
-// bg #131010 full tile; white frame x 25..75%, y 18.75..81.25% (ring 12.5% of
-// width); block #5A5858 x 37.5..62.5%, y 43.75..68.75%.
-const BG = [0x13, 0x10, 0x10];
-const RING = [0xff, 0xff, 0xff];
+// Desktop-style light variant of the official mark: white tile, near-black
+// nested frame, gray center block — same geometry as the official favicon
+// (frame x 25..75%, y 18.75..81.25%, ring 12.5% of width, block
+// x 37.5..62.5%, y 43.75..68.75%). Rounded tile corners (22%), transparent
+// outside — matching the OpenCode desktop app icon style.
+const BG = [0xff, 0xff, 0xff];
+const RING = [0x13, 0x10, 0x10];
 const BLOCK = [0x5a, 0x58, 0x58];
+const RADIUS = Math.round(SIZE * 0.22);
 
 const px = new Uint8Array(SIZE * SIZE * 4);
 const fillRect = (x0, y0, x1, y1, [r, g, b], alpha = 255) => {
@@ -33,6 +36,21 @@ const fillRect = (x0, y0, x1, y1, [r, g, b], alpha = 255) => {
     }
   }
 };
+
+function insideRoundedTile(x, y) {
+  const maxX = SIZE - 1;
+  const maxY = SIZE - 1;
+  const inX = x >= RADIUS && x <= maxX - RADIUS;
+  const inY = y >= RADIUS && y <= maxY - RADIUS;
+  if (inX || inY) {
+    return true;
+  }
+  const cx = x < RADIUS ? RADIUS : maxX - RADIUS;
+  const cy = y < RADIUS ? RADIUS : maxY - RADIUS;
+  const dx = x - cx;
+  const dy = y - cy;
+  return dx * dx + dy * dy <= RADIUS * RADIUS;
+}
 
 fillRect(0, 0, SIZE, SIZE, BG);
 const fx0 = Math.round(SIZE * 0.25);
@@ -50,6 +68,16 @@ const by1 = Math.round(SIZE * 0.6875);
 fillRect(fx0, fy0, fx1, fy1, RING); // frame
 fillRect(hx0, hy0, hx1, hy1, BG); // hole
 fillRect(bx0, by0, bx1, by1, BLOCK); // center block
+
+// Round the tile corners: everything outside the rounded rect turns transparent.
+for (let y = 0; y < SIZE; y += 1) {
+  for (let x = 0; x < SIZE; x += 1) {
+    if (!insideRoundedTile(x, y)) {
+      const i = (y * SIZE + x) * 4;
+      px[i + 3] = 0;
+    }
+  }
+}
 
 // --- minimal PNG encoder ----------------------------------------------------
 const crcTable = new Int32Array(256);

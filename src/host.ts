@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { OpencodeClient } from "./opencode/client";
 import { OpencodeEventStream, type EventStreamState } from "./opencode/events";
-import type { AgentInfo, ModelInfo, ModelRef, OEvent } from "./opencode/types";
+import type { AgentInfo, CommandInfo, ModelInfo, ModelRef, OEvent, SkillInfo } from "./opencode/types";
 import { ServerManager, type ActiveServer, type ServerState } from "./server/manager";
 import type { Catalog } from "./webview/protocol";
 
@@ -21,7 +21,14 @@ export class OpencodeHost {
   private manager: ServerManager;
   private eventStream: OpencodeEventStream | undefined;
   private clientInstance: OpencodeClient | undefined;
-  private catalogCache: Catalog = { agents: [], models: [] };
+  private catalogCache: Catalog = {
+    agents: [],
+    models: [],
+    commands: [],
+    skills: [],
+    recentModels: [],
+    favoriteModels: [],
+  };
 
   private readonly stateEmitter = new vscode.EventEmitter<ServerState>();
   readonly onState = this.stateEmitter.event;
@@ -41,6 +48,14 @@ export class OpencodeHost {
   constructor(private readonly options: HostOptions) {
     this.folderPath = toServerPath(options.folder.uri.fsPath);
     this.manager = this.buildManager();
+    this.catalogCache.recentModels = this.options.context.workspaceState.get<ModelRef[]>(
+      this.recentKey(),
+      [],
+    );
+    this.catalogCache.favoriteModels = this.options.context.globalState.get<ModelRef[]>(
+      "opencode.favoriteModels",
+      [],
+    );
   }
 
   private buildManager(): ServerManager {
@@ -94,6 +109,37 @@ export class OpencodeHost {
   /** Non-blocking warning when the connected server major version is untested. */
   get compatWarning(): string | undefined {
     return this.compatWarningDetail;
+  }
+
+  private recentKey(): string {
+    return `opencode.recentModels:${this.folderPath}`;
+  }
+
+  /** Record a model selection as "recently used" (per workspace, max 5). */
+  recordModelUsed(ref: ModelRef): void {
+    const key = `${ref.providerID}/${ref.id}`;
+    const previous = this.catalogCache.recentModels;
+    const list = previous.filter((m) => `${m.providerID}/${m.id}` !== key);
+    list.unshift({ providerID: ref.providerID, id: ref.id, variant: ref.variant });
+    this.catalogCache.recentModels = list.slice(0, 5);
+    void this.options.context.workspaceState.update(this.recentKey(), this.catalogCache.recentModels);
+    if (this.catalogCache.recentModels.some((m) => `${m.providerID}/${m.id}` === key) !== previous.some((m) => `${m.providerID}/${m.id}` === key)) {
+      // Only resync when the entry is new to the list (avoid churn per send).
+      this.resyncEmitter.fire();
+    }
+  }
+
+  /** Toggle a model favorite (global, shared across workspaces). */
+  toggleFavoriteModel(ref: ModelRef): void {
+    const key = `${ref.providerID}/${ref.id}`;
+    const current = this.options.context.globalState.get<ModelRef[]>("opencode.favoriteModels", []);
+    const exists = current.some((m) => `${m.providerID}/${m.id}` === key);
+    const list = exists
+      ? current.filter((m) => `${m.providerID}/${m.id}` !== key)
+      : [...current, { providerID: ref.providerID, id: ref.id }];
+    void this.options.context.globalState.update("opencode.favoriteModels", list);
+    this.catalogCache.favoriteModels = list;
+    this.resyncEmitter.fire();
   }
 
   log(line: string): void {
@@ -170,6 +216,18 @@ export class OpencodeHost {
     } catch (error) {
       this.log(`models load failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+    let commands: CommandInfo[] = [];
+    try {
+      commands = (await client.commands()).data;
+    } catch (error) {
+      this.log(`commands load failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    let skills: SkillInfo[] = [];
+    try {
+      skills = (await client.skills()).data;
+    } catch (error) {
+      this.log(`skills load failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
     let defaultModel: ModelRef | undefined;
     try {
       defaultModel = await client.defaultModel(this.folderPath);
@@ -179,7 +237,15 @@ export class OpencodeHost {
     const fallbackModel = models[0]
       ? { providerID: models[0].providerID, id: models[0].modelID }
       : undefined;
-    this.catalogCache = { agents, models, defaultModel: defaultModel ?? fallbackModel };
+    this.catalogCache = {
+      agents,
+      models,
+      commands,
+      skills,
+      recentModels: this.catalogCache.recentModels,
+      favoriteModels: this.catalogCache.favoriteModels,
+      defaultModel: defaultModel ?? fallbackModel,
+    };
     this.resyncEmitter.fire();
   }
 

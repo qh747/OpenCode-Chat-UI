@@ -15,6 +15,7 @@ import type {
 } from "../opencode/types";
 import { reverseApply } from "../util/diffapply";
 import { orderMessages } from "../util/messages";
+import { resolveCommandAction } from "../util/commands";
 import type { HostToWeb, WebToHost } from "./protocol";
 
 interface Sink {
@@ -108,6 +109,9 @@ export class ChatController implements vscode.Disposable {
       case "showHistory":
         await vscode.commands.executeCommand("opencode.history");
         break;
+      case "runCommand":
+        await this.executeRunCommand(web.command, web.arguments);
+        break;
       case "switchSession":
         await this.switchSession(web.id);
         break;
@@ -122,6 +126,9 @@ export class ChatController implements vscode.Disposable {
             variant: web.variant,
           }),
         );
+        break;
+      case "toggleFavorite":
+        this.host.toggleFavoriteModel({ providerID: web.providerID, id: web.id });
         break;
       case "stageImage":
         await this.stageImage(web.requestId, web.name, web.dataBase64);
@@ -220,7 +227,7 @@ export class ChatController implements vscode.Disposable {
       this.dismissed.clear();
       this.busy = false;
       this.title = created.data.title;
-      this.agent = created.data.agent;
+      this.agent = created.data.agent ?? "build";
       this.model = created.data.model;
       await this.context.workspaceState.update(this.storageKey(), this.sessionId);
       await this.refreshSessionMeta();
@@ -292,6 +299,11 @@ export class ChatController implements vscode.Disposable {
     };
     this.messages.push(localMessage);
     this.post({ kind: "messages", sessionID: this.sessionId, messages: this.mergedMessages() });
+    // Remember the model actually in use for the picker's Recent section.
+    const usedModel = this.model ?? this.host.catalog.defaultModel;
+    if (usedModel) {
+      this.host.recordModelUsed(usedModel);
+    }
     await this.safeCall(() => client.prompt(this.sessionId ?? "", { text, files: attachments }));
   }
 
@@ -325,6 +337,47 @@ export class ChatController implements vscode.Disposable {
     this.agent = "build";
     this.post({ kind: "sessionMeta", sessionID: this.sessionId, agent: "build" });
     await this.send("Proceed with the plan.", []);
+  }
+
+  /** Execute a slash command: built-ins client-side, the rest on the server. */
+  private async executeRunCommand(command: string, args: string): Promise<void> {
+    const action = resolveCommandAction(command);
+    if (action.kind === "client") {
+      switch (action.action) {
+        case "new":
+          await this.newSession();
+          return;
+        case "undo": {
+          const lastUser = [...this.messages].reverse().find((m) => m.type === "user");
+          if (lastUser) {
+            await this.rewindTo(lastUser.id);
+          } else {
+            this.post({ kind: "error", message: "Nothing to undo yet." });
+          }
+          return;
+        }
+        case "export":
+          if (this.sessionId) {
+            await this.exportSession(this.sessionId);
+          }
+          return;
+        case "fork":
+          if (this.sessionId) {
+            await this.forkSession(this.sessionId);
+          }
+          return;
+        case "compact":
+          await this.safeCall(() => this.client()?.compact(this.sessionId ?? ""));
+          await this.refreshMessages();
+          return;
+      }
+    }
+    const client = this.client();
+    if (!client || !this.sessionId) {
+      return;
+    }
+    await this.safeCall(() => client.runCommand(this.sessionId ?? "", command, args));
+    await this.refreshMessages();
   }
 
   /** Persist a pasted/dropped image to a temp file the server can read. */

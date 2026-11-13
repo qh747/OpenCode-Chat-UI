@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "./state";
 import type { ChipInput, ComposerHandle } from "./composerTypes";
+import { BUILTIN_COMMANDS, filterCommands, mergeMentions, splitCommandInput } from "../src/util/commands";
+import type { CommandInfoLike } from "../src/util/commands";
+import type { CommandInfo, SkillInfo } from "../src/opencode/types";
 
 const MAX_IMAGES = 6;
+
+const BUILTIN_DESCRIPTIONS: Record<string, string> = {
+  new: "新会话",
+  undo: "撤销上一条消息",
+  compact: "总结会话以减少上下文大小",
+  fork: "从之前的消息创建新会话",
+  export: "将完整会话记录导出为 Markdown",
+};
 
 interface ComposerProps {
   dispatch: Dispatch;
@@ -12,6 +23,11 @@ interface ComposerProps {
   pickers?: React.ReactNode;
   /** fileResults from the store, keyed by requestId. */
   fileResults: Record<string, { path: string; name: string }[]>;
+  /** Slash commands from the server catalog. */
+  commands: CommandInfo[];
+  /** Skills from the server catalog. */
+  skills: SkillInfo[];
+  onRunCommand: (command: string, args: string) => void;
   onAbort: () => void;
   handleRef?: (handle: ComposerHandle) => void;
 }
@@ -20,15 +36,49 @@ interface Chip extends ChipInput {
   key: string;
 }
 
-export function Composer({ dispatch, busy, canSend, pickers, fileResults, onAbort, handleRef }: ComposerProps) {
+type ActiveList =
+  | { kind: "commands"; index: number }
+  | { kind: "mentions"; index: number }
+  | undefined;
+
+export function Composer({
+  dispatch,
+  busy,
+  canSend,
+  pickers,
+  fileResults,
+  commands,
+  skills,
+  onRunCommand,
+  onAbort,
+  handleRef,
+}: ComposerProps) {
   const [text, setText] = useState("");
   const [chips, setChips] = useState<Chip[]>([]);
   const [imageNotice, setImageNotice] = useState<string | undefined>();
-  const [mentionOpen, setMentionOpen] = useState(false);
-  const [mentionResults, setMentionResults] = useState<{ path: string; name: string }[]>([]);
+  const [mentionSuppressed, setMentionSuppressed] = useState(false);
+  const [active, setActive] = useState<ActiveList>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const counter = useRef(0);
   const mentionRequestId = useRef("");
+
+  const commandMode = text.startsWith("/");
+  const commandQuery = commandMode ? text.slice(1) : "";
+  const commandList = (() => {
+    const builtin = BUILTIN_COMMANDS.map((c) => ({ ...c, description: BUILTIN_DESCRIPTIONS[c.name] ?? "" }));
+    const merged: CommandInfoLike[] = [...builtin];
+    for (const c of commands) {
+      if (!merged.some((m) => m.name === c.name)) {
+        merged.push(c);
+      }
+    }
+    return filterCommands(merged, commandQuery.replace(/\s+.*$/, ""));
+  })();
+  const mentionQuery = /@([^\s@]*)$/.exec(text)?.[1];
+  const mentionOpen = !commandMode && !mentionSuppressed && mentionQuery !== undefined;
+  const mentionList = mentionOpen
+    ? mergeMentions(skills, fileResults[mentionRequestId.current] ?? [], mentionQuery ?? "")
+    : [];
 
   useEffect(() => {
     handleRef?.({
@@ -55,21 +105,20 @@ export function Composer({ dispatch, busy, canSend, pickers, fileResults, onAbor
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [text]);
 
-  // Pull mention search results from the shared store.
+  // Keep an active row selected when the lists change.
   useEffect(() => {
-    if (!mentionOpen) {
-      return;
+    if (commandMode) {
+      setActive({ kind: "commands", index: 0 });
+    } else if (mentionOpen) {
+      setActive({ kind: "mentions", index: 0 });
+    } else {
+      setActive(undefined);
     }
-    const results = fileResults[mentionRequestId.current];
-    if (results) {
-      setMentionResults(results);
-    }
-  }, [fileResults, mentionOpen]);
+  }, [commandMode, mentionOpen, commandList.length, mentionList.length]);
 
   const requestMention = (query: string) => {
     const requestId = `mention-${counter.current++}`;
     mentionRequestId.current = requestId;
-    setMentionResults([]);
     dispatch({ kind: "searchFiles", requestId, query });
   };
 
@@ -77,24 +126,29 @@ export function Composer({ dispatch, busy, canSend, pickers, fileResults, onAbor
     setText(value);
     const mentionMatch = /@([^\s@]*)$/.exec(value);
     const query = mentionMatch?.[1];
-    if (query !== undefined) {
-      setMentionOpen(true);
+    if (!value.startsWith("/") && query !== undefined) {
+      setMentionSuppressed(false);
       requestMention(query);
-    } else {
-      setMentionOpen(false);
     }
   };
 
-  const acceptMention = (result: { path: string; name: string }) => {
-    setText((current) => current.replace(/@([^\s@]*)$/, ""));
-    setMentionOpen(false);
-    setChips((current) =>
-      current.some((c) => c.path === result.path) ? current : [...current, { ...result, key: result.path }],
-    );
+  const acceptCommand = (name: string) => {
+    setText(`/${name} `);
     textareaRef.current?.focus();
   };
 
-  /** Read an image File and ask the host to stage it as an attachable temp file. */
+  const acceptMention = (option: { kind: "skill" | "file"; value: string; label: string }) => {
+    setText((current) => current.replace(/@([^\s@]*)$/, ""));
+    if (option.kind === "skill") {
+      setText((current) => `${current}@${option.label} `);
+    } else {
+      setChips((current) =>
+        current.some((c) => c.path === option.value) ? current : [...current, { path: option.value, key: option.value }],
+      );
+    }
+    textareaRef.current?.focus();
+  };
+
   const stageImageFile = (file: File) => {
     const imageChips = chips.filter((c) => c.image).length;
     if (imageChips >= MAX_IMAGES) {
@@ -137,31 +191,110 @@ export function Composer({ dispatch, busy, canSend, pickers, fileResults, onAbor
     }
   };
 
+  const acceptActive = () => {
+    if (active?.kind === "commands") {
+      const command = commandList[active.index];
+      if (command) {
+        acceptCommand(command.name);
+      }
+      return true;
+    }
+    if (active?.kind === "mentions") {
+      const option = mentionList[active.index];
+      if (option) {
+        acceptMention(option);
+      }
+      return true;
+    }
+    return false;
+  };
+
   const doSend = () => {
     const trimmed = text.trim();
-    if (!trimmed || busy) {
+    if (!trimmed || busy || !canSend) {
       return;
+    }
+    if (trimmed.startsWith("/")) {
+      const { command, arguments: args } = splitCommandInput(trimmed);
+      if (command) {
+        onRunCommand(command, args);
+        setText("");
+        setActive(undefined);
+        return;
+      }
     }
     dispatch({ kind: "send", text: trimmed, files: chips.map((c) => c.path) });
     setText("");
     setChips([]);
-    setMentionOpen(false);
-    setImageNotice(undefined);
+    setActive(undefined);
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
+      if (commandMode) {
+        // With arguments typed ("/review hello") Enter executes directly;
+        // bare "/name" accepts the highlighted suggestion into the input.
+        if (text.includes(" ")) {
+          const { command, arguments: args } = splitCommandInput(text);
+          if (command) {
+            onRunCommand(command, args);
+            setText("");
+            setActive(undefined);
+          }
+          return;
+        }
+        if (acceptActive()) {
+          return;
+        }
+        const bare = splitCommandInput(text).command;
+        if (bare) {
+          onRunCommand(bare, "");
+          setText("");
+          setActive(undefined);
+        }
+        return;
+      }
+      if (mentionOpen && acceptActive()) {
+        return;
+      }
       doSend();
+      return;
+    }
+    if (event.key === "ArrowDown" && active) {
+      event.preventDefault();
+      const length = active.kind === "commands" ? commandList.length : mentionList.length;
+      setActive({ ...active, index: (active.index + 1) % Math.max(length, 1) });
+      return;
+    }
+    if (event.key === "ArrowUp" && active) {
+      event.preventDefault();
+      const length = active.kind === "commands" ? commandList.length : mentionList.length;
+      setActive({ ...active, index: (active.index - 1 + length) % Math.max(length, 1) });
+      return;
+    }
+    if (event.key === "Tab" && (commandMode || mentionOpen)) {
+      event.preventDefault();
+      acceptActive();
       return;
     }
     if (event.key === "Tab" && event.shiftKey) {
       event.preventDefault();
       dispatch({ kind: "cycleAgent", direction: 1 });
     }
-    if (event.key === "Escape" && mentionOpen) {
-      setMentionOpen(false);
+    if (event.key === "Escape") {
+      if (mentionOpen) {
+        setMentionSuppressed(true);
+      }
     }
+  };
+
+  const commandDescription = (name: string): string => {
+    const builtin = BUILTIN_DESCRIPTIONS[name];
+    if (builtin) {
+      return builtin;
+    }
+    return commands.find((c) => c.name === name)?.description ?? "";
   };
 
   return (
@@ -190,7 +323,7 @@ export function Composer({ dispatch, busy, canSend, pickers, fileResults, onAbor
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onDrop={onDrop}
-          placeholder="Build anything…  (@ files, paste images)"
+          placeholder="随便问点什么， / 可查看命令， @ 可添加上下文..."
           rows={1}
           disabled={!canSend}
         />
@@ -205,25 +338,57 @@ export function Composer({ dispatch, busy, canSend, pickers, fileResults, onAbor
           {pickers}
           <span className="spacer" />
           {busy ? (
-            <button className="btn danger" onClick={onAbort} title="Stop the current turn">
-              ■ Stop
+            <button className="send-btn stop" onClick={onAbort} title="Stop the current turn">
+              ■
             </button>
           ) : (
-            <button className="btn primary" onClick={doSend} disabled={!text.trim() || !canSend}>
-              Send ⏎
+            <button
+              className="send-btn"
+              onClick={doSend}
+              disabled={!text.trim() || !canSend}
+              title="Send (Enter)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           )}
         </div>
         {imageNotice && <div className="image-notice">{imageNotice}</div>}
+        {commandMode && (
+          <div className="mention-list">
+            {commandList.length === 0 ? (
+              <div className="mention-empty">No matching commands</div>
+            ) : (
+              commandList.map((command, index) => (
+                <button
+                  key={command.name}
+                  className={`mention-item${active?.kind === "commands" && active.index === index ? " active" : ""}`}
+                  onClick={() => acceptCommand(command.name)}
+                >
+                  <span className="mention-name">/{command.name}</span>
+                  <span className="mention-desc">{commandDescription(command.name)}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
         {mentionOpen && (
           <div className="mention-list">
-            {mentionResults.length === 0 ? (
-              <div className="mention-empty">No matching files</div>
+            {mentionList.length === 0 ? (
+              <div className="mention-empty">No matching skills or files</div>
             ) : (
-              mentionResults.map((result) => (
-                <button key={result.path} className="mention-item" onClick={() => acceptMention(result)}>
-                  📄 {result.name}
-                  <span className="mention-path">{result.path}</span>
+              mentionList.map((option, index) => (
+                <button
+                  key={`${option.kind}-${option.value}`}
+                  className={`mention-item${active?.kind === "mentions" && active.index === index ? " active" : ""}`}
+                  onClick={() => acceptMention(option)}
+                >
+                  <span className="mention-icon">{option.kind === "skill" ? "📖" : "📄"}</span>
+                  <span className="mention-name">
+                    {option.kind === "skill" ? `@${option.label}` : option.label}
+                  </span>
+                  <span className="mention-desc">{option.description}</span>
                 </button>
               ))
             )}

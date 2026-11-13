@@ -15,16 +15,30 @@ interface DropdownProps {
   title?: string;
   /** Wider variant for long model names. */
   wide?: boolean;
+  /** Notified when the menu opens/closes (e.g. to keep hover-only UI alive). */
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
  * Styled dropdown (button + popup menu) replacing native <select> — themed
  * via CSS variables, closes on outside click / Escape.
  */
-export function Dropdown({ value, options, onChange, placeholder = "…", title, wide }: DropdownProps) {
+export function Dropdown({
+  value,
+  options,
+  onChange,
+  placeholder = "…",
+  title,
+  wide,
+  onOpenChange,
+}: DropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) {

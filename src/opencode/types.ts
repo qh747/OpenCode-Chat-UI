@@ -72,6 +72,21 @@ export interface ModelInfo {
   family?: string;
   type?: string;
   variants?: ModelVariant[];
+  limit?: { context?: number; output?: number };
+  capabilities?: { tools?: boolean };
+}
+
+export interface CommandInfo {
+  name: string;
+  description?: string;
+}
+
+export interface SkillInfo {
+  id: string;
+  name: string;
+  description?: string;
+  path?: string;
+  content?: string;
 }
 
 /** POST /api/session/{id}/prompt body attachment (only `uri` is required). */

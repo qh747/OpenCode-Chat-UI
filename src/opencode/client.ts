@@ -1,6 +1,7 @@
 import type {
   AgentInfo,
   AssistantMessage,
+  CommandInfo,
   FileDiffInfo,
   ListPage,
   MessageInfo,
@@ -12,6 +13,7 @@ import type {
   ProviderInfo,
   ServerInfo,
   SessionInfo,
+  SkillInfo,
 } from "./types";
 
 export class ApiError extends Error {
@@ -246,6 +248,39 @@ export class OpencodeClient {
     return this.request<{ data: PermissionRequest[] }>(
       "GET",
       withDirectory("/api/permission/request", directory),
+    );
+  }
+
+  /**
+   * Slash commands for the current location. Verified live on 2.3.0: called
+   * without parameters this returns the commands for the server's default
+   * location (the extension spawns the server with the workspace as cwd);
+   * passing a `directory` query unexpectedly returns an empty list.
+   */
+  async commands(): Promise<{ data: CommandInfo[] }> {
+    return this.request<{ data: CommandInfo[] }>("GET", "/api/command");
+  }
+
+  /** Skills for the current location. */
+  async skills(): Promise<{ data: SkillInfo[] }> {
+    return this.request<{ data: SkillInfo[] }>("GET", "/api/skill");
+  }
+
+  /** Execute a slash command within a session. */
+  async runCommand(sessionID: string, name: string, text: string): Promise<void> {
+    await this.request<unknown>(
+      "POST",
+      `/api/session/${encodeURIComponent(sessionID)}/command`,
+      { name, text },
+    );
+  }
+
+  /** Summarize the session to reduce context size (/compact). */
+  async compact(sessionID: string): Promise<void> {
+    await this.request<unknown>(
+      "POST",
+      `/api/session/${encodeURIComponent(sessionID)}/compact`,
+      {},
     );
   }
 

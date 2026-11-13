@@ -1,10 +1,12 @@
 import type {
   AgentInfo,
+  CommandInfo,
   FileDiffInfo,
   MessageInfo,
   ModelInfo,
   ModelRef,
   PermissionRequest,
+  SkillInfo,
 } from "../opencode/types";
 
 export type ConnectionState = "stopped" | "starting" | "connected" | "error";
@@ -12,6 +14,10 @@ export type ConnectionState = "stopped" | "starting" | "connected" | "error";
 export interface Catalog {
   agents: AgentInfo[];
   models: ModelInfo[];
+  commands: CommandInfo[];
+  skills: SkillInfo[];
+  recentModels: ModelRef[];
+  favoriteModels: ModelRef[];
   defaultModel?: ModelRef;
 }
 
@@ -50,9 +56,11 @@ export type WebToHost =
   | { kind: "abort" }
   | { kind: "newSession" }
   | { kind: "showHistory" }
+  | { kind: "runCommand"; command: string; arguments: string }
   | { kind: "switchSession"; id: string }
   | { kind: "setAgent"; agent: string }
   | { kind: "setModel"; providerID: string; id: string; variant?: string }
+  | { kind: "toggleFavorite"; providerID: string; id: string }
   | { kind: "stageImage"; requestId: string; name: string; dataBase64: string }
   | { kind: "rewindTo"; messageID: string }
   | { kind: "permissionReply"; requestID: string; decision: "once" | "always" | "reject" }

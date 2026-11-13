@@ -42,5 +42,17 @@ The server's volatile SSE feed (`/api/event`). Lossy by design; consumers resync
 **Sink**
 A webview surface (sidebar view or editor tab) attached to the shared controller. All sinks receive identical broadcasts.
 
+**Slash command**
+A `/`-prefixed command typed in the composer. Server/config commands (from `/api/command`) execute on the server; built-in client commands (`/new`, `/undo`, `/compact`, `/fork`, `/export`) are handled by the extension.
+
+**Skill**
+A named capability from the opencode server's skill list, mentioned in a message as `@<skill-name>` to steer the agent.
+
 **Attachment chip**
 A context item the user attaches to a message: a workspace file, the active editor selection, or a staged pasted image.
+
+**Recent models**
+The extension's local, per-workspace list of the last five model refs used — shown as the first section of the model picker.
+
+**Favorite model**
+A globally pinned model ref shown via the model picker's effort flyout (`Favorite`).

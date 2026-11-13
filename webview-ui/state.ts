@@ -33,7 +33,7 @@ export const initialState: ChatState = {
   messages: [],
   pending: [],
   diffs: [],
-  catalog: { agents: [], models: [] },
+  catalog: { agents: [], models: [], commands: [], skills: [], recentModels: [], favoriteModels: [] },
   errors: [],
   fileResults: {},
   pickedPaths: {},

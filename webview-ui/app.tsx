@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatState } from "./state";
 import type { WebToHost } from "../src/webview/protocol";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { DiffList, PermissionCard, Welcome } from "./Cards";
 import { Dropdown } from "./Dropdown";
+import { ModelPicker } from "./ModelPicker";
 import type { ComposerHandle } from "./composerTypes";
-import type { ModelInfo } from "../src/opencode/types";
 
 interface Props {
   state: ChatState;
@@ -50,16 +50,6 @@ export function App({ state, send, composerHandleRef }: Props) {
 
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
 
-  const modelGroups = useMemo(() => {
-    const groups = new Map<string, ModelInfo[]>();
-    for (const model of state.catalog.models) {
-      const list = groups.get(model.providerID) ?? [];
-      list.push(model);
-      groups.set(model.providerID, list);
-    }
-    return [...groups.entries()];
-  }, [state.catalog.models]);
-
   const activeModel = state.model ?? state.catalog.defaultModel;
   const agent = state.agent ?? state.catalog.agents[0]?.id;
   const activeModelInfo = activeModel
@@ -69,17 +59,18 @@ export function App({ state, send, composerHandleRef }: Props) {
     : undefined;
   const variants = activeModelInfo?.variants ?? [];
 
+  const agentWeight = (id: string): number => (id === "build" ? 0 : id === "plan" ? 1 : 2);
   const agentOptions =
     state.catalog.agents.length > 0
-      ? state.catalog.agents.map((a) => ({ value: a.id, label: a.name }))
+      ? [...state.catalog.agents]
+          .sort((a, b) => agentWeight(a.id) - agentWeight(b.id))
+          .map((a) => ({ value: a.id, label: a.name }))
       : [{ value: agent ?? "build", label: agent ?? "build" }];
-  const modelOptions = modelGroups.flatMap(([providerID, models]) =>
-    models.map((m) => ({ value: `${m.providerID}/${m.modelID}`, label: m.name, group: providerID })),
-  );
   const effortOptions = [
-    { value: "", label: "effort: default" },
-    ...variants.map((v) => ({ value: v.id, label: `effort: ${v.id}` })),
+    { value: "", label: "Default" },
+    ...variants.map((v) => ({ value: v.id, label: v.id ? `${v.id.charAt(0).toUpperCase()}${v.id.slice(1)}` : v.id })),
   ];
+  const [effortOpen, setEffortOpen] = useState(false);
 
   const pickers =
     state.connection === "connected" ? (
@@ -90,35 +81,33 @@ export function App({ state, send, composerHandleRef }: Props) {
           onChange={(value) => send({ kind: "setAgent", agent: value })}
           title="Agent (Shift+Tab cycles)"
         />
-        {modelOptions.length > 0 && (
-          <Dropdown
-            wide
-            value={activeModel ? `${activeModel.providerID}/${activeModel.id}` : ""}
-            options={modelOptions}
-            onChange={(value) => {
-              const [providerID, id] = value.split("/");
-              if (providerID && id) {
-                send({ kind: "setModel", providerID, id, variant: undefined });
-              }
-            }}
-            title={activeModelInfo?.name ?? "Model"}
-            placeholder="Model"
+        {(state.catalog.models.length > 0 || activeModel) && (
+          <ModelPicker
+            models={state.catalog.models}
+            recentModels={state.catalog.recentModels}
+            favoriteModels={state.catalog.favoriteModels}
+            activeModel={activeModel}
+            onSelect={(ref) => send({ kind: "setModel", providerID: ref.providerID, id: ref.id, variant: ref.variant })}
+            onToggleFavorite={(ref) => send({ kind: "toggleFavorite", providerID: ref.providerID, id: ref.id })}
           />
         )}
         {variants.length > 0 && activeModel && (
-          <Dropdown
-            value={state.model?.variant ?? ""}
-            options={effortOptions}
-            onChange={(value) =>
-              send({
-                kind: "setModel",
-                providerID: activeModel.providerID,
-                id: activeModel.id,
-                variant: value || undefined,
-              })
-            }
-            title="Reasoning effort"
-          />
+          <span className={`effort-wrap${effortOpen ? " open" : ""}`}>
+            <Dropdown
+              value={state.model?.variant ?? ""}
+              options={effortOptions}
+              onChange={(value) =>
+                send({
+                  kind: "setModel",
+                  providerID: activeModel.providerID,
+                  id: activeModel.id,
+                  variant: value || undefined,
+                })
+              }
+              onOpenChange={setEffortOpen}
+              title="Reasoning effort"
+            />
+          </span>
         )}
       </>
     ) : null;
@@ -209,6 +198,9 @@ export function App({ state, send, composerHandleRef }: Props) {
         canSend={state.connection === "connected"}
         pickers={pickers}
         fileResults={state.fileResults}
+        commands={state.catalog.commands}
+        skills={state.catalog.skills}
+        onRunCommand={(command, args) => send({ kind: "runCommand", command, arguments: args })}
         onAbort={() => send({ kind: "abort" })}
         handleRef={(handle) => {
           composerHandleRef.current = handle;
