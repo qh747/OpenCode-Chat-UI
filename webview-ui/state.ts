@@ -54,13 +54,16 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
 
 export function reducer(state: ChatState, message: HostToWeb): ChatState {
   switch (message.kind) {
-    case "state":
+    case "state": {
+      const cleared = message.state === "connected" ? { errors: [] as string[] } : {};
       return {
         ...state,
+        ...cleared,
         connection: message.state,
         version: message.version ?? state.version,
         connectionError: message.error,
       };
+    }
     case "snapshot":
       return applySnapshot(state, message.snapshot);
     case "catalog":

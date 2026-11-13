@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { spawn, type SpawnOptions } from "node:child_process";
 import { ServerManager } from "../src/server/manager";
 
 // Tests are bundled to out/tests.cjs by esbuild, so __dirname is out/ —
@@ -70,5 +71,25 @@ test("logs output lines for diagnostics", async () => {
   });
   await manager.start();
   assert.ok(logs.some((line) => line.includes("spawn attempt")), logs.join("\n"));
+  await manager.dispose();
+});
+
+test("spawns .cmd shims through a shell on Windows (Node CVE-2024-27980 guard)", async () => {
+  let capturedShell: boolean | undefined;
+  let capturedCommand = "";
+  const { manager } = makeManager({
+    commandSpec: (port) => ({ command: "C:\\fake\\opencode.cmd", args: ["serve", String(port)] }),
+    spawnImpl: ((command: string, args: readonly string[], options?: SpawnOptions) => {
+      capturedCommand = command;
+      capturedShell = (options as { shell?: boolean } | undefined)?.shell;
+      return spawn(process.execPath, [mockServer, String(args[1] ?? "0")]);
+    }) as unknown as typeof spawn,
+  });
+  await manager.start();
+  assert.equal(capturedCommand, "C:\\fake\\opencode.cmd");
+  if (process.platform === "win32") {
+    assert.equal(capturedShell, true, "expected shell:true for .cmd on Windows");
+  }
+  assert.equal(manager.currentState, "connected");
   await manager.dispose();
 });

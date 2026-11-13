@@ -151,12 +151,9 @@ export class ChatController implements vscode.Disposable {
   // --- state -------------------------------------------------------
 
   private client() {
-    const client = this.host.client();
-    if (!client) {
-      this.post({ kind: "error", message: "OpenCode server is not connected yet." });
-      return undefined;
-    }
-    return client;
+    // Silent on purpose: the connection banner already surfaces the problem;
+    // repeating it here would spam the error list on every user action.
+    return this.host.client();
   }
 
   private storageKey(): string {
@@ -170,7 +167,12 @@ export class ChatController implements vscode.Disposable {
   }
 
   private broadcastState(): void {
-    this.post({ kind: "state", state: this.host.currentState, version: this.host.server?.version });
+    this.post({
+      kind: "state",
+      state: this.host.currentState,
+      version: this.host.server?.version,
+      error: this.host.lastError,
+    });
   }
 
   private async safeCall(fn: () => unknown): Promise<void> {

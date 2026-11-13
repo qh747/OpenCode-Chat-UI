@@ -9,7 +9,7 @@ export default tseslint.config(
   {
     files: ["src/**/*.ts", "webview-ui/**/*.ts", "webview-ui/**/*.tsx", "test/**/*.ts"],
     rules: {
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "@typescript-eslint/consistent-type-imports": "error",
       "no-console": "off",
     },

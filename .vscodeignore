@@ -13,3 +13,7 @@ eslint.config.mjs
 tsconfig.json
 **/*.ts
 **/*.mts
+AGENTS.md
+.commandcode/
+docs/
+.gitignore

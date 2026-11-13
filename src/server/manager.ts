@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { request as httpRequest } from "node:http";
 import * as net from "node:net";
 import { resolveBinary } from "./resolve";
 
@@ -55,11 +56,12 @@ export class ServerManager {
   }
 
   private log(line: string): void {
-    this.logRing.push(line);
+    const stamped = `${new Date().toISOString()} ${line}`;
+    this.logRing.push(stamped);
     if (this.logRing.length > LOG_RING_LIMIT) {
       this.logRing.shift();
     }
-    this.options.logger(line);
+    this.options.logger(stamped);
   }
 
   logTail(lines = 30): string {
@@ -111,7 +113,7 @@ export class ServerManager {
   }
 
   private async spawnInternal(): Promise<ActiveServer> {
-    const resolved = await resolveBinary(this.options.settings.path);
+    const resolved = await resolveBinary(this.options.settings.path, (line) => this.log(line));
     if (!resolved) {
       const detail =
         "opencode CLI not found. Install it (https://opencode.ai/docs) or set \"opencode.path\".";
@@ -136,17 +138,29 @@ export class ServerManager {
           args: ["serve", "--port", String(port), "--hostname", "127.0.0.1"],
         };
       this.log(`spawn attempt ${attempt + 1}: ${spec.command} ${spec.args.join(" ")}`);
+      // Strip Electron/Node runtime pollution the VS Code host injects —
+      // child processes must start from a clean runtime environment.
+      const {
+        ELECTRON_RUN_AS_NODE: _e,
+        NODE_OPTIONS: _n,
+        ELECTRON_NO_ATTACH_CONSOLE: _c,
+        ELECTRON_FIRST_LOAD: _f,
+        ...cleanEnv
+      } = process.env;
       const env: NodeJS.ProcessEnv = {
-        ...process.env,
+        ...cleanEnv,
         OPENCODE_PASSWORD: password,
         OPENCODE_SERVER_PASSWORD: password,
       };
       const spawnImpl = this.options.spawnImpl ?? spawn;
+      // Node ≥20.12 refuses to spawn .cmd/.bat without a shell (CVE-2024-27980).
+      const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(spec.command);
       this.child = spawnImpl(spec.command, spec.args, {
         cwd: this.options.directory,
         env,
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
+        shell: needsShell,
       });
       this.child.stdout?.on("data", (chunk: Buffer) => this.log(chunk.toString()));
       this.child.stderr?.on("data", (chunk: Buffer) => this.log(chunk.toString()));
@@ -203,7 +217,6 @@ export class ServerManager {
   private async waitHealthy(port: number, password: string): Promise<string | undefined> {
     const timeoutMs = this.options.healthTimeoutMs ?? 30_000;
     const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-    const url = `http://127.0.0.1:${port}/api/info`;
     const deadline = Date.now() + timeoutMs;
     let exitReason: string | undefined;
     this.exitHandler = (reason) => { exitReason = reason; };
@@ -215,13 +228,12 @@ export class ServerManager {
         this.exitHandler = undefined;
         throw new Error(`opencode serve exited during startup: ${exitReason}`);
       }
+      // node:http instead of fetch: VS Code may configure a global proxy
+      // dispatcher for fetch, which cannot reach our loopback server.
       try {
-        const response = await fetch(url, {
-          headers: { Authorization: auth },
-          signal: AbortSignal.timeout(1_500),
-        });
-        if (response.ok) {
-          const info = (await response.json()) as { version?: string };
+        const result = await httpGetJson(`http://127.0.0.1:${port}/api/info`, auth, 1_500);
+        if (result.status === 200) {
+          const info = JSON.parse(result.body) as { version?: string };
           this.exitHandler = undefined;
           return info.version ?? "unknown";
         }
@@ -294,4 +306,29 @@ async function pickFreePort(): Promise<number> {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Plain loopback HTTP GET that bypasses any global fetch proxy dispatcher. */
+function httpGetJson(
+  url: string,
+  auth: string,
+  timeoutMs: number,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(
+      url,
+      { headers: { Authorization: auth }, timeout: timeoutMs },
+      (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk: string) => {
+          body += chunk;
+        });
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error("health check timeout")));
+    req.on("error", reject);
+    req.end();
+  });
 }

@@ -35,6 +35,8 @@ export class OpencodeHost {
   private readonly errorEmitter = new vscode.EventEmitter<string>();
   readonly onError = this.errorEmitter.event;
 
+  private lastErrorDetail: string | undefined;
+
   constructor(private readonly options: HostOptions) {
     this.folderPath = toServerPath(options.folder.uri.fsPath);
     this.manager = this.buildManager();
@@ -47,7 +49,11 @@ export class OpencodeHost {
       logger: (line) => this.options.output.appendLine(line.trimEnd()),
       onState: (state, detail) => {
         if (state === "error" && detail) {
+          this.lastErrorDetail = detail;
           this.errorEmitter.fire(detail);
+        }
+        if (state === "connected") {
+          this.lastErrorDetail = undefined;
         }
         this.stateEmitter.fire(state);
       },
@@ -77,6 +83,11 @@ export class OpencodeHost {
 
   client(): OpencodeClient | undefined {
     return this.clientInstance;
+  }
+
+  /** Last connection failure detail (cleared once connected again). */
+  get lastError(): string | undefined {
+    return this.lastErrorDetail;
   }
 
   log(line: string): void {
@@ -113,6 +124,7 @@ export class OpencodeHost {
       this.resyncEmitter.fire();
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
+      this.lastErrorDetail = messageText;
       this.errorEmitter.fire(messageText);
     }
   }
