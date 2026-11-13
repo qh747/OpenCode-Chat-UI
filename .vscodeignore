@@ -1,0 +1,15 @@
+src/
+webview-ui/
+test/
+dev/
+out/
+.zcode/
+.vscode/
+.github/
+dist/*.map
+*.vsix
+esbuild.mjs
+eslint.config.mjs
+tsconfig.json
+**/*.ts
+**/*.mts

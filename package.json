@@ -1,0 +1,215 @@
+{
+  "name": "opencode-vscode",
+  "displayName": "OpenCode for VS Code",
+  "description": "CommandCode-style chat experience for your local opencode CLI. Reuses your existing opencode login (including OpenCode Go subscriptions) by connecting to a local opencode v2 server.",
+  "version": "0.1.0",
+  "publisher": "opencode-community",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opencode-community/opencode-vscode"
+  },
+  "engines": {
+    "vscode": "^1.106.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "opencode",
+    "ai",
+    "agent",
+    "coding agent",
+    "chat"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onView:opencode.chat",
+    "onView:opencode.sessions"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "opencode",
+          "title": "OpenCode",
+          "icon": "icons/activity.svg"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "opencode-secondary",
+          "title": "OpenCode",
+          "icon": "icons/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "opencode": [
+        {
+          "id": "opencode.sessions",
+          "name": "Sessions"
+        }
+      ],
+      "opencode-secondary": [
+        {
+          "id": "opencode.chat",
+          "type": "webview",
+          "name": "Chat"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "opencode.sessions",
+        "contents": "No sessions yet.\n[New session](command:opencode.newSession)\n\nIf the server does not come up, check [Logs](command:opencode.showLogs)."
+      }
+    ],
+    "commands": [
+      {
+        "command": "opencode.newSession",
+        "title": "OpenCode: New Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "opencode.openChat",
+        "title": "OpenCode: Open Chat"
+      },
+      {
+        "command": "opencode.openChatTab",
+        "title": "OpenCode: Open Chat in Editor Tab"
+      },
+      {
+        "command": "opencode.refreshSessions",
+        "title": "OpenCode: Refresh Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "opencode.renameSession",
+        "title": "OpenCode: Rename Session"
+      },
+      {
+        "command": "opencode.deleteSession",
+        "title": "OpenCode: Delete Session"
+      },
+      {
+        "command": "opencode.openCLI",
+        "title": "OpenCode: Open CLI in Terminal"
+      },
+      {
+        "command": "opencode.showLogs",
+        "title": "OpenCode: Show Logs"
+      },
+      {
+        "command": "opencode.restartServer",
+        "title": "OpenCode: Restart Server"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "opencode.openChat",
+        "key": "ctrl+shift+'",
+        "mac": "cmd+shift+'"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "opencode.newSession",
+          "when": "view == opencode.sessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "opencode.refreshSessions",
+          "when": "view == opencode.sessions",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "opencode.renameSession",
+          "when": "view == opencode.sessions && viewItem == opencode.session",
+          "group": "inline@1"
+        },
+        {
+          "command": "opencode.deleteSession",
+          "when": "view == opencode.sessions && viewItem == opencode.session",
+          "group": "inline@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "opencode.renameSession",
+          "when": "false"
+        },
+        {
+          "command": "opencode.deleteSession",
+          "when": "false"
+        },
+        {
+          "command": "opencode.refreshSessions",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OpenCode",
+      "properties": {
+        "opencode.path": {
+          "type": "string",
+          "default": "",
+          "description": "Override the opencode binary path. Leave empty to auto-detect (PATH, then the bundled CLI from the OpenCode desktop app)."
+        },
+        "opencode.serverUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Connect to an already running opencode v2 server (e.g. http://127.0.0.1:4096) instead of spawning one per window."
+        },
+        "opencode.serverPassword": {
+          "type": "string",
+          "default": "",
+          "description": "Password for the external server configured in opencode.serverUrl (Basic auth user is always \"opencode\")."
+        },
+        "opencode.context.autoAttachSelection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically attach the active editor's selection as context when sending a message."
+        },
+        "opencode.context.maxSelectionLength": {
+          "type": "number",
+          "default": 2000,
+          "description": "Maximum number of characters of the active selection to attach."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src webview-ui test",
+    "test": "node esbuild.mjs --tests && node out/tests.cjs",
+    "vscode:prepublish": "npm run typecheck && npm run lint && npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/vscode": "^1.106.0",
+    "@vscode/vsce": "^3.0.0",
+    "dompurify": "^3.2.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.0.0",
+    "marked": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}
