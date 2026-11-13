@@ -56,6 +56,11 @@ body {
   text-overflow: ellipsis;
   max-width: 45%;
 }
+.header-mark {
+  flex: none;
+  color: var(--fg);
+  opacity: 0.85;
+}
 .header .icon-btn {
   width: 26px;
   height: 26px;
@@ -187,33 +192,68 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding-bottom: 12vh;
+  padding: 0 24px 8vh;
   color: var(--fg);
 }
 .welcome-logo {
   color: var(--fg);
-  opacity: 0.92;
+  opacity: 0.85;
+  margin-bottom: 22px;
 }
 .welcome-logo svg {
-  width: 88px;
-  height: 88px;
+  width: 84px;
+  height: 84px;
 }
 .welcome-title {
-  font-size: 30px;
-  font-weight: 700;
+  font-size: 28px;
+  font-weight: 650;
   letter-spacing: 0.01em;
-  margin: 20px 0 0;
+  margin: 0;
 }
 .welcome-sub {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 15px;
+}
+.welcome-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 28px;
+  max-width: 520px;
+}
+.suggestion-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--input-bg) 55%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.suggestion-card:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
+  border-color: var(--vscode-focusBorder, #007fd4);
+  transform: translateY(-1px);
+}
+.suggestion-icon {
+  color: var(--muted);
+  font-size: 10px;
+}
+.suggestion-text {
+  white-space: nowrap;
 }
 .welcome-version {
-  margin: 26px 0 0;
+  margin: 30px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
+  opacity: 0.8;
 }
 
 /* messages */
@@ -769,10 +809,10 @@ body {
 .effort-wrap {
   display: inline-flex;
 }
-/* send button (desktop-style up-arrow) */
+/* send button — 26px tall to align with the picker row */
 .send-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -781,6 +821,7 @@ body {
   border: none;
   border-radius: 7px;
   cursor: pointer;
+  flex: none;
 }
 .send-btn:disabled {
   opacity: 0.45;

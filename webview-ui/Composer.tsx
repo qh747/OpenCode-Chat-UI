@@ -93,6 +93,10 @@ export function Composer({
         });
         textareaRef.current?.focus();
       },
+      setPromptText: (value) => {
+        setText(value);
+        textareaRef.current?.focus();
+      },
     });
   }, [handleRef]);
 
@@ -348,7 +352,9 @@ export function Composer({
           <span className="spacer" />
           {busy ? (
             <button className="send-btn stop" onClick={onAbort} title="Stop the current turn">
-              ■
+              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor" />
+              </svg>
             </button>
           ) : (
             <button

@@ -122,6 +122,10 @@ export function App({ state, send, composerHandleRef }: Props) {
   return (
     <div className="app">
       <div className="header">
+        <svg className="header-mark" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.2" y="3.2" width="17.6" height="17.6" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="8" y="8" width="8" height="8" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
         <span className="header-title" title={state.title}>
           {state.title ?? "New session"}
         </span>
@@ -158,7 +162,10 @@ export function App({ state, send, composerHandleRef }: Props) {
       )}
 
       {!hasMessages && state.connection !== "error" ? (
-        <Welcome version={state.version} />
+        <Welcome
+          version={state.version}
+          onSuggestion={(text) => composerHandleRef.current?.setPromptText(text)}
+        />
       ) : (
         <div
           className="scroll-area"

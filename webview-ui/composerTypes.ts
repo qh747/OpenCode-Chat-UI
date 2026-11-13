@@ -6,4 +6,5 @@ export interface ChipInput {
 
 export interface ComposerHandle {
   setChips: (items: ChipInput[]) => void;
+  setPromptText: (text: string) => void;
 }

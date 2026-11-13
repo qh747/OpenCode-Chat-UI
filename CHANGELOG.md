@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.8
+
+- Header: OpenCode outline mark beside the session title; history/new-session buttons on a shared 26px box.
+- Send button aligned with the picker row height (26px); processing state shows a rounded square icon matching the arrow size.
+- Welcome screen redesigned: larger outline logo, tagline and three one-click prompt suggestion cards (click fills the composer).
+
 ## 0.3.7
 
 - View title shortened to just "OpenCode".
