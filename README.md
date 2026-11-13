@@ -1,5 +1,7 @@
 # OpenCode for VS Code
 
+English | [简体中文](README.zh-CN.md)
+
 A [VS Code](https://code.visualstudio.com) extension that brings a [CommandCode](https://commandcode.ai)-style chat experience to your local [opencode](https://opencode.ai) CLI — reusing the login you already have, including **OpenCode Go subscriptions**.
 
 ![UI](https://img.shields.io/badge/opencode-v2-8A2BE2) ![license](https://img.shields.io/badge/license-MIT-green)
@@ -69,6 +71,10 @@ The v2 HTTP API used here was verified against opencode 2.2.7's own OpenAPI docu
 - Reasoning-effort selector
 - Four permission presets (auto-accept edits / full access)
 - Terminal CLI bridge (`/ide`-style)
+
+## Note: pay-as-you-go vs subscription
+
+opencode's default model may live on the `opencode` pay-as-you-go provider — if that balance is empty, turns fail immediately with 402 "Insufficient balance". Your subscription models live under the `opencode-go` provider; pick an `opencode-go/*` model in the model picker to use your Go plan.
 
 ## License
 
