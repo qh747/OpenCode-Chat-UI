@@ -51,7 +51,8 @@ export function App({ state, send, composerHandleRef }: Props) {
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
 
   const activeModel = state.model ?? state.catalog.defaultModel;
-  const agent = state.agent ?? state.catalog.agents[0]?.id;
+  // Never show a placeholder for the mode: default to build until known.
+  const agent = state.agent ?? state.catalog.agents[0]?.id ?? "build";
   const activeModelInfo = activeModel
     ? state.catalog.models.find(
         (m) => m.providerID === activeModel.providerID && m.modelID === activeModel.id,

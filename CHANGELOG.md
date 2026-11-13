@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.6
+
+- New-session mode button always shows Build instead of a placeholder while the agent catalog is still loading.
+- Welcome screen simplified back to logo + tagline + version.
+
 ## 0.3.5
 
 - Fixed: agent/mode picker could stay empty (only Build) — the server loads its agent registry asynchronously after /api/info becomes ready, so the first catalog fetch raced and returned []. The extension now reloads the catalog on agent/provider/model/config registry events and retries briefly when a fetch comes back empty (verified: 0 → 7 agents).

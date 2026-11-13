@@ -99,24 +99,7 @@ export function Welcome({ version }: { version?: string }) {
       </div>
       <h1 className="welcome-title">OpenCode</h1>
       <p className="welcome-sub">What should we work on?</p>
-      <div className="welcome-tips">
-        <div className="tip">
-          <span className="tip-key">@</span> mention a file to add context
-        </div>
-        <div className="tip">
-          <span className="tip-key">📷</span> paste or drop images into the composer
-        </div>
-        <div className="tip">
-          <span className="tip-key">⇥</span> Shift+Tab switches build / plan modes
-        </div>
-        <div className="tip">
-          <span className="tip-key">⏪</span> hover one of your messages to rewind
-        </div>
-      </div>
-      <p className="welcome-version">
-        {version ? `opencode v${version} · ` : ""}subscription models live under{" "}
-        <code>opencode-go/*</code>
-      </p>
+      {version && <p className="welcome-version">opencode v{version}</p>}
     </div>
   );
 }
