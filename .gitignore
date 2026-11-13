@@ -5,3 +5,5 @@ dev/
 *.vsix
 .DS_Store
 .zcode/
+.commandcode/
+.vscode/
