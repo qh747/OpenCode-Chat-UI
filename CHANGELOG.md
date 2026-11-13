@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5
+
+- Fixed: agent/mode picker could stay empty (only Build) — the server loads its agent registry asynchronously after /api/info becomes ready, so the first catalog fetch raced and returned []. The extension now reloads the catalog on agent/provider/model/config registry events and retries briefly when a fetch comes back empty (verified: 0 → 7 agents).
+- Reasoning-effort picker is always visible (no hover requirement).
+
 ## 0.3.4
 
 - Selected agent/effort rows no longer render in focus-border blue — they use the same bold treatment as the selected model row.

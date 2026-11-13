@@ -169,7 +169,16 @@ export class OpencodeHost {
         baseUrl: server.url,
         password: server.password,
         directory: this.folderPath,
-        onEvent: (event) => this.eventEmitter.fire(event),
+        onEvent: (event) => {
+          this.eventEmitter.fire(event);
+          // The server loads its agent/model registries asynchronously —
+          // /api/info goes ready before they exist, so the first catalog
+          // fetch can race and come back empty. Reload when the server
+          // signals that its registries changed.
+          if (CATALOG_EVENTS.has(event.type)) {
+            this.scheduleCatalogReload();
+          }
+        },
         onState: (state: EventStreamState) => {
           if (state === "open") {
             void this.loadCatalog();
@@ -191,6 +200,20 @@ export class OpencodeHost {
     await this.start();
   }
 
+  private catalogReloadTimer: ReturnType<typeof setTimeout> | undefined;
+  private catalogRetryCount = 0;
+
+  /** Debounced catalog reload (server registry events can burst at boot). */
+  private scheduleCatalogReload(): void {
+    if (this.catalogReloadTimer) {
+      return;
+    }
+    this.catalogReloadTimer = setTimeout(() => {
+      this.catalogReloadTimer = undefined;
+      void this.loadCatalog();
+    }, 600);
+  }
+
   async loadCatalog(): Promise<void> {
     const client = this.client();
     if (!client) {
@@ -209,6 +232,13 @@ export class OpencodeHost {
         agents = result.data.filter((agent: AgentInfo) => !agent.hidden);
       }
       this.log(`agents loaded: ${agents.length} selectable of ${result.data.length} total`);
+      if (agents.length === 0 && this.catalogRetryCount < 3) {
+        // The agent registry may still be booting; try again shortly.
+        this.catalogRetryCount += 1;
+        this.scheduleCatalogReload();
+      } else if (agents.length > 0) {
+        this.catalogRetryCount = 0;
+      }
     } catch (error) {
       this.log(`agents load failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -253,6 +283,10 @@ export class OpencodeHost {
   async dispose(): Promise<void> {
     this.eventStream?.stop();
     this.eventStream = undefined;
+    if (this.catalogReloadTimer) {
+      clearTimeout(this.catalogReloadTimer);
+      this.catalogReloadTimer = undefined;
+    }
     await this.manager.dispose();
     this.stateEmitter.dispose();
     this.eventEmitter.dispose();
@@ -276,6 +310,14 @@ export class OpencodeHost {
 }
 
 /** Windows fsPaths use backslashes; the server accepts and normalizes both. */
+export /** Server events that signal the agent/model registries changed. */
+const CATALOG_EVENTS = new Set([
+  "agent.updated",
+  "provider.updated",
+  "model.updated",
+  "config.updated",
+]);
+
 export function toServerPath(fsPath: string): string {
   return fsPath.replace(/\\/g, "/");
 }

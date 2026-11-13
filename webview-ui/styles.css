@@ -780,12 +780,8 @@ body {
   padding: 6px 10px;
   font-size: 12px;
 }
-/* effort picker only visible while hovering the composer */
+/* effort picker is always visible (user preference) */
 .effort-wrap {
-  display: none;
-}
-.composer:hover .effort-wrap,
-.effort-wrap.open {
   display: inline-flex;
 }
 /* send button (desktop-style up-arrow) */
