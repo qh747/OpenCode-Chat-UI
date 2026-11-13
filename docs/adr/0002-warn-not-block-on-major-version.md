@@ -1,7 +1,11 @@
 # ADR-0002: Warn, don't block, on opencode major-version mismatch
 
-- Status: accepted
+- Status: accepted (amended 2026-11-14: v1 servers fail fast with upgrade guidance)
 - Date: 2026-11-14
+
+## Amended decision: opencode v1 is rejected with upgrade guidance
+
+A v1 server cannot serve this extension at all (different endpoint prefix, event names, permission flow; no variants/fork/staged-revert). Probing `/api/info` first and `/global/health` second distinguishes the two: a healthy v1 response (major = 1) **fails startup immediately** with an error banner telling the user to run `opencode upgrade` — no retries, since retrying the same binary cannot change the outcome. Only *unknown* majors (≥ 3) keep the non-blocking warning behavior above.
 
 ## Context
 

@@ -22,7 +22,7 @@
 
 ## 环境要求
 
-- 已安装并登录 [opencode CLI](https://opencode.ai/docs) **v2.x**（`opencode auth login`）。Windows 上如果 PATH 里没有 CLI，扩展会自动回退到 OpenCode 桌面应用内置的 CLI。
+- 已安装并登录 [opencode CLI](https://opencode.ai/docs) **v2.x**（`opencode auth login`）。Windows 上如果 PATH 里没有 CLI，扩展会自动回退到 OpenCode 桌面应用内置的 CLI。检测到 opencode **v1** server 会明确拒绝并给出升级引导（`opencode upgrade`）。
 - VS Code 1.106+。
 
 ## 快速开始

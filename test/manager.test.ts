@@ -65,6 +65,26 @@ test("fails with a helpful error when the command dies immediately", async () =>
   await manager.dispose();
 });
 
+test("rejects an opencode v1 server with upgrade guidance (fail fast, no retries)", async () => {
+  const { manager, logs } = makeManager({
+    commandSpec: (port) => ({
+      command: process.execPath,
+      args: [mockServer, String(port), "--v1"],
+    }),
+    healthTimeoutMs: 10_000,
+  });
+  const started = Date.now();
+  await assert.rejects(() => manager.start(), /requires opencode v2/);
+  assert.equal(manager.currentState, "error");
+  assert.ok(Date.now() - started < 5_000, "v1 detection must fail fast, not exhaust retries");
+  assert.equal(
+    logs.filter((line) => line.includes("spawn attempt")).length,
+    1,
+    "retrying a v1 binary is pointless",
+  );
+  await manager.dispose();
+});
+
 test("logs output lines for diagnostics", async () => {
   const { manager, logs } = makeManager({
     commandSpec: (port) => ({ command: process.execPath, args: [mockServer, String(port)] }),

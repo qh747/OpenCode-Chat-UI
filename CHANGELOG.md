@@ -2,6 +2,7 @@
 
 ## 0.2.0
 
+- opencode v1 detection: servers reporting a v1 `/global/health` fail startup immediately with an `opencode upgrade` guidance message instead of a generic connection failure.
 - Image attachments: paste or drag up to 6 images per message.
 - Session fork and Markdown transcript export (sessions tree context menu).
 - Message-level rewind (removes later messages, reverts their file changes).

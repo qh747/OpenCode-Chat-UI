@@ -32,6 +32,9 @@ export interface ServerManagerOptions {
 
 const LOG_RING_LIMIT = 200;
 
+/** Startup failure that retrying cannot fix (e.g. the binary is opencode v1). */
+class FatalStartError extends Error {}
+
 /**
  * Owns the opencode server lifecycle for one VS Code window: either spawns a
  * private `opencode serve` (random port + random basic-auth password, killed
@@ -169,6 +172,13 @@ export class ServerManager {
       try {
         started = await this.waitHealthy(port, password);
       } catch (error) {
+        if (error instanceof FatalStartError) {
+          // Retrying cannot fix a wrong major version — fail fast and clean up.
+          await this.killChild();
+          this.log(`fatal: ${error.message}`);
+          this.setState("error", error.message);
+          throw error;
+        }
         started = undefined;
         lastError = error instanceof Error ? error.message : String(error);
       }
@@ -239,6 +249,26 @@ export class ServerManager {
         }
       } catch {
         // not up yet; keep polling
+      }
+      // No /api/info? Maybe an opencode v1 server (health at /global/health).
+      try {
+        const legacy = await httpGetJson(`http://127.0.0.1:${port}/global/health`, auth, 1_500);
+        if (legacy.status === 200) {
+          const info = JSON.parse(legacy.body) as { healthy?: boolean; version?: string };
+          const major = Number.parseInt(info.version ?? "", 10);
+          this.exitHandler = undefined;
+          if (major === 1) {
+            throw new FatalStartError(
+              `opencode v1 server detected (v${info.version}). This extension requires opencode v2 — run \`opencode upgrade\` (or reinstall from https://opencode.ai/docs) and reload the window.`,
+            );
+          }
+          return info.version ?? "unknown";
+        }
+      } catch (error) {
+        if (error instanceof FatalStartError) {
+          throw error;
+        }
+        // still not up; keep polling
       }
       await delay(250);
     }

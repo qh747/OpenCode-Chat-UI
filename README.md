@@ -22,7 +22,7 @@ A [VS Code](https://code.visualstudio.com) extension that puts a full [opencode]
 
 ## Requirements
 
-- [opencode CLI](https://opencode.ai/docs) **v2.x** installed and logged in (`opencode auth login`). On Windows without a CLI in `PATH`, the extension falls back to the CLI bundled inside the OpenCode desktop app.
+- [opencode CLI](https://opencode.ai/docs) **v2.x** installed and logged in (`opencode auth login`). On Windows without a CLI in `PATH`, the extension falls back to the CLI bundled inside the OpenCode desktop app. An opencode **v1** server is detected and rejected with upgrade guidance (`opencode upgrade`).
 - VS Code 1.106+.
 
 ## Getting started
