@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4
+
+- Selected agent/effort rows no longer render in focus-border blue — they use the same bold treatment as the selected model row.
+- Agents catalog load now logs its count to the output channel for diagnosing picker issues.
+
 ## 0.3.3
 
 - Slash-command and mention lists now scroll the keyboard-highlighted row into view.

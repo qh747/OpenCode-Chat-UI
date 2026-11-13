@@ -208,6 +208,7 @@ export class OpencodeHost {
         // Fallback: keep every visible agent rather than rendering no picker.
         agents = result.data.filter((agent: AgentInfo) => !agent.hidden);
       }
+      this.log(`agents loaded: ${agents.length} selectable of ${result.data.length} total`);
     } catch (error) {
       this.log(`agents load failed: ${error instanceof Error ? error.message : String(error)}`);
     }

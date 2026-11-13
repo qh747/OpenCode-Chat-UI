@@ -127,7 +127,8 @@ body {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
 .dropdown-item.selected {
-  color: var(--vscode-focusBorder, #007fd4);
+  color: var(--fg);
+  font-weight: 600;
 }
 .dropdown-check {
   margin-left: auto;
