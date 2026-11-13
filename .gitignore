@@ -7,7 +7,3 @@ dev/
 .zcode/
 .commandcode/
 .vscode/
-# workspace tooling artifacts
-AGENTS.md
-.commandcode/
-docs/
