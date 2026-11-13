@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "./state";
 import type { ChipInput, ComposerHandle } from "./composerTypes";
+import { ContextBar } from "./ContextBar";
+import type { ContextBarProps } from "./ContextBar";
 import { BUILTIN_COMMANDS, filterCommands, mergeMentions, splitCommandInput } from "../src/util/commands";
 import type { CommandInfoLike } from "../src/util/commands";
 import type { CommandInfo, SkillInfo } from "../src/opencode/types";
@@ -30,6 +32,8 @@ interface ComposerProps {
   onRunCommand: (command: string, args: string) => void;
   onAbort: () => void;
   handleRef?: (handle: ComposerHandle) => void;
+  /** Context strip rendered under the input box. */
+  context?: ContextBarProps;
 }
 
 interface Chip extends ChipInput {
@@ -52,6 +56,7 @@ export function Composer({
   onRunCommand,
   onAbort,
   handleRef,
+  context,
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [chips, setChips] = useState<Chip[]>([]);
@@ -93,10 +98,6 @@ export function Composer({
         });
         textareaRef.current?.focus();
       },
-      setPromptText: (value) => {
-        setText(value);
-        textareaRef.current?.focus();
-      },
     });
   }, [handleRef]);
 
@@ -106,8 +107,16 @@ export function Composer({
     if (!el) {
       return;
     }
+    const max = 200;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    let next = Math.min(el.scrollHeight, max);
+    el.style.height = `${next}px`;
+    // scrollHeight ignores some of the padding, so the first guess can be a few
+    // pixels short — that overflow is what makes Chromium draw a scrollbar.
+    if (el.scrollHeight > el.clientHeight) {
+      next = Math.min(next + (el.scrollHeight - el.clientHeight), max);
+      el.style.height = `${next}px`;
+    }
   }, [text]);
 
   // Keep an active row selected when the lists change.
@@ -363,8 +372,15 @@ export function Composer({
               disabled={!text.trim() || !canSend}
               title="Send (Enter)"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor" />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 19V6.4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                <path
+                  d="M5.8 12.6 12 6.4l6.2 6.2"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
           )}
@@ -409,6 +425,7 @@ export function Composer({
           </div>
         )}
       </div>
+      {context && <ContextBar {...context} />}
     </div>
   );
 }

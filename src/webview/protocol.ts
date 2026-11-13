@@ -7,9 +7,16 @@ import type {
   ModelRef,
   PermissionRequest,
   SkillInfo,
+  TokenUsage,
 } from "../opencode/types";
 
 export type ConnectionState = "stopped" | "starting" | "connected" | "error";
+
+/** Branch / dirty state of the workspace folder (absent when git is unavailable). */
+export interface GitInfo {
+  branch?: string;
+  dirty?: boolean;
+}
 
 export interface Catalog {
   agents: AgentInfo[];
@@ -31,6 +38,10 @@ export interface Snapshot {
   pending: PermissionRequest[];
   diffs: FileDiffInfo[];
   catalog: Catalog;
+  cost?: number;
+  tokens?: TokenUsage;
+  workspacePath?: string;
+  git?: GitInfo;
 }
 
 export interface HistoryGroup {
@@ -43,7 +54,17 @@ export type HostToWeb =
   | { kind: "imageStaged"; requestId: string; path: string; name: string }
   | { kind: "history"; groups: HistoryGroup[] }
   | { kind: "snapshot"; snapshot: Snapshot }
-  | { kind: "sessionMeta"; sessionID?: string; title?: string; agent?: string; model?: ModelRef; busy?: boolean }
+  | {
+      kind: "sessionMeta";
+      sessionID?: string;
+      title?: string;
+      agent?: string;
+      model?: ModelRef;
+      busy?: boolean;
+      cost?: number;
+      tokens?: TokenUsage;
+    }
+  | { kind: "git"; git: GitInfo }
   | { kind: "textStarted"; sessionID: string; messageID: string }
   | { kind: "textDelta"; sessionID: string; messageID: string; delta: string }
   | { kind: "reasoningDelta"; sessionID: string; messageID: string; delta: string }

@@ -87,44 +87,16 @@ function fileName(file: string): string {
 
 // --- welcome --------------------------------------------------------------
 
-export function Welcome({
-  version,
-  onSuggestion,
-}: {
-  version?: string;
-  onSuggestion?: (text: string) => void;
-}) {
-  const suggestions = [
-    { icon: "◆", text: "Explain what this project does" },
-    { icon: "◇", text: "Review my uncommitted changes" },
-    { icon: "○", text: "Find and fix the TODOs in this repo" },
-  ];
+export function Welcome({ version }: { version?: string }) {
   return (
     <div className="welcome">
-      <div className="welcome-logo" aria-hidden="true">
-        <svg width="96" height="96" viewBox="0 0 24 24" fill="none">
-          <rect x="3.2" y="3.2" width="17.6" height="17.6" stroke="currentColor" strokeWidth="1.3" />
-          <rect x="8" y="8" width="8" height="8" stroke="currentColor" strokeWidth="1.3" />
-        </svg>
+      <div className="welcome-prompt">
+        <span className="welcome-caret" aria-hidden="true">
+          ›
+        </span>
+        <span className="welcome-hint">What should we work on?</span>
       </div>
-      <h1 className="welcome-title">OpenCode</h1>
-      <p className="welcome-sub">What should we work on?</p>
-      <div className="welcome-suggestions">
-        {suggestions.map((suggestion) => (
-          <button
-            key={suggestion.text}
-            className="suggestion-card"
-            onClick={() => onSuggestion?.(suggestion.text)}
-            title="Fill the composer with this prompt"
-          >
-            <span className="suggestion-icon" aria-hidden="true">
-              {suggestion.icon}
-            </span>
-            <span className="suggestion-text">{suggestion.text}</span>
-          </button>
-        ))}
-      </div>
-      {version && <p className="welcome-version">opencode v{version}</p>}
+      {version && <div className="welcome-version">opencode v{version}</div>}
     </div>
   );
 }

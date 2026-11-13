@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1
+
+- Fix: the send button always showed the square "stop" icon, even when idle. Idle now shows the up arrow; the square appears only while a turn is in progress (click it to stop).
+- The empty-state welcome screen is now a single terminal-style prompt line (`› What should we work on?`) with the version below it. The logo and the clickable prompt suggestions are gone.
+- The composer input, its pickers and every dropdown opened from it now use the monospace font of the welcome screen. The send button is blue instead of following the theme's button color.
+- A context strip under the composer shows the current git branch (`*` when the working tree is dirty) and the workspace path on the left, with context tokens used and the session cost on the right.
+- Fix: the context strip said "no git" inside git repositories. The branch is now read from `.git/HEAD` directly (with the built-in git extension as the source for the dirty marker), and the details are logged to the "OpenCode" output channel.
+- The header mark is now a rounded badge holding the OpenCode glyph, centred with the session title on a tighter line box.
+- Fix: the composer input showed scrollbar arrows on Windows. The scrollbar is hidden and the auto-resize now accounts for the textarea padding.
+
 ## 0.4.0
 
 - History picker moved into the webview: the header clock button now opens a date-grouped menu anchored to the button (rename / fork / export / delete actions on hover), instead of the window-centered QuickPick. The command-palette entry keeps the QuickPick.

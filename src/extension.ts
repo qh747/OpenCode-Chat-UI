@@ -17,7 +17,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   const host = new OpencodeHost({ context, folder, output });
-  const chat = new ChatController(host, context, folder);
+  const chat = new ChatController(host, context, folder, output);
 
   context.subscriptions.push(
     host,

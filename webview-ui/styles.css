@@ -44,13 +44,14 @@ body {
 .header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   flex: none;
 }
 .header-title {
   font-weight: 600;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -58,6 +59,8 @@ body {
 }
 .header-mark {
   flex: none;
+  width: 17px;
+  height: 17px;
   color: var(--fg);
   opacity: 0.85;
 }
@@ -95,8 +98,8 @@ body {
   color: var(--input-fg);
   border: none;
   border-radius: 5px;
-  font-family: var(--font);
-  font-size: 13px;
+  font-family: var(--mono);
+  font-size: 12px;
   font-weight: 600;
   padding: 3px 8px;
   cursor: pointer;
@@ -127,7 +130,8 @@ body {
   padding: 4px 0;
 }
 .dropdown-group {
-  font-size: 10px;
+  font-family: var(--mono);
+  font-size: 9px;
   font-weight: 600;
   color: var(--muted);
   padding: 4px 10px 2px;
@@ -143,9 +147,9 @@ body {
   background: none;
   border: none;
   color: var(--fg);
-  font-family: var(--font);
-  font-size: 13px;
-  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 12px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -201,67 +205,24 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 24px 8vh;
   color: var(--fg);
 }
-.welcome-logo {
-  color: var(--fg);
-  opacity: 0.85;
-  margin-bottom: 22px;
-}
-.welcome-logo svg {
-  width: 84px;
-  height: 84px;
-}
-.welcome-title {
-  font-size: 28px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  margin: 0;
-}
-.welcome-sub {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 15px;
-}
-.welcome-suggestions {
+.welcome-prompt {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 28px;
-  max-width: 520px;
-}
-.suggestion-card {
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: color-mix(in srgb, var(--input-bg) 55%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--fg);
-  font-family: var(--font);
+  gap: 7px;
+  font-family: var(--mono);
   font-size: 12px;
-  padding: 8px 14px;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  color: var(--fg);
 }
-.suggestion-card:hover {
-  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
-  border-color: var(--vscode-focusBorder, #007fd4);
-  transform: translateY(-1px);
-}
-.suggestion-icon {
-  color: var(--muted);
-  font-size: 10px;
-}
-.suggestion-text {
-  white-space: nowrap;
+.welcome-caret {
+  color: var(--vscode-textLink-foreground, #4daafc);
 }
 .welcome-version {
-  margin: 30px 0 0;
-  color: var(--muted);
+  margin-top: 6px;
+  font-family: var(--mono);
   font-size: 10px;
+  color: var(--muted);
   opacity: 0.8;
 }
 
@@ -686,7 +647,8 @@ body {
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
-  font-size: 11px;
+  font-family: var(--mono);
+  font-size: 10px;
   padding: 1px 8px;
   max-width: 220px;
   white-space: nowrap;
@@ -745,10 +707,18 @@ body {
   color: var(--input-fg);
   border: none;
   resize: none;
-  font-family: var(--font);
-  font-size: 13px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  font-family: var(--mono);
+  font-size: 12px;
   padding: 8px 10px 4px;
   outline: none;
+}
+/* Chromium draws the scrollbar arrows inside the input on Windows — hide it. */
+.composer-box textarea::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 .composer-box textarea::placeholder {
   color: var(--vscode-input-placeholderForeground, #888888);
@@ -759,6 +729,43 @@ body {
   gap: 6px;
   padding: 4px 8px 6px;
   flex-wrap: wrap;
+}
+
+/* context strip under the composer: branch + path | usage + cost */
+.ctx-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  padding: 5px 2px 0;
+  min-width: 0;
+}
+.ctx-branch {
+  color: var(--fg);
+}
+.ctx-dirty {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+}
+.ctx-nogit {
+  opacity: 0.7;
+}
+.ctx-sep {
+  opacity: 0.45;
+}
+.ctx-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ctx-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
 }
 
 /* @ mention dropdown */
@@ -784,9 +791,9 @@ body {
   background: none;
   border: none;
   color: var(--fg);
-  font-family: var(--font);
+  font-family: var(--mono);
   font-size: 12px;
-  padding: 5px 10px;
+  padding: 4px 10px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -804,13 +811,14 @@ body {
 }
 .mention-desc {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .mention-empty {
   color: var(--muted);
+  font-family: var(--mono);
   padding: 6px 10px;
   font-size: 12px;
 }
@@ -825,12 +833,15 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--btn-bg);
-  color: var(--btn-fg);
+  background: #0078d4;
+  color: #ffffff;
   border: none;
   border-radius: 50%;
   cursor: pointer;
   flex: none;
+}
+.send-btn:hover:not(:disabled) {
+  background: #1f8fe6;
 }
 .send-btn:disabled {
   opacity: 0.45;
@@ -854,9 +865,9 @@ body {
   background: none;
   border: none;
   color: var(--fg);
-  font-family: var(--font);
-  font-size: 13px;
-  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 12px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -876,21 +887,21 @@ body {
 }
 .model-provider {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   flex: none;
 }
 .model-badge {
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--ok);
-  font-size: 10px;
+  font-size: 9px;
   padding: 0 4px;
   flex: none;
 }
 .model-effort-hint {
   margin-left: auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   flex: none;
 }
 .model-menu {
@@ -907,8 +918,8 @@ body {
   color: var(--input-fg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-family: var(--font);
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
   padding: 4px 8px;
   outline: none;
 }
@@ -927,7 +938,7 @@ body {
 .model-meta {
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   padding: 6px 10px;
   white-space: normal;
 }

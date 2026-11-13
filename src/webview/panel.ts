@@ -11,13 +11,15 @@ import type {
   MessageInfo,
   PermissionRequest,
   PromptFileAttachment,
+  TokenUsage,
   UserMessage,
 } from "../opencode/types";
 import { reverseApply } from "../util/diffapply";
 import { orderMessages } from "../util/messages";
 import { resolveCommandAction } from "../util/commands";
 import { groupSessionsByDate } from "../util/sessions";
-import type { HostToWeb, WebToHost } from "./protocol";
+import { GitStatusProvider } from "../git";
+import type { GitInfo, HostToWeb, WebToHost } from "./protocol";
 
 interface Sink {
   post(message: HostToWeb): void;
@@ -42,6 +44,9 @@ export class ChatController implements vscode.Disposable {
   private title: string | undefined;
   private agent: string | undefined;
   private model: { providerID: string; id: string; variant?: string } | undefined;
+  private cost: number | undefined;
+  private tokens: TokenUsage | undefined;
+  private git: GitInfo = {};
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private permissionTimer: ReturnType<typeof setInterval> | undefined;
   private fileCache: { path: string; name: string }[] | undefined;
@@ -52,6 +57,7 @@ export class ChatController implements vscode.Disposable {
     private readonly host: OpencodeHost,
     private readonly context: vscode.ExtensionContext,
     private readonly folder: vscode.WorkspaceFolder,
+    private readonly output?: vscode.OutputChannel,
   ) {
     this.subscriptions.push(
       vscode.workspace.registerTextDocumentContentProvider(SCHEME, {
@@ -59,6 +65,16 @@ export class ChatController implements vscode.Disposable {
       }),
     );
     this.sessionId = this.context.workspaceState.get<string>(this.storageKey());
+
+    const git = new GitStatusProvider(this.folder, (line) => this.output?.appendLine(line));
+    this.git = git.current;
+    this.subscriptions.push(
+      git,
+      git.onDidChange((status) => {
+        this.git = status;
+        this.post({ kind: "git", git: status });
+      }),
+    );
 
     this.subscriptions.push(
       this.host.onEvent((event) => this.handleEvent(event)),
@@ -802,6 +818,8 @@ export class ChatController implements vscode.Disposable {
       this.title = result.data.title;
       this.agent = result.data.agent;
       this.model = result.data.model;
+      this.cost = result.data.cost;
+      this.tokens = result.data.tokens;
       if (result.data.time.busy && !result.data.time.idle) {
         this.busy = true;
       }
@@ -812,6 +830,8 @@ export class ChatController implements vscode.Disposable {
         agent: this.agent,
         model: this.model,
         busy: this.busy,
+        cost: this.cost,
+        tokens: this.tokens,
       });
     });
   }
@@ -845,6 +865,10 @@ export class ChatController implements vscode.Disposable {
         pending: this.pending,
         diffs: this.diffs.filter((d) => !this.dismissed.has(d.file)),
         catalog: this.host.catalog,
+        cost: this.cost,
+        tokens: this.tokens,
+        workspacePath: this.folder.uri.fsPath,
+        git: this.git,
       },
     });
   }

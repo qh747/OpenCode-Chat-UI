@@ -123,9 +123,21 @@ export function App({ state, send, composerHandleRef }: Props) {
   return (
     <div className="app">
       <div className="header">
-        <svg className="header-mark" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="3.2" y="3.2" width="17.6" height="17.6" stroke="currentColor" strokeWidth="1.6" />
-          <rect x="8" y="8" width="8" height="8" stroke="currentColor" strokeWidth="1.6" />
+        <svg
+          className="header-mark"
+          width="17"
+          height="17"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          aria-hidden="true"
+        >
+          <rect x="1.75" y="1.75" width="20.5" height="20.5" rx="6" />
+          <g transform="translate(4.5 4.5) scale(0.625)" strokeWidth="2.72">
+            <rect x="3.2" y="3.2" width="17.6" height="17.6" />
+            <rect x="8" y="8" width="8" height="8" />
+          </g>
         </svg>
         <span className="header-title" title={state.title}>
           {state.title ?? "New session"}
@@ -160,10 +172,7 @@ export function App({ state, send, composerHandleRef }: Props) {
       )}
 
       {!hasMessages && state.connection !== "error" ? (
-        <Welcome
-          version={state.version}
-          onSuggestion={(text) => composerHandleRef.current?.setPromptText(text)}
-        />
+        <Welcome version={state.version} />
       ) : (
         <div
           className="scroll-area"
@@ -208,6 +217,13 @@ export function App({ state, send, composerHandleRef }: Props) {
         dispatch={send}
         busy={state.busy}
         canSend={state.connection === "connected"}
+        context={{
+          git: state.git,
+          workspacePath: state.workspacePath,
+          cost: state.cost,
+          tokens: state.tokens,
+          contextLimit: activeModelInfo?.limit?.context,
+        }}
         pickers={pickers}
         fileResults={state.fileResults}
         commands={state.catalog.commands}

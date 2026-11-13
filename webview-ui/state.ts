@@ -1,12 +1,19 @@
 import type {
   Catalog,
   ConnectionState,
+  GitInfo,
   HistoryGroup,
   HostToWeb,
   Snapshot,
   WebToHost,
 } from "../src/webview/protocol";
-import type { AssistantMessage, FileDiffInfo, MessageInfo, PermissionRequest } from "../src/opencode/types";
+import type {
+  AssistantMessage,
+  FileDiffInfo,
+  MessageInfo,
+  PermissionRequest,
+  TokenUsage,
+} from "../src/opencode/types";
 
 export interface ChatState {
   connection: ConnectionState;
@@ -27,6 +34,10 @@ export interface ChatState {
   pickedPaths: Record<string, string[]>;
   stagedImages: Record<string, { path: string; name: string }>;
   historyGroups: HistoryGroup[];
+  cost?: number;
+  tokens?: TokenUsage;
+  workspacePath?: string;
+  git?: GitInfo;
 }
 
 export const initialState: ChatState = {
@@ -55,6 +66,10 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     pending: snapshot.pending,
     diffs: snapshot.diffs,
     catalog: snapshot.catalog,
+    cost: snapshot.cost,
+    tokens: snapshot.tokens,
+    workspacePath: snapshot.workspacePath,
+    git: snapshot.git,
   };
 }
 
@@ -85,7 +100,12 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         agent: message.agent ?? state.agent,
         model: message.model ?? state.model,
         busy: message.busy ?? state.busy,
+        cost: message.cost ?? state.cost,
+        tokens: message.tokens ?? state.tokens,
       };
+    }
+    case "git": {
+      return { ...state, git: message.git };
     }
     case "textStarted": {
       if (message.sessionID !== state.sessionID) {
