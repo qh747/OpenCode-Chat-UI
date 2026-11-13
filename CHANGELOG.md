@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.7
+
+- View title shortened to just "OpenCode".
+- Header history/new-session buttons aligned to a shared 26px box.
+- Welcome screen redesigned: larger outline logo (88px), bigger title/tagline, balanced spacing.
+
 ## 0.3.6
 
 - New-session mode button always shows Build instead of a placeholder while the agent catalog is still loading.
