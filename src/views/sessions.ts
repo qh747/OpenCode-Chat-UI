@@ -84,7 +84,9 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   getTreeItem(node: TreeNode): vscode.TreeItem {
     if (node.kind === "group") {
-      const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Expanded);
+      // Collapsed by default (CommandCode-style): click a group to reveal and
+      // pick a session; its history only loads when chosen.
+      const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
       item.contextValue = "opencode.group";
       return item;
     }

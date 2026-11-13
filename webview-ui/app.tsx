@@ -68,6 +68,73 @@ export function App({ state, send, composerHandleRef }: Props) {
     : undefined;
   const variants = activeModelInfo?.variants ?? [];
 
+  const pickers = (
+    <>
+      {state.catalog.agents.length > 0 && (
+        <select
+          className="picker"
+          value={agent ?? ""}
+          onChange={(event) => send({ kind: "setAgent", agent: event.target.value })}
+          title="Agent (Shift+Tab cycles)"
+        >
+          {state.catalog.agents.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      )}
+      {modelGroups.length > 0 && (
+        <select
+          className="picker picker-model"
+          value={activeModel ? `${activeModel.providerID}/${activeModel.id}` : ""}
+          onChange={(event) => {
+            const [providerID, id] = event.target.value.split("/");
+            if (providerID && id) {
+              send({ kind: "setModel", providerID, id, variant: undefined });
+            }
+          }}
+          title={activeModelInfo?.name ?? "Model"}
+        >
+          {modelGroups.map(([providerID, models]) => (
+            <optgroup key={providerID} label={providerID}>
+              {models.map((m) => (
+                <option key={`${m.providerID}/${m.modelID}`} value={`${m.providerID}/${m.modelID}`}>
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      )}
+      {state.connection === "connected" && variants.length > 0 && (
+        <select
+          className="picker"
+          value={state.model?.variant ?? ""}
+          onChange={(event) => {
+            if (!activeModel) {
+              return;
+            }
+            send({
+              kind: "setModel",
+              providerID: activeModel.providerID,
+              id: activeModel.id,
+              variant: event.target.value || undefined,
+            });
+          }}
+          title="Reasoning effort"
+        >
+          <option value="">effort: default</option>
+          {variants.map((v) => (
+            <option key={v.id} value={v.id}>
+              effort: {v.id}
+            </option>
+          ))}
+        </select>
+      )}
+    </>
+  );
+
   return (
     <div className="app">
       <div className="header">
@@ -75,68 +142,6 @@ export function App({ state, send, composerHandleRef }: Props) {
           {state.title ?? "New session"}
         </span>
         <span className="spacer" />
-        {state.catalog.agents.length > 0 && (
-          <select
-            className="picker"
-            value={agent ?? ""}
-            onChange={(event) => send({ kind: "setAgent", agent: event.target.value })}
-            title="Agent (Shift+Tab cycles)"
-          >
-            {state.catalog.agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {modelGroups.length > 0 && (
-          <select
-            className="picker"
-            value={activeModel ? `${activeModel.providerID}/${activeModel.id}` : ""}
-            onChange={(event) => {
-              const [providerID, id] = event.target.value.split("/");
-              if (providerID && id) {
-                send({ kind: "setModel", providerID, id, variant: undefined });
-              }
-            }}
-            title="Model"
-          >
-            {modelGroups.map(([providerID, models]) => (
-              <optgroup key={providerID} label={providerID}>
-                {models.map((m) => (
-                  <option key={`${m.providerID}/${m.modelID}`} value={`${m.providerID}/${m.modelID}`}>
-                    {m.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        )}
-        {state.connection === "connected" && variants.length > 0 && (
-          <select
-            className="picker"
-            value={state.model?.variant ?? ""}
-            onChange={(event) => {
-              if (!activeModel) {
-                return;
-              }
-              send({
-                kind: "setModel",
-                providerID: activeModel.providerID,
-                id: activeModel.id,
-                variant: event.target.value || undefined,
-              });
-            }}
-            title="Reasoning effort"
-          >
-            <option value="">effort: default</option>
-            {variants.map((v) => (
-              <option key={v.id} value={v.id}>
-                effort: {v.id}
-              </option>
-            ))}
-          </select>
-        )}
         <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title="New session">
           ＋
         </button>
@@ -208,7 +213,7 @@ export function App({ state, send, composerHandleRef }: Props) {
         dispatch={send}
         busy={state.busy}
         canSend={state.connection === "connected"}
-        agent={agent}
+        pickers={pickers}
         fileResults={state.fileResults}
         onAbort={() => send({ kind: "abort" })}
         handleRef={(handle) => {

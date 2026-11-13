@@ -1,7 +1,8 @@
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- OpenCode mark (official favicon geometry, monochrome outline for theme tinting):
-       nested square frame + solid center block. -->
+  <!-- OpenCode mark (official favicon geometry, enlarged for the mask canvas):
+       nested square frame + solid center block. Frame 3..21, ring 2 thick,
+       center block 8..16. -->
   <path fill-rule="evenodd" clip-rule="evenodd"
-        d="M6 6h12v12H6V6Zm2.2 2.2v7.6h7.6V8.2H8.2Z" fill="#000000"/>
-  <rect x="9.4" y="9.4" width="5.2" height="5.2" fill="#000000"/>
+        d="M3 3h18v18H3V3Zm2 2v14h14V5H5Z" fill="#000000"/>
+  <rect x="8" y="8" width="8" height="8" fill="#000000"/>
 </svg>

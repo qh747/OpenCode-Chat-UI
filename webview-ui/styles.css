@@ -66,6 +66,11 @@ body {
   padding: 2px 4px;
   max-width: 150px;
 }
+.composer-actions .picker {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 220px;
+}
 .spacer {
   flex: 1;
 }
@@ -620,13 +625,7 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px 8px 6px;
-}
-.agent-indicator {
-  font-size: 11px;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0 7px;
+  flex-wrap: wrap;
 }
 
 /* @ mention dropdown */

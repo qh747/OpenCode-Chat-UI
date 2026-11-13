@@ -8,7 +8,8 @@ interface ComposerProps {
   dispatch: Dispatch;
   busy: boolean;
   canSend: boolean;
-  agent: string | undefined;
+  /** Mode/model/effort pickers rendered into the composer action bar. */
+  pickers?: React.ReactNode;
   /** fileResults from the store, keyed by requestId. */
   fileResults: Record<string, { path: string; name: string }[]>;
   onAbort: () => void;
@@ -19,7 +20,7 @@ interface Chip extends ChipInput {
   key: string;
 }
 
-export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort, handleRef }: ComposerProps) {
+export function Composer({ dispatch, busy, canSend, pickers, fileResults, onAbort, handleRef }: ComposerProps) {
   const [text, setText] = useState("");
   const [chips, setChips] = useState<Chip[]>([]);
   const [imageNotice, setImageNotice] = useState<string | undefined>();
@@ -201,11 +202,7 @@ export function Composer({ dispatch, busy, canSend, agent, fileResults, onAbort,
           >
             +
           </button>
-          {agent && (
-            <span className="agent-indicator" title="Agent (Shift+Tab to cycle)">
-              {agent}
-            </span>
-          )}
+          {pickers}
           <span className="spacer" />
           {busy ? (
             <button className="btn danger" onClick={onAbort} title="Stop the current turn">

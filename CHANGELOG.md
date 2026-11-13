@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed: chat message order — the v2 message list arrives newest-first and was rendered as-is, putting your message below the reply.
+- Fixed: sent messages now appear instantly (optimistic local bubble) instead of after the server round-trip.
+- Mode (agent), model and reasoning-effort pickers moved into the composer action bar below the input; wider model selector with ellipsis for long names.
+- Sessions tree groups start collapsed — expand a group to pick a session.
+- OpenCode mark geometry aligned with the official favicon and enlarged (activity/container icon + welcome logo share the same shape).
+
 ## 0.2.0
 
 - opencode v1 detection: servers reporting a v1 `/global/health` fail startup immediately with an `opencode upgrade` guidance message instead of a generic connection failure.

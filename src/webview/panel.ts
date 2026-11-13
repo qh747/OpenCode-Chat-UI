@@ -14,6 +14,7 @@ import type {
   UserMessage,
 } from "../opencode/types";
 import { reverseApply } from "../util/diffapply";
+import { orderMessages } from "../util/messages";
 import type { HostToWeb, WebToHost } from "./protocol";
 
 interface Sink {
@@ -277,6 +278,17 @@ export class ChatController implements vscode.Disposable {
     this.busy = true;
     this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
     this.startPermissionPolling();
+    // Optimistic local bubble: the user sees their message instantly instead
+    // of waiting for the server round-trip; the authoritative refresh replaces
+    // it with the real user message (with attachment metadata) moments later.
+    const localMessage: MessageInfo = {
+      type: "user",
+      id: `local-${Date.now()}`,
+      time: { created: Date.now() },
+      text,
+    };
+    this.messages.push(localMessage);
+    this.post({ kind: "messages", sessionID: this.sessionId, messages: this.mergedMessages() });
     await this.safeCall(() => client.prompt(this.sessionId ?? "", { text, files: attachments }));
   }
 
@@ -560,7 +572,8 @@ export class ChatController implements vscode.Disposable {
     }
     await this.safeCall(async () => {
       const page = await client.listMessages(this.sessionId ?? "");
-      this.messages = page.data;
+      // The v2 endpoint returns newest-first; the UI renders oldest-first.
+      this.messages = orderMessages(page.data);
       this.post({ kind: "messages", sessionID: this.sessionId ?? "", messages: this.mergedMessages() });
     });
   }

@@ -91,15 +91,16 @@ export function Welcome({ version }: { version?: string }) {
   return (
     <div className="welcome">
       <div className="welcome-logo" aria-hidden="true">
-        {/* OpenCode mark: nested square frame + solid center block */}
+        {/* OpenCode mark: nested square frame + solid center block (same
+            geometry as icons/activity.svg, official favicon proportions) */}
         <svg width="72" height="72" viewBox="0 0 24 24" fill="none">
           <path
             fillRule="evenodd"
             clipRule="evenodd"
-            d="M6 6h12v12H6V6Zm2.2 2.2v7.6h7.6V8.2H8.2Z"
+            d="M3 3h18v18H3V3Zm2 2v14h14V5H5Z"
             fill="currentColor"
           />
-          <rect x="9.4" y="9.4" width="5.2" height="5.2" fill="currentColor" />
+          <rect x="8" y="8" width="8" height="8" fill="currentColor" />
         </svg>
       </div>
       <h1 className="welcome-title">OpenCode</h1>
