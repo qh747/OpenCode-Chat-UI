@@ -33,9 +33,15 @@ export interface Snapshot {
   catalog: Catalog;
 }
 
+export interface HistoryGroup {
+  label: string;
+  sessions: { id: string; title?: string; updated: number }[];
+}
+
 export type HostToWeb =
   | { kind: "state"; state: ConnectionState; version?: string; error?: string; compatWarning?: string }
   | { kind: "imageStaged"; requestId: string; path: string; name: string }
+  | { kind: "history"; groups: HistoryGroup[] }
   | { kind: "snapshot"; snapshot: Snapshot }
   | { kind: "sessionMeta"; sessionID?: string; title?: string; agent?: string; model?: ModelRef; busy?: boolean }
   | { kind: "textStarted"; sessionID: string; messageID: string }
@@ -57,6 +63,10 @@ export type WebToHost =
   | { kind: "newSession" }
   | { kind: "showHistory" }
   | { kind: "runCommand"; command: string; arguments: string }
+  | { kind: "renameSession"; id: string; currentTitle?: string }
+  | { kind: "deleteSession"; id: string }
+  | { kind: "forkSession"; id: string }
+  | { kind: "exportSession"; id: string }
   | { kind: "switchSession"; id: string }
   | { kind: "setAgent"; agent: string }
   | { kind: "setModel"; providerID: string; id: string; variant?: string }

@@ -6,6 +6,7 @@ import { Composer } from "./Composer";
 import { DiffList, PermissionCard, Welcome } from "./Cards";
 import { Dropdown } from "./Dropdown";
 import { ModelPicker } from "./ModelPicker";
+import { HistoryMenu } from "./HistoryMenu";
 import type { ComposerHandle } from "./composerTypes";
 
 interface Props {
@@ -130,12 +131,7 @@ export function App({ state, send, composerHandleRef }: Props) {
           {state.title ?? "New session"}
         </span>
         <span className="spacer" />
-        <button className="icon-btn" onClick={() => send({ kind: "showHistory" })} title="Session history">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-            <path d="M12 7v5l3.5 2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
+        <HistoryMenu dispatch={send} groups={state.historyGroups} onOpen={() => send({ kind: "showHistory" })} />
         <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title="New session">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

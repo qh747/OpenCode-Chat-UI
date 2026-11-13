@@ -1,6 +1,7 @@
 import type {
   Catalog,
   ConnectionState,
+  HistoryGroup,
   HostToWeb,
   Snapshot,
   WebToHost,
@@ -25,6 +26,7 @@ export interface ChatState {
   fileResults: Record<string, { path: string; name: string }[]>;
   pickedPaths: Record<string, string[]>;
   stagedImages: Record<string, { path: string; name: string }>;
+  historyGroups: HistoryGroup[];
 }
 
 export const initialState: ChatState = {
@@ -38,6 +40,7 @@ export const initialState: ChatState = {
   fileResults: {},
   pickedPaths: {},
   stagedImages: {},
+  historyGroups: [],
 };
 
 function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
@@ -185,6 +188,8 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
           [message.requestId]: { path: message.path, name: message.name },
         },
       };
+    case "history":
+      return { ...state, historyGroups: message.groups };
     default:
       return state;
   }

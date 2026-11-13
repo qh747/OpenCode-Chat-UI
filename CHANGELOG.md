@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- History picker moved into the webview: the header clock button now opens a date-grouped menu anchored to the button (rename / fork / export / delete actions on hover), instead of the window-centered QuickPick. The command-palette entry keeps the QuickPick.
+- Send button is circular (26px) and height-aligned with the effort picker row.
+- Shared session grouping helper (src/util/sessions.ts).
+
 ## 0.3.9
 
 - Header buttons fully unified: same 26px box, 16px SVG icons (clock and plus), no lingering focus background — heights match the session title row.

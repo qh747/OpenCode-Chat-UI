@@ -16,6 +16,7 @@ import type {
 import { reverseApply } from "../util/diffapply";
 import { orderMessages } from "../util/messages";
 import { resolveCommandAction } from "../util/commands";
+import { groupSessionsByDate } from "../util/sessions";
 import type { HostToWeb, WebToHost } from "./protocol";
 
 interface Sink {
@@ -107,7 +108,19 @@ export class ChatController implements vscode.Disposable {
         await this.newSession();
         break;
       case "showHistory":
-        await vscode.commands.executeCommand("opencode.history");
+        await this.postHistory();
+        break;
+      case "renameSession":
+        await this.renameSessionById(web.id, web.currentTitle);
+        break;
+      case "deleteSession":
+        await this.deleteSessionById(web.id);
+        break;
+      case "forkSession":
+        await this.forkSession(web.id);
+        break;
+      case "exportSession":
+        await this.exportSession(web.id);
         break;
       case "runCommand":
         await this.executeRunCommand(web.command, web.arguments);
@@ -417,6 +430,57 @@ export class ChatController implements vscode.Disposable {
       await this.refreshMessages();
       await this.refreshDiffs();
     });
+  }
+
+  /** Fetch sessions and push date-grouped history to the webview menu. */
+  private async postHistory(): Promise<void> {
+    const client = this.client();
+    if (!client) {
+      return;
+    }
+    await this.safeCall(async () => {
+      const page = await client.listSessions({
+        directory: this.host.folderPath,
+        limit: 100,
+        order: "desc",
+        archived: false,
+      });
+      const groups = groupSessionsByDate(page.data).map((group) => ({
+        label: group.label,
+        sessions: group.sessions.map((s) => ({
+          id: s.id,
+          title: s.title,
+          updated: s.time.updated,
+        })),
+      }));
+      this.post({ kind: "history", groups });
+    });
+  }
+
+  private async renameSessionById(id: string, currentTitle?: string): Promise<void> {
+    const name = await vscode.window.showInputBox({
+      prompt: "Session name",
+      value: currentTitle ?? "",
+    });
+    if (name !== undefined) {
+      await this.safeCall(() => this.client()?.patchSession(id, { title: name }));
+    }
+  }
+
+  private async deleteSessionById(id: string): Promise<void> {
+    const confirm = await vscode.window.showWarningMessage("Delete this session?", { modal: true }, "Delete");
+    if (confirm === "Delete") {
+      await this.safeCall(() => this.client()?.deleteSession(id));
+      if (this.sessionId === id) {
+        this.sessionId = undefined;
+        this.messages = [];
+        this.pending = [];
+        this.diffs = [];
+        this.busy = false;
+        void this.context.workspaceState.update(this.storageKey(), undefined);
+        this.postSnapshot();
+      }
+    }
   }
 
   /** Fork (copy) a session and switch to the copy. */

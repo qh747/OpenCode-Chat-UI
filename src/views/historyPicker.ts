@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { groupSessionsByDate } from "../util/sessions";
 import type { OpencodeHost } from "../host";
 import type { SessionInfo } from "../opencode/types";
 
@@ -9,14 +10,6 @@ export interface HistoryActions {
   fork(id: string): void;
   exportSession(id: string): void;
 }
-
-const GROUP_LABELS: Record<string, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  week: "Last 7 days",
-  month: "Last 30 days",
-  older: "Earlier",
-};
 
 /**
  * History picker replacing the old sessions tree view: date-grouped
@@ -89,37 +82,7 @@ export async function showHistoryPicker(host: OpencodeHost, actions: HistoryActi
 }
 
 function groupByDate(sessions: SessionInfo[]): [string, SessionInfo[]][] {
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const buckets = new Map<string, SessionInfo[]>();
-  for (const session of sessions) {
-    const age = now - session.time.updated;
-    let key: string;
-    if (age < dayMs && new Date(session.time.updated).getDate() === new Date(now).getDate()) {
-      key = "today";
-    } else if (age < 2 * dayMs) {
-      key = "yesterday";
-    } else if (age < 7 * dayMs) {
-      key = "week";
-    } else if (age < 30 * dayMs) {
-      key = "month";
-    } else {
-      key = "older";
-    }
-    const list = buckets.get(key) ?? [];
-    list.push(session);
-    buckets.set(key, list);
-  }
-  const order = ["today", "yesterday", "week", "month", "older"];
-  const result: [string, SessionInfo[]][] = [];
-  for (const key of order) {
-    const label = GROUP_LABELS[key];
-    const list = buckets.get(key);
-    if (label && list && list.length > 0) {
-      result.push([label, list]);
-    }
-  }
-  return result;
+  return groupSessionsByDate(sessions).map((g) => [g.label, g.sessions] as [string, SessionInfo[]]);
 }
 
 function relativeTime(timestamp: number): string {
