@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9
+
+- Header buttons fully unified: same 26px box, 16px SVG icons (clock and plus), no lingering focus background — heights match the session title row.
+
 ## 0.3.8
 
 - Header: OpenCode outline mark beside the session title; history/new-session buttons on a shared 26px box.
