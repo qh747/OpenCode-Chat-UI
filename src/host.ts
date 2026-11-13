@@ -150,24 +150,37 @@ export class OpencodeHost {
     if (!client) {
       return;
     }
+    // Each source loads independently so one failure doesn't wipe the rest.
+    let agents: AgentInfo[] = [];
+    let models: ModelInfo[] = [];
     try {
-      const [agentsRes, modelsRes, defaultModel] = await Promise.all([
-        client.agents(),
-        client.models(),
-        client.defaultModel(),
-      ]);
-      const agents = agentsRes.data.filter(
+      const result = await client.agents(this.folderPath);
+      agents = result.data.filter(
         (agent: AgentInfo) => agent.mode !== "subagent" && !agent.hidden,
       );
-      const models = modelsRes.data;
-      const fallback = models[0]
-        ? { providerID: models[0].providerID, id: models[0].modelID }
-        : undefined;
-      this.catalogCache = { agents, models, defaultModel: defaultModel ?? fallback };
-      this.resyncEmitter.fire();
+      if (agents.length === 0) {
+        // Fallback: keep every visible agent rather than rendering no picker.
+        agents = result.data.filter((agent: AgentInfo) => !agent.hidden);
+      }
     } catch (error) {
-      this.log(`catalog load failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`agents load failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+    try {
+      models = (await client.models(this.folderPath)).data;
+    } catch (error) {
+      this.log(`models load failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    let defaultModel: ModelRef | undefined;
+    try {
+      defaultModel = await client.defaultModel(this.folderPath);
+    } catch (error) {
+      this.log(`default model load failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const fallbackModel = models[0]
+      ? { providerID: models[0].providerID, id: models[0].modelID }
+      : undefined;
+    this.catalogCache = { agents, models, defaultModel: defaultModel ?? fallbackModel };
+    this.resyncEmitter.fire();
   }
 
   async dispose(): Promise<void> {

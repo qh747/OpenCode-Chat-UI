@@ -25,6 +25,15 @@ export class ApiError extends Error {
   }
 }
 
+/** Append ?directory=… (URL-encoded) when a directory is provided. */
+function withDirectory(path: string, directory?: string): string {
+  if (!directory) {
+    return path;
+  }
+  const joiner = path.includes("?") ? "&" : "?";
+  return `${path}${joiner}directory=${encodeURIComponent(directory)}`;
+}
+
 export interface ClientOptions {
   baseUrl: string;
   /** Password for HTTP basic auth. Username is always "opencode". */
@@ -206,20 +215,25 @@ export class OpencodeClient {
     return result.data;
   }
 
-  async agents(): Promise<{ data: AgentInfo[] }> {
-    return this.request<{ data: AgentInfo[] }>("GET", "/api/agent");
+  /**
+   * Catalog endpoints are location-scoped since opencode 2.3.0: without a
+   * `directory` query the server returns empty lists (verified live), so every
+   * caller passes the workspace directory.
+   */
+  async agents(directory?: string): Promise<{ data: AgentInfo[] }> {
+    return this.request<{ data: AgentInfo[] }>("GET", withDirectory("/api/agent", directory));
   }
 
-  async providers(): Promise<{ data: ProviderInfo[] }> {
-    return this.request<{ data: ProviderInfo[] }>("GET", "/api/provider");
+  async providers(directory?: string): Promise<{ data: ProviderInfo[] }> {
+    return this.request<{ data: ProviderInfo[] }>("GET", withDirectory("/api/provider", directory));
   }
 
-  async models(): Promise<{ data: ModelInfo[] }> {
-    return this.request<{ data: ModelInfo[] }>("GET", "/api/model");
+  async models(directory?: string): Promise<{ data: ModelInfo[] }> {
+    return this.request<{ data: ModelInfo[] }>("GET", withDirectory("/api/model", directory));
   }
 
-  async defaultModel(): Promise<ModelRef | undefined> {
-    const payload = await this.request<unknown>("GET", "/api/model/default");
+  async defaultModel(directory?: string): Promise<ModelRef | undefined> {
+    const payload = await this.request<unknown>("GET", withDirectory("/api/model/default", directory));
     const ref = (payload as { data?: ModelRef }).data ?? (payload as ModelRef);
     if (ref && typeof ref === "object" && "providerID" in ref && "id" in ref) {
       return ref as ModelRef;
@@ -228,8 +242,11 @@ export class OpencodeClient {
   }
 
   /** Pending permission requests across the server. */
-  async pendingPermissions(): Promise<{ data: PermissionRequest[] }> {
-    return this.request<{ data: PermissionRequest[] }>("GET", "/api/permission/request");
+  async pendingPermissions(directory?: string): Promise<{ data: PermissionRequest[] }> {
+    return this.request<{ data: PermissionRequest[] }>(
+      "GET",
+      withDirectory("/api/permission/request", directory),
+    );
   }
 
   /** Reply to a permission request. */

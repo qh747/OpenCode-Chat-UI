@@ -49,6 +49,7 @@ export type WebToHost =
   | { kind: "send"; text: string; files: string[] }
   | { kind: "abort" }
   | { kind: "newSession" }
+  | { kind: "showHistory" }
   | { kind: "switchSession"; id: string }
   | { kind: "setAgent"; agent: string }
   | { kind: "setModel"; providerID: string; id: string; variant?: string }

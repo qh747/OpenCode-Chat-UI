@@ -91,21 +91,37 @@ export function Welcome({ version }: { version?: string }) {
   return (
     <div className="welcome">
       <div className="welcome-logo" aria-hidden="true">
-        {/* OpenCode mark: nested square frame + solid center block (same
-            geometry as icons/activity.svg, official favicon proportions) */}
+        {/* OpenCode mark: official favicon geometry, mark bbox fills the canvas */}
         <svg width="72" height="72" viewBox="0 0 24 24" fill="none">
           <path
             fillRule="evenodd"
             clipRule="evenodd"
-            d="M3 3h18v18H3V3Zm2 2v14h14V5H5Z"
+            d="M1.2 0h21.6v24H1.2Zm4.8 4.8v14.4h12V4.8H6Z"
             fill="currentColor"
           />
-          <rect x="8" y="8" width="8" height="8" fill="currentColor" />
+          <rect x="6" y="9.6" width="9.6" height="9.6" fill="currentColor" />
         </svg>
       </div>
       <h1 className="welcome-title">OpenCode</h1>
       <p className="welcome-sub">What should we work on?</p>
-      {version && <p className="welcome-version">opencode v{version}</p>}
+      <div className="welcome-tips">
+        <div className="tip">
+          <span className="tip-key">@</span> mention a file to add context
+        </div>
+        <div className="tip">
+          <span className="tip-key">📷</span> paste or drop images into the composer
+        </div>
+        <div className="tip">
+          <span className="tip-key">⇥</span> Shift+Tab switches build / plan modes
+        </div>
+        <div className="tip">
+          <span className="tip-key">⏪</span> hover one of your messages to rewind
+        </div>
+      </div>
+      <p className="welcome-version">
+        {version ? `opencode v${version} · ` : ""}subscription models live under{" "}
+        <code>opencode-go/*</code>
+      </p>
     </div>
   );
 }

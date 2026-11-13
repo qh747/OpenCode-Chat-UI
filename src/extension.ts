@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 import { OpencodeHost } from "./host";
-import { SessionsTreeProvider } from "./views/sessions";
 import { ChatController } from "./webview/panel";
 import { ChatViewProvider, openChatTab } from "./webview/view";
+import { showHistoryPicker } from "./views/historyPicker";
 import type { SessionInfo } from "./opencode/types";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -17,14 +17,11 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   const host = new OpencodeHost({ context, folder, output });
-  const tree = new SessionsTreeProvider(host);
   const chat = new ChatController(host, context, folder);
 
   context.subscriptions.push(
     host,
-    tree,
     chat,
-    vscode.window.registerTreeDataProvider("opencode.sessions", tree),
     vscode.window.registerWebviewViewProvider("opencode.chat", new ChatViewProvider(chat, context.extensionUri), {
       webviewOptions: { retainContextWhenHidden: true },
     }),
@@ -59,6 +56,24 @@ export function activate(context: vscode.ExtensionContext): void {
   // Start the server immediately; errors surface via status bar and chat.
   void host.start();
 
+  const showSessionActions = {
+    open: (id: string) => {
+      void chat.switchSession(id);
+    },
+    rename: (id: string, currentTitle: string | undefined) => {
+      void renameSessionFlow(host, id, currentTitle);
+    },
+    remove: (id: string) => {
+      void deleteSessionFlow(host, id);
+    },
+    fork: (id: string) => {
+      void chat.forkSession(id);
+    },
+    exportSession: (id: string) => {
+      void chat.exportSession(id);
+    },
+  };
+
   context.subscriptions.push(
     vscode.commands.registerCommand("opencode.newSession", async () => {
       await chat.newSession();
@@ -73,43 +88,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("opencode.openChatTab", () =>
       openChatTab(chat, context.extensionUri, context),
     ),
-    vscode.commands.registerCommand("opencode.refreshSessions", () => tree.load()),
-    vscode.commands.registerCommand("opencode.renameSession", async (node?: { session: SessionInfo }) => {
-      if (!node) {
-        return;
-      }
-      const name = await vscode.window.showInputBox({
-        prompt: "Session name",
-        value: node.session.title ?? "",
-      });
-      if (name !== undefined) {
-        await host.client()?.patchSession(node.session.id, { title: name });
-        void tree.load();
-      }
-    }),
-    vscode.commands.registerCommand("opencode.deleteSession", async (node?: { session: SessionInfo }) => {
-      if (!node) {
-        return;
-      }
-      const confirm = await vscode.window.showWarningMessage(
-        `Delete session "${node.session.title || "Untitled"}"?`,
-        { modal: true },
-        "Delete",
-      );
-      if (confirm === "Delete") {
-        await host.client()?.deleteSession(node.session.id);
-        void tree.load();
-      }
-    }),
-    vscode.commands.registerCommand("opencode.forkSession", (node?: { session: SessionInfo }) => {
-      if (node) {
-        void chat.forkSession(node.session.id);
-      }
-    }),
-    vscode.commands.registerCommand("opencode.exportSession", (node?: { session: SessionInfo }) => {
-      if (node) {
-        void chat.exportSession(node.session.id);
-      }
+    vscode.commands.registerCommand("opencode.history", async () => {
+      await showHistoryPicker(host, showSessionActions);
     }),
     vscode.commands.registerCommand("opencode.showLogs", () => output.show(true)),
     vscode.commands.registerCommand("opencode.restartServer", async () => {
@@ -132,6 +112,23 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 }
 
+async function renameSessionFlow(host: OpencodeHost, id: string, currentTitle: string | undefined): Promise<void> {
+  const name = await vscode.window.showInputBox({
+    prompt: "Session name",
+    value: currentTitle ?? "",
+  });
+  if (name !== undefined) {
+    await host.client()?.patchSession(id, { title: name });
+  }
+}
+
+async function deleteSessionFlow(host: OpencodeHost, id: string): Promise<void> {
+  const confirm = await vscode.window.showWarningMessage("Delete this session?", { modal: true }, "Delete");
+  if (confirm === "Delete") {
+    await host.client()?.deleteSession(id);
+  }
+}
+
 function registerUiOnlyCommands(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("opencode.showLogs", () => output.show(true)),
@@ -144,6 +141,9 @@ function registerUiOnlyCommands(context: vscode.ExtensionContext, output: vscode
     vscode.commands.registerCommand("opencode.openChatTab", () => {
       void vscode.window.showInformationMessage("OpenCode: open a workspace folder first.");
     }),
+    vscode.commands.registerCommand("opencode.history", () => {
+      void vscode.window.showInformationMessage("OpenCode: open a workspace folder first.");
+    }),
     vscode.commands.registerCommand("opencode.restartServer", () => undefined),
     vscode.commands.registerCommand("opencode.openCLI", () => undefined),
   );
@@ -152,3 +152,6 @@ function registerUiOnlyCommands(context: vscode.ExtensionContext, output: vscode
 export function deactivate(): void {
   /* host disposal happens via context.subscriptions */
 }
+
+// SessionInfo re-exported for command argument typing in tests/tools.
+export type { SessionInfo };

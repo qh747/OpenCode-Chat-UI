@@ -4,6 +4,7 @@ import type { WebToHost } from "../src/webview/protocol";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { DiffList, PermissionCard, Welcome } from "./Cards";
+import { Dropdown } from "./Dropdown";
 import type { ComposerHandle } from "./composerTypes";
 import type { ModelInfo } from "../src/opencode/types";
 
@@ -68,72 +69,59 @@ export function App({ state, send, composerHandleRef }: Props) {
     : undefined;
   const variants = activeModelInfo?.variants ?? [];
 
-  const pickers = (
-    <>
-      {state.catalog.agents.length > 0 && (
-        <select
-          className="picker"
-          value={agent ?? ""}
-          onChange={(event) => send({ kind: "setAgent", agent: event.target.value })}
-          title="Agent (Shift+Tab cycles)"
-        >
-          {state.catalog.agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      )}
-      {modelGroups.length > 0 && (
-        <select
-          className="picker picker-model"
-          value={activeModel ? `${activeModel.providerID}/${activeModel.id}` : ""}
-          onChange={(event) => {
-            const [providerID, id] = event.target.value.split("/");
-            if (providerID && id) {
-              send({ kind: "setModel", providerID, id, variant: undefined });
-            }
-          }}
-          title={activeModelInfo?.name ?? "Model"}
-        >
-          {modelGroups.map(([providerID, models]) => (
-            <optgroup key={providerID} label={providerID}>
-              {models.map((m) => (
-                <option key={`${m.providerID}/${m.modelID}`} value={`${m.providerID}/${m.modelID}`}>
-                  {m.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      )}
-      {state.connection === "connected" && variants.length > 0 && (
-        <select
-          className="picker"
-          value={state.model?.variant ?? ""}
-          onChange={(event) => {
-            if (!activeModel) {
-              return;
-            }
-            send({
-              kind: "setModel",
-              providerID: activeModel.providerID,
-              id: activeModel.id,
-              variant: event.target.value || undefined,
-            });
-          }}
-          title="Reasoning effort"
-        >
-          <option value="">effort: default</option>
-          {variants.map((v) => (
-            <option key={v.id} value={v.id}>
-              effort: {v.id}
-            </option>
-          ))}
-        </select>
-      )}
-    </>
+  const agentOptions =
+    state.catalog.agents.length > 0
+      ? state.catalog.agents.map((a) => ({ value: a.id, label: a.name }))
+      : [{ value: agent ?? "build", label: agent ?? "build" }];
+  const modelOptions = modelGroups.flatMap(([providerID, models]) =>
+    models.map((m) => ({ value: `${m.providerID}/${m.modelID}`, label: m.name, group: providerID })),
   );
+  const effortOptions = [
+    { value: "", label: "effort: default" },
+    ...variants.map((v) => ({ value: v.id, label: `effort: ${v.id}` })),
+  ];
+
+  const pickers =
+    state.connection === "connected" ? (
+      <>
+        <Dropdown
+          value={agent ?? ""}
+          options={agentOptions}
+          onChange={(value) => send({ kind: "setAgent", agent: value })}
+          title="Agent (Shift+Tab cycles)"
+        />
+        {modelOptions.length > 0 && (
+          <Dropdown
+            wide
+            value={activeModel ? `${activeModel.providerID}/${activeModel.id}` : ""}
+            options={modelOptions}
+            onChange={(value) => {
+              const [providerID, id] = value.split("/");
+              if (providerID && id) {
+                send({ kind: "setModel", providerID, id, variant: undefined });
+              }
+            }}
+            title={activeModelInfo?.name ?? "Model"}
+            placeholder="Model"
+          />
+        )}
+        {variants.length > 0 && activeModel && (
+          <Dropdown
+            value={state.model?.variant ?? ""}
+            options={effortOptions}
+            onChange={(value) =>
+              send({
+                kind: "setModel",
+                providerID: activeModel.providerID,
+                id: activeModel.id,
+                variant: value || undefined,
+              })
+            }
+            title="Reasoning effort"
+          />
+        )}
+      </>
+    ) : null;
 
   return (
     <div className="app">
@@ -142,6 +130,12 @@ export function App({ state, send, composerHandleRef }: Props) {
           {state.title ?? "New session"}
         </span>
         <span className="spacer" />
+        <button className="icon-btn" onClick={() => send({ kind: "showHistory" })} title="Session history">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 7v5l3.5 2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
         <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title="New session">
           ＋
         </button>

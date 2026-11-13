@@ -105,6 +105,9 @@ export class ChatController implements vscode.Disposable {
       case "newSession":
         await this.newSession();
         break;
+      case "showHistory":
+        await vscode.commands.executeCommand("opencode.history");
+        break;
       case "switchSession":
         await this.switchSession(web.id);
         break;
@@ -623,7 +626,7 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     await this.safeCall(async () => {
-      const result = await client.pendingPermissions();
+      const result = await client.pendingPermissions(this.host.folderPath);
       this.pending = result.data.filter((p) => p.sessionID === this.sessionId);
       this.post({ kind: "permissions", sessionID: this.sessionId, pending: this.pending });
       if (this.pending.length === 0) {

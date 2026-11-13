@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+
+- Marketplace icon regenerated with the official OpenCode mark (dark tile, white frame, gray block) via a dependency-free PNG generator (`scripts/generate-icons.mjs`); activity + welcome marks share the exact official geometry.
+- Sessions tree view removed — a clock button in the chat header opens a date-grouped history picker with per-session rename / fork / export / delete actions.
+- Fixed: user bubbles rendered an extra empty line (invisible rewind button occupied a row; it is absolutely positioned now).
+- Fixed: agent picker could be empty on opencode ≥ 2.3.0 — catalog endpoints are location-scoped and now receive the workspace `directory` (verified live: `/api/agent` returns `[]` without it). The picker is always rendered while connected, and catalog sources load independently.
+- Custom styled dropdowns replace native selects for agent / model / effort.
+- Welcome screen now shows usage tips (mention files, paste images, Shift+Tab agent cycling, message rewind).
+
 ## 0.2.1
 
 - Fixed: chat message order — the v2 message list arrives newest-first and was rendered as-is, putting your message below the reply.

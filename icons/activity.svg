@@ -1,8 +1,8 @@
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- OpenCode mark (official favicon geometry, enlarged for the mask canvas):
-       nested square frame + solid center block. Frame 3..21, ring 2 thick,
-       center block 8..16. -->
+  <!-- OpenCode mark (official favicon geometry: frame x 25..75%, y 18.75..81.25%,
+       ring 12.5% of width, block x 37.5..62.5%, y 43.75..68.75%), mark bbox
+       filling the 24px mask canvas. -->
   <path fill-rule="evenodd" clip-rule="evenodd"
-        d="M3 3h18v18H3V3Zm2 2v14h14V5H5Z" fill="#000000"/>
-  <rect x="8" y="8" width="8" height="8" fill="#000000"/>
+        d="M1.2 0h21.6v24H1.2Zm4.8 4.8v14.4h12V4.8H6Z" fill="#000000"/>
+  <rect x="6" y="9.6" width="9.6" height="9.6" fill="#000000"/>
 </svg>
