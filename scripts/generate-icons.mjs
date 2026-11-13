@@ -15,13 +15,14 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const SIZE = 256;
 // Desktop-style light variant of the official mark: white tile, near-black
-// nested frame, gray center block — same geometry as the official favicon
+// nested frame, LIGHT GRAY center block (the ornate-light gray used by the
+// official wordmark) — same geometry as the official favicon
 // (frame x 25..75%, y 18.75..81.25%, ring 12.5% of width, block
 // x 37.5..62.5%, y 43.75..68.75%). Rounded tile corners (22%), transparent
-// outside — matching the OpenCode desktop app icon style.
+// outside.
 const BG = [0xff, 0xff, 0xff];
 const RING = [0x13, 0x10, 0x10];
-const BLOCK = [0x5a, 0x58, 0x58];
+const BLOCK = [0xcf, 0xce, 0xcd];
 const RADIUS = Math.round(SIZE * 0.22);
 
 const px = new Uint8Array(SIZE * SIZE * 4);

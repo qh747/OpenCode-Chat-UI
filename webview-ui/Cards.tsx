@@ -91,15 +91,10 @@ export function Welcome({ version }: { version?: string }) {
   return (
     <div className="welcome">
       <div className="welcome-logo" aria-hidden="true">
-        {/* OpenCode mark: official favicon geometry, mark bbox fills the canvas */}
+        {/* OpenCode mark: outline style (matches the activity-bar icon) */}
         <svg width="72" height="72" viewBox="0 0 24 24" fill="none">
-          <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M1.2 0h21.6v24H1.2Zm4.8 4.8v14.4h12V4.8H6Z"
-            fill="currentColor"
-          />
-          <rect x="6" y="9.6" width="9.6" height="9.6" fill="currentColor" />
+          <rect x="3.2" y="3.2" width="17.6" height="17.6" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="8" y="8" width="8" height="8" stroke="currentColor" strokeWidth="1.6" />
         </svg>
       </div>
       <h1 className="welcome-title">OpenCode</h1>

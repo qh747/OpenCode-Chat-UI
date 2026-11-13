@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Marketplace icon: center block switched to light gray (#CFCECD, the official ornate-light gray) so the nested-frame mark reads white frame / light-gray block on the white tile.
+- Activity-bar and welcome marks redrawn in outline style (stroked frame + hollow center block) to match neighboring editor icons.
+
 ## 0.3.1
 
 - Fixed: agent picker was stuck on a single "build" entry — opencode 2.3.0's `/api/agent` (and the other location-scoped catalog endpoints) only return data for the deepObject query `?location[directory]=…`; the plain `?directory=` form returns empty lists (verified live). Fallback labels are capitalized (Build/Plan).
