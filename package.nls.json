@@ -6,5 +6,13 @@
   "opencode.context.maxSelectionLength.description": "Maximum number of characters of the active selection to attach.",
   "opencode.notifications.turnComplete.description": "Show a notification when a turn finishes.",
   "opencode.notifications.permissionRequest.description": "Show a notification when the agent asks for permission.",
-  "opencode.notifications.errors.description": "Show a notification when the agent or the server reports an error."
+  "opencode.notifications.errors.description": "Show a notification when the agent or the server reports an error.",
+  "opencode.composer.submitKey.description": "Which keystroke sends a message from the composer.",
+  "opencode.composer.submitKey.enter": "Enter sends, Shift+Enter inserts a newline.",
+  "opencode.composer.submitKey.ctrlEnter": "Ctrl+Enter (⌘Enter on macOS) sends; plain Enter inserts a newline.",
+  "opencode.composer.showContextBar.description": "Show the info bar under the composer (git branch, workspace path, context usage and cost).",
+  "opencode.ui.preferredLocation.description": "Where OpenCode: Open and the status bar button point.",
+  "opencode.ui.preferredLocation.sidebar": "Focus the sidebar panel.",
+  "opencode.ui.preferredLocation.editor": "Open the chat in an editor tab.",
+  "opencode.startup.autoOpen.description": "Open the chat panel automatically when a workspace opens."
 }

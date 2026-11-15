@@ -146,6 +146,36 @@
           "type": "boolean",
           "default": false,
           "description": "%opencode.notifications.errors.description%"
+        },
+        "opencode.composer.submitKey": {
+          "type": "string",
+          "enum": ["enter", "ctrlEnter"],
+          "enumDescriptions": [
+            "%opencode.composer.submitKey.enter%",
+            "%opencode.composer.submitKey.ctrlEnter%"
+          ],
+          "default": "enter",
+          "description": "%opencode.composer.submitKey.description%"
+        },
+        "opencode.composer.showContextBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "%opencode.composer.showContextBar.description%"
+        },
+        "opencode.ui.preferredLocation": {
+          "type": "string",
+          "enum": ["sidebar", "editor"],
+          "enumDescriptions": [
+            "%opencode.ui.preferredLocation.sidebar%",
+            "%opencode.ui.preferredLocation.editor%"
+          ],
+          "default": "sidebar",
+          "description": "%opencode.ui.preferredLocation.description%"
+        },
+        "opencode.startup.autoOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "%opencode.startup.autoOpen.description%"
         }
       }
     }

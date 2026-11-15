@@ -6,5 +6,13 @@
   "opencode.context.maxSelectionLength.description": "选区可作为上下文附加的最大字符数。",
   "opencode.notifications.turnComplete.description": "一轮回答结束时显示通知。",
   "opencode.notifications.permissionRequest.description": "Agent 请求权限时显示通知。",
-  "opencode.notifications.errors.description": "Agent 或服务器报告错误时显示通知。"
+  "opencode.notifications.errors.description": "Agent 或服务器报告错误时显示通知。",
+  "opencode.composer.submitKey.description": "在输入框中用哪个按键发送消息。",
+  "opencode.composer.submitKey.enter": "Enter 发送，Shift+Enter 换行。",
+  "opencode.composer.submitKey.ctrlEnter": "Ctrl+Enter（macOS 上为 ⌘Enter）发送，Enter 换行。",
+  "opencode.composer.showContextBar.description": "显示输入框下方的信息条（git 分支、工作区路径、上下文用量与费用）。",
+  "opencode.ui.preferredLocation.description": "OpenCode: Open 命令与状态栏按钮的打开位置。",
+  "opencode.ui.preferredLocation.sidebar": "聚焦侧栏面板。",
+  "opencode.ui.preferredLocation.editor": "在编辑器标签页中打开聊天。",
+  "opencode.startup.autoOpen.description": "打开工作区时自动打开聊天面板。"
 }

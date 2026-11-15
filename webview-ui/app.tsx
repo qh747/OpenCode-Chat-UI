@@ -271,13 +271,18 @@ export function App({ state, send, composerHandleRef }: Props) {
         dispatch={send}
         busy={state.busy}
         canSend={state.connection === "connected"}
-        context={{
-          git: state.git,
-          workspacePath: state.workspacePath,
-          cost: state.cost,
-          tokens: state.tokens,
-          contextLimit: activeModelInfo?.limit?.context,
-        }}
+        submitKey={state.submitKey}
+        context={
+          state.showContextBar
+            ? {
+                git: state.git,
+                workspacePath: state.workspacePath,
+                cost: state.cost,
+                tokens: state.tokens,
+                contextLimit: activeModelInfo?.limit?.context,
+              }
+            : undefined
+        }
         pickers={pickers}
         fileResults={state.fileResults}
         commands={state.catalog.commands}

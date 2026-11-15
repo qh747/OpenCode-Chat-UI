@@ -10,6 +10,7 @@ import type {
   Snapshot,
   WebToHost,
 } from "../src/webview/protocol";
+import type { SubmitKey } from "../src/util/composer-keys";
 import type {
   AssistantContent,
   AssistantMessage,
@@ -52,6 +53,8 @@ export interface ChatState {
   git?: GitInfo;
   editors: EditorFile[];
   previews: Record<string, AttachmentPreview>;
+  submitKey: SubmitKey;
+  showContextBar: boolean;
 }
 
 export const initialState: ChatState = {
@@ -72,6 +75,8 @@ export const initialState: ChatState = {
   historyGroups: [],
   editors: [],
   previews: {},
+  submitKey: "enter",
+  showContextBar: true,
 };
 
 function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
@@ -173,6 +178,8 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         version: message.version ?? state.version,
         connectionError: message.error,
         compatWarning: message.compatWarning,
+        submitKey: message.composer?.submitKey ?? state.submitKey,
+        showContextBar: message.composer?.showContextBar ?? state.showContextBar,
       };
     }
     case "snapshot":

@@ -88,6 +88,10 @@ export function activate(context: vscode.ExtensionContext): void {
       if (typeof sessionId === "string" && sessionId) {
         await chat.switchSession(sessionId);
       }
+      if (preferredLocation() === "editor") {
+        openChatTab(chat, context.extensionUri, context);
+        return;
+      }
       await vscode.commands.executeCommand("opencode.chat.focus");
     }),
     vscode.commands.registerCommand("opencode.openChatTab", () =>
@@ -109,7 +113,8 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
   );
 
-  // Auto-restart when connection-relevant settings change.
+  // Auto-restart when connection-relevant settings change; UI settings are
+  // re-pushed to the webviews instead.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (
@@ -118,8 +123,24 @@ export function activate(context: vscode.ExtensionContext): void {
       ) {
         void host.restart();
       }
+      if (
+        event.affectsConfiguration("opencode.composer.submitKey") ||
+        event.affectsConfiguration("opencode.composer.showContextBar")
+      ) {
+        chat.refreshUiSettings();
+      }
     }),
   );
+
+  if (vscode.workspace.getConfiguration("opencode").get<boolean>("startup.autoOpen", false)) {
+    void vscode.commands.executeCommand("opencode.openChat");
+  }
+}
+
+function preferredLocation(): "sidebar" | "editor" {
+  return vscode.workspace
+    .getConfiguration("opencode")
+    .get<"sidebar" | "editor">("ui.preferredLocation", "sidebar");
 }
 
 async function renameSessionFlow(host: OpencodeHost, id: string, currentTitle: string | undefined): Promise<void> {

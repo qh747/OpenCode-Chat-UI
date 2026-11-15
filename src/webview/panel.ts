@@ -357,6 +357,7 @@ export class ChatController implements vscode.Disposable {
   }
 
   private broadcastState(): void {
+    const config = vscode.workspace.getConfiguration("opencode");
     this.post({
       kind: "state",
       state: this.host.currentState,
@@ -364,7 +365,16 @@ export class ChatController implements vscode.Disposable {
       error: this.host.lastError,
       compatWarning: this.host.compatWarning,
       locale: getLocale(),
+      composer: {
+        submitKey: config.get<"enter" | "ctrlEnter">("composer.submitKey", "enter"),
+        showContextBar: config.get<boolean>("composer.showContextBar", true),
+      },
     });
+  }
+
+  /** Re-push state so composer settings changed in the middle of a session apply. */
+  refreshUiSettings(): void {
+    this.broadcastState();
   }
 
   private async safeCall(fn: () => unknown): Promise<void> {

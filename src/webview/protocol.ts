@@ -1,5 +1,6 @@
 import type { SessionRunStatus } from "../util/sessions";
 import type { Locale } from "../util/i18n";
+import type { SubmitKey } from "../util/composer-keys";
 import type {
   AgentInfo,
   AssistantContent,
@@ -102,6 +103,8 @@ export type HostToWeb =
       compatWarning?: string;
       /** The display language the panel renders copy in. */
       locale?: Locale;
+      /** Composer behavior settings; absent keeps what the panel already has. */
+      composer?: { submitKey: SubmitKey; showContextBar: boolean };
     }
   | { kind: "imageStaged"; requestId: string; path: string; name: string }
   | { kind: "history"; groups: HistoryGroup[] }

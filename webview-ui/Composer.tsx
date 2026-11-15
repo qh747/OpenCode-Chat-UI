@@ -7,6 +7,7 @@ import { BUILTIN_COMMANDS, filterCommands, mergeMentions, splitCommandInput } fr
 import type { CommandInfoLike, MentionOption } from "../src/util/commands";
 import type { CommandInfo, SkillInfo } from "../src/opencode/types";
 import type { AttachmentKind, AttachmentPreview, EditorFile } from "../src/webview/protocol";
+import { shouldSend, type SubmitKey } from "../src/util/composer-keys";
 import { t, type MessageKey } from "../src/util/i18n";
 
 const MAX_IMAGES = 6;
@@ -37,6 +38,8 @@ interface ComposerProps {
   dispatch: Dispatch;
   busy: boolean;
   canSend: boolean;
+  /** Which keystroke sends the message (Shift+Enter always a newline). */
+  submitKey: SubmitKey;
   /** Mode/model/effort pickers rendered into the composer action bar. */
   pickers?: React.ReactNode;
   /** fileResults from the store, keyed by requestId. */
@@ -88,6 +91,7 @@ export function Composer({
   dispatch,
   busy,
   canSend,
+  submitKey,
   pickers,
   fileResults,
   commands,
@@ -435,9 +439,11 @@ export function Composer({
       setPreview(null);
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      if (commandMode) {
+    if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+      // Command and mention confirmation stays on bare Enter regardless of
+      // the send keystroke; only sending the message itself is configurable.
+      if (commandMode && !event.shiftKey) {
+        event.preventDefault();
         // With arguments typed ("/review hello") Enter executes directly;
         // bare "/name" accepts the highlighted suggestion into the input.
         if (text.includes(" ")) {
@@ -460,10 +466,16 @@ export function Composer({
         }
         return;
       }
-      if (mentionOpen && acceptActive()) {
-        return;
+      if (mentionOpen && !event.shiftKey) {
+        event.preventDefault();
+        if (acceptActive()) {
+          return;
+        }
       }
-      doSend();
+      if (shouldSend(submitKey, event.nativeEvent)) {
+        event.preventDefault();
+        doSend();
+      }
       return;
     }
     if (event.key === "ArrowDown" && active) {

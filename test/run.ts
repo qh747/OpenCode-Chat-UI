@@ -6,6 +6,7 @@ import "./chat-render.test";
 import "./chat-reducer.test";
 import "./client-routes.test";
 import "./commands.test";
+import "./composer-keys.test";
 import "./dcp-markers.test";
 import "./diff-list.test";
 import "./diffapply.test";
