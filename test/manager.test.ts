@@ -17,7 +17,7 @@ function makeManager(overrides: Partial<ConstructorParameters<typeof ServerManag
   let state = "";
   const manager = new ServerManager({
     directory: process.cwd(),
-    settings: { path: "", serverUrl: "", serverPassword: "" },
+    settings: { path: "", serverUrl: "" },
     logger: (line) => logs.push(line),
     onState: (next) => {
       state = next;
@@ -68,7 +68,7 @@ test("connects to an external server URL without spawning", async () => {
   const reference = await spawned.manager.start(); // keep running as the "external" server
 
   const external = makeManager({
-    settings: { path: "", serverUrl: reference.url, serverPassword: "" },
+    settings: { path: "", serverUrl: reference.url },
   });
   const active = await external.manager.start();
   assert.equal(active.owned, false);

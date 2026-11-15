@@ -49,7 +49,6 @@ code --install-extension dist/opencode-vscode-<version>.vsix
 | --- | --- | --- |
 | `opencode.path` | `""` | Override the opencode binary path (auto-detected otherwise). |
 | `opencode.serverUrl` | `""` | Connect to an already running opencode v2 server instead of spawning one. |
-| `opencode.serverPassword` | `""` | Password for the external server (basic-auth user is always `opencode`). |
 | `opencode.context.autoAttachSelection` | `true` | Attach the active editor's selection as context. |
 | `opencode.context.maxSelectionLength` | `2000` | Max characters of a selection to attach. |
 | `opencode.notifications.turnComplete` | `true` | Notify when a turn finishes. |

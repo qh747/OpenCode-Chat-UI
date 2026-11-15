@@ -114,8 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (
         event.affectsConfiguration("opencode.path") ||
-        event.affectsConfiguration("opencode.serverUrl") ||
-        event.affectsConfiguration("opencode.serverPassword")
+        event.affectsConfiguration("opencode.serverUrl")
       ) {
         void host.restart();
       }

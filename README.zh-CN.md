@@ -49,7 +49,6 @@ code --install-extension dist/opencode-vscode-0.2.0.vsix
 | --- | --- | --- |
 | `opencode.path` | `""` | 手动指定 opencode 二进制路径（否则自动探测）。 |
 | `opencode.serverUrl` | `""` | 连接已运行的 opencode v2 server，而不是每个窗口启动一个。 |
-| `opencode.serverPassword` | `""` | 外部 server 的密码（Basic auth 用户固定为 `opencode`）。 |
 | `opencode.context.autoAttachSelection` | `true` | 发送消息时自动附加当前编辑器的选区。 |
 | `opencode.context.maxSelectionLength` | `2000` | 选区附加的最大字符数。 |
 | `opencode.notifications.turnComplete` | `true` | 一轮对话结束时通知。 |

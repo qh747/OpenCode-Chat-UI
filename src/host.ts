@@ -76,7 +76,6 @@ export class OpencodeHost {
     return {
       path: config.get<string>("path", "").trim(),
       serverUrl: config.get<string>("serverUrl", "").trim(),
-      serverPassword: config.get<string>("serverPassword", ""),
     };
   }
 

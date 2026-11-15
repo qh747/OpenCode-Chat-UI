@@ -122,11 +122,6 @@
           "default": "",
           "description": "%opencode.serverUrl.description%"
         },
-        "opencode.serverPassword": {
-          "type": "string",
-          "default": "",
-          "description": "%opencode.serverPassword.description%"
-        },
         "opencode.context.autoAttachSelection": {
           "type": "boolean",
           "default": true,

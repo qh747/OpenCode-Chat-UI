@@ -20,7 +20,6 @@ export interface ServerManagerOptions {
   settings: {
     path: string;
     serverUrl: string;
-    serverPassword: string;
   };
   logger: (line: string) => void;
   onState: (state: ServerState, detail?: string) => void;
@@ -128,8 +127,7 @@ export class ServerManager {
       this.setState("error", detail);
       throw new Error(detail);
     }
-    const password = this.options.settings.serverPassword;
-    const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
+    const auth = `Basic ${Buffer.from("opencode:").toString("base64")}`;
     const infoUrl = `${url.replace(/\/+$/, "")}/api/info`;
     try {
       const response = await fetch(infoUrl, {
@@ -140,7 +138,7 @@ export class ServerManager {
         throw new Error(`HTTP ${response.status} from ${infoUrl}`);
       }
       const info = (await response.json()) as { version?: string };
-      this.server = { url: infoUrl.replace(/\/api\/info$/, ""), password, version: info.version ?? "unknown", owned: false };
+      this.server = { url: infoUrl.replace(/\/api\/info$/, ""), password: "", version: info.version ?? "unknown", owned: false };
       this.log(`connected to external server ${this.server.url} (v${this.server.version})`);
       this.setState("connected");
       return this.server;
