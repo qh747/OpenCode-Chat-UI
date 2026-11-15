@@ -1,6 +1,8 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  filterSkills,
+  findSkillByCommand,
   groupModels,
   isFreeModel,
   mergeMentions,
@@ -82,31 +84,57 @@ describe("modelShortName", () => {
 });
 
 describe("mergeMentions", () => {
-  const skills = [
-    { name: "opencode", description: "questions about OpenCode itself" },
-    { name: "report", description: "report an issue" },
-  ];
   const files = [
     { path: "H:/w/src/main.ts", name: "main.ts" },
     { path: "H:/w/src/app.ts", name: "app.ts" },
   ];
 
-  test("empty query lists skills first then files", () => {
-    const merged = mergeMentions(skills, files, "");
-    assert.equal(merged[0]?.kind, "skill");
-    assert.equal(merged[merged.length - 1]?.kind, "file");
-    assert.equal(merged.length, 4);
+  test("empty query lists files", () => {
+    const merged = mergeMentions(files, "");
+    assert.deepEqual(merged.map((m) => m.label), ["main.ts", "app.ts"]);
   });
 
-  test("query filters both skills and files", () => {
-    const merged = mergeMentions(skills, files, "app");
+  test("query filters files", () => {
+    const merged = mergeMentions(files, "app");
     assert.deepEqual(merged.map((m) => m.label), ["app.ts"]);
-    const skillOnly = mergeMentions(skills, files, "report");
-    assert.deepEqual(skillOnly.map((m) => m.label), ["report"]);
+    assert.deepEqual(mergeMentions(files, "zzz"), []);
   });
 
-  test("query keeps skills matching even when files do not", () => {
-    const merged = mergeMentions(skills, files, "OPENCODE");
-    assert.equal(merged[0]?.kind, "skill");
+  test("query is case-insensitive", () => {
+    assert.deepEqual(mergeMentions(files, "APP").map((m) => m.label), ["app.ts"]);
+  });
+});
+
+describe("filterSkills", () => {
+  const skills = [
+    { id: "opencode", name: "OpenCode", description: "questions about OpenCode itself" },
+    { id: "report", name: "Report", description: "report an issue" },
+  ];
+
+  test("empty query returns all skills", () => {
+    assert.deepEqual(filterSkills(skills, "").map((s) => s.id), ["opencode", "report"]);
+  });
+
+  test("query matches the id or the display name", () => {
+    assert.deepEqual(filterSkills(skills, "rep").map((s) => s.id), ["report"]);
+    assert.deepEqual(filterSkills(skills, "Report").map((s) => s.id), ["report"]);
+    assert.deepEqual(filterSkills(skills, "OpenCode").map((s) => s.id), ["opencode"]);
+    assert.deepEqual(filterSkills(skills, "opencode").map((s) => s.id), ["opencode"]);
+    assert.deepEqual(filterSkills(skills, "zzz"), []);
+  });
+});
+
+describe("findSkillByCommand", () => {
+  const skills = [
+    { id: "opencode", name: "OpenCode" },
+    { id: "report", name: "Report" },
+  ];
+
+  test("matches a typed command by skill id, case-insensitively", () => {
+    assert.equal(findSkillByCommand(skills, "report")?.id, "report");
+    assert.equal(findSkillByCommand(skills, "REPORT")?.id, "report");
+    assert.equal(findSkillByCommand(skills, "/report")?.id, "report");
+    assert.equal(findSkillByCommand(skills, "zzz"), undefined);
+    assert.equal(findSkillByCommand(skills, ""), undefined);
   });
 });

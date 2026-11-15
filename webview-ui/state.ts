@@ -17,7 +17,6 @@ import type {
   FileDiffInfo,
   MessageInfo,
   PermissionRequest,
-  TokenUsage,
 } from "../src/opencode/types";
 import type { SegmentKind } from "../src/util/live-segments";
 import { locatePart } from "../src/util/live-segments";
@@ -47,14 +46,17 @@ export interface ChatState {
   pickedPaths: Record<string, string[]>;
   stagedImages: Record<string, { path: string; name: string }>;
   historyGroups: HistoryGroup[];
-  cost?: number;
-  tokens?: TokenUsage;
+  /** Tokens of the latest billed assistant message — the context gauge value. */
+  contextTokens?: number;
+  /** Cache hit rate of the same message (0..1). */
+  cacheHitRate?: number;
   workspacePath?: string;
   git?: GitInfo;
   editors: EditorFile[];
   previews: Record<string, AttachmentPreview>;
   submitKey: SubmitKey;
   showContextBar: boolean;
+  maxVisibleDiffRows: number;
 }
 
 export const initialState: ChatState = {
@@ -77,6 +79,7 @@ export const initialState: ChatState = {
   previews: {},
   submitKey: "enter",
   showContextBar: true,
+  maxVisibleDiffRows: 5,
 };
 
 function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
@@ -95,8 +98,8 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     catalog: snapshot.catalog,
     catalogLoaded: true,
     hydrated: true,
-    cost: snapshot.cost,
-    tokens: snapshot.tokens,
+    contextTokens: snapshot.contextTokens,
+    cacheHitRate: snapshot.cacheHitRate,
     workspacePath: snapshot.workspacePath,
     git: snapshot.git,
     editors: snapshot.editors ?? state.editors,
@@ -180,6 +183,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         compatWarning: message.compatWarning,
         submitKey: message.composer?.submitKey ?? state.submitKey,
         showContextBar: message.composer?.showContextBar ?? state.showContextBar,
+        maxVisibleDiffRows: message.diffList?.maxVisibleRows ?? state.maxVisibleDiffRows,
       };
     }
     case "snapshot":
@@ -203,8 +207,8 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         agent: message.agent ?? state.agent,
         model: message.model ?? state.model,
         busy: message.busy ?? state.busy,
-        cost: message.cost ?? state.cost,
-        tokens: message.tokens ?? state.tokens,
+        contextTokens: message.contextTokens ?? state.contextTokens,
+        cacheHitRate: message.cacheHitRate ?? state.cacheHitRate,
       };
     }
     case "git": {

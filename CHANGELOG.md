@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.7
+
+- Skills are picked from the slash-command menu: `/` now lists the server's skills below the commands, filtered as you type, keyboard-selectable. Selecting one inserts the skill mention `@<id>` so the message can carry more context before it is sent; sending `/skill-id arguments` directly starts the turn with that mention.
+- Fixed: the `@` mention picker showed skills by their display name, but the server resolves mentions by the skill's id — which often differs (`OpenCode` vs `opencode`, `Report` vs `report`), so selected skills could fail to load. Mentions now always spell the id; the display name is shown in the row.
+- The `@` picker is files-only now; skills live only in the `/` picker.
+
+- The expanded changed-files list no longer stretches the panel: rows beyond `opencode.diffList.maxVisibleRows` (default 5) scroll inside the card behind a thin scrollbar themed to match the panel. Fewer files than the cap render exactly as before.
+
+## 0.4.5
+
+- The cost figure in the context strip is gone. The opencode server never reported a cost for subscription models (`session.cost` stays 0 no matter what the turn used), so the strip showed a frozen `$0.0000` that no plugin-side change could fix. In its place the strip now shows the cache hit rate of the latest billed turn — the share of prompt tokens the provider served from its prompt cache, e.g. `43k / 1.0M | 95%` — which the same message that feeds the context gauge carries. If the server starts reporting real costs again, this is where a cost readout could return.
+
+## 0.4.4
+
+- The context strip's usage figure was the session's cumulative token total, which grows with every turn and means nothing against the context window — it could read `2.6M / 1.0M`. It now shows the tokens of the latest billed assistant message (input + output + reasoning + cache), the same number the opencode web UI uses for its context gauge, so the figure is the context the next turn will start from. A rewind stops the count at the revert point, and a completed compaction discards the usage it replaced.
+- The strip now updates at the end of every turn, not only when the session is reopened (0.4.3 fix, kept).
+
 ## 0.4.3
 
 - The changed-files list is collapsed by default: one quiet row — `▸ CHANGES 2 · +31 -4` — that expands into the per-file Keep / Revert on click. The counts are the signal; the rows are only for acting on one file. It used to sit above the composer fully expanded after every turn, one row per file, until each was dealt with.

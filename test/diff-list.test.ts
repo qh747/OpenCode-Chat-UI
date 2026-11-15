@@ -10,9 +10,15 @@ const DIFFS: FileDiffInfo[] = [
   { file: "h:\\proj\\src\\panel.ts", status: "modified", additions: 12, deletions: 3, patch: "" },
 ];
 
-function render(diffs: FileDiffInfo[]): string {
+function render(diffs: FileDiffInfo[], maxVisibleRows = 5): string {
   return renderToStaticMarkup(
-    createElement(DiffList, { diffs, onOpen: () => {}, onKeep: () => {}, onRevert: () => {} }),
+    createElement(DiffList, {
+      diffs,
+      maxVisibleRows,
+      onOpen: () => {},
+      onKeep: () => {},
+      onRevert: () => {},
+    }),
   );
 }
 
@@ -30,5 +36,10 @@ describe("diff list", () => {
 
   test("nothing renders when there is nothing to show", () => {
     assert.equal(render([]), "");
+  });
+
+  test("row cap is plumbed through as the --diff-max-rows style", () => {
+    assert.match(render(DIFFS), /--diff-max-rows:5/);
+    assert.match(render(DIFFS, 3), /--diff-max-rows:3/);
   });
 });

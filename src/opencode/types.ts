@@ -34,6 +34,8 @@ export interface SessionInfo {
     archived?: number;
   };
   outcome?: "succeeded" | "failed" | "interrupted";
+  /** Present after a rewind; the session history is hidden past this message. */
+  revert?: { messageID?: string };
   metadata?: Record<string, unknown>;
   location: { directory: string };
 }

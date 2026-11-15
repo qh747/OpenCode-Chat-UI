@@ -11,7 +11,6 @@ import type {
   ModelRef,
   PermissionRequest,
   SkillInfo,
-  TokenUsage,
 } from "../opencode/types";
 
 export type ConnectionState = "stopped" | "starting" | "connected" | "error";
@@ -48,8 +47,10 @@ export interface Snapshot {
   pending: PermissionRequest[];
   diffs: FileDiffInfo[];
   catalog: Catalog;
-  cost?: number;
-  tokens?: TokenUsage;
+  /** Tokens of the latest billed assistant message — the context gauge value. */
+  contextTokens?: number;
+  /** Cache hit rate of the same message (0..1). */
+  cacheHitRate?: number;
   workspacePath?: string;
   git?: GitInfo;
   editors?: EditorFile[];
@@ -105,6 +106,8 @@ export type HostToWeb =
       locale?: Locale;
       /** Composer behavior settings; absent keeps what the panel already has. */
       composer?: { submitKey: SubmitKey; showContextBar: boolean };
+      /** Diff-list display settings; absent keeps what the panel already has. */
+      diffList?: { maxVisibleRows: number };
     }
   | { kind: "imageStaged"; requestId: string; path: string; name: string }
   | { kind: "history"; groups: HistoryGroup[] }
@@ -116,8 +119,8 @@ export type HostToWeb =
       agent?: string;
       model?: ModelRef;
       busy?: boolean;
-      cost?: number;
-      tokens?: TokenUsage;
+      contextTokens?: number;
+      cacheHitRate?: number;
     }
   | { kind: "git"; git: GitInfo }
   | { kind: "textStarted"; sessionID: string; messageID: string; ordinal: number }

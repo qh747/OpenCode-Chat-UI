@@ -1,23 +1,24 @@
 import type { GitInfo } from "../src/webview/protocol";
-import type { TokenUsage } from "../src/opencode/types";
 import { t } from "../src/util/i18n";
 
 export interface ContextBarProps {
   git?: GitInfo;
   workspacePath?: string;
-  cost?: number;
-  tokens?: TokenUsage;
+  /** Tokens of the latest billed assistant message (context occupancy). */
+  contextTokens?: number;
+  /** Cache hit rate of the same message (0..1). */
+  cacheHitRate?: number;
   /** Context window of the active model, when known. */
   contextLimit?: number;
 }
 
 /**
  * One-line context strip under the composer: git branch and workspace path on
- * the left, context usage and cost on the right.
+ * the left, context usage and cache hit rate on the right.
  */
-export function ContextBar({ git, workspacePath, cost, tokens, contextLimit }: ContextBarProps) {
-  const used = tokens ? totalTokens(tokens) : undefined;
-  const hasUsage = used !== undefined || cost !== undefined;
+export function ContextBar({ git, workspacePath, contextTokens, cacheHitRate, contextLimit }: ContextBarProps) {
+  const used = contextTokens;
+  const hasUsage = used !== undefined || cacheHitRate !== undefined;
   if (!git?.branch && !workspacePath && !hasUsage) {
     return null;
   }
@@ -48,16 +49,14 @@ export function ContextBar({ git, workspacePath, cost, tokens, contextLimit }: C
               {contextLimit ? ` / ${formatTokens(contextLimit)}` : ""}
             </span>
           )}
-          {used !== undefined && cost !== undefined && <span className="ctx-sep">|</span>}
-          {cost !== undefined && <span title={t("sessionCostTitle")}>${cost.toFixed(4)}</span>}
+          {used !== undefined && cacheHitRate !== undefined && <span className="ctx-sep">|</span>}
+          {cacheHitRate !== undefined && (
+            <span title={t("cacheHitRateTitle")}>{(cacheHitRate * 100).toFixed(0)}%</span>
+          )}
         </span>
       )}
     </div>
   );
-}
-
-function totalTokens(tokens: TokenUsage): number {
-  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write;
 }
 
 function formatTokens(value: number): string {

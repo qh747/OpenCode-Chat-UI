@@ -814,6 +814,27 @@ body {
 .diff-card:last-child {
   border-bottom: none;
 }
+/* Expanded rows: cap at N rows (--diff-max-rows, from opencode.diffList.maxVisibleRows)
+   and scroll the rest instead of stretching the panel. 28px ≈ one row (button
+   21px + padding 8px - border overlap); rows beyond the cap peek a few px as a
+   scroll affordance. */
+.diff-rows {
+  max-height: calc(var(--diff-max-rows, 5) * 28px);
+  overflow-y: auto;
+}
+.diff-rows::-webkit-scrollbar {
+  width: 6px;
+}
+.diff-rows::-webkit-scrollbar-track {
+  background: transparent;
+}
+.diff-rows::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.diff-rows::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
 .diff-file {
   background: none;
   border: none;
@@ -1259,7 +1280,7 @@ body {
 */
 
 
-/* context strip under the composer: branch + path | usage + cost */
+/* context strip under the composer: branch + path | usage + cache hit rate */
 .ctx-bar {
   display: flex;
   align-items: center;

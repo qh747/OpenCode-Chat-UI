@@ -11,6 +11,7 @@
   "opencode.composer.submitKey.enter": "Enter sends, Shift+Enter inserts a newline.",
   "opencode.composer.submitKey.ctrlEnter": "Ctrl+Enter (⌘Enter on macOS) sends; plain Enter inserts a newline.",
   "opencode.composer.showContextBar.description": "Show the info bar under the composer (git branch, workspace path, context usage and cost).",
+  "opencode.diffList.maxVisibleRows.description": "How many changed-file rows the expanded diff list shows before it scrolls.",
   "opencode.ui.preferredLocation.description": "Where OpenCode: Open and the status bar button point.",
   "opencode.ui.preferredLocation.sidebar": "Focus the sidebar panel.",
   "opencode.ui.preferredLocation.editor": "Open the chat in an editor tab.",

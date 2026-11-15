@@ -54,6 +54,7 @@ code --install-extension dist/opencode-vscode-0.2.0.vsix
 | `opencode.notifications.turnComplete` | `true` | 一轮对话结束时通知。 |
 | `opencode.notifications.permissionRequest` | `true` | agent 请求权限时通知。 |
 | `opencode.notifications.errors` | `false` | agent 或 server 报错时通知。 |
+| `opencode.diffList.maxVisibleRows` | `5` | 改动文件列表展开时超出多少行后出现滚动条。 |
 
 聊天面板标题栏的齿轮按钮会打开设置面板，在同一处编辑上述设置以及 opencode
 服务端自己的配置（`opencode.json`）。

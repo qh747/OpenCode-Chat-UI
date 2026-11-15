@@ -3,8 +3,8 @@ import type { Dispatch } from "./state";
 import type { ChipInput, ComposerHandle } from "./composerTypes";
 import { ContextBar } from "./ContextBar";
 import type { ContextBarProps } from "./ContextBar";
-import { BUILTIN_COMMANDS, filterCommands, mergeMentions, splitCommandInput } from "../src/util/commands";
-import type { CommandInfoLike, MentionOption } from "../src/util/commands";
+import { BUILTIN_COMMANDS, filterCommands, filterSkills, mergeMentions, splitCommandInput } from "../src/util/commands";
+import type { CommandInfoLike, MentionOption, SkillOption } from "../src/util/commands";
 import type { CommandInfo, SkillInfo } from "../src/opencode/types";
 import type { AttachmentKind, AttachmentPreview, EditorFile } from "../src/webview/protocol";
 import { shouldSend, type SubmitKey } from "../src/util/composer-keys";
@@ -129,6 +129,9 @@ export function Composer({
     }
     return filterCommands(merged, commandQuery.replace(/\s+.*$/, ""));
   })();
+  const skillRows = commandMode
+    ? filterSkills(skills, commandQuery.replace(/\s+.*$/, ""))
+    : [];
   const mentionQuery = /@([^\s@]*)$/.exec(text)?.[1];
   const mentionOpen = !commandMode && !mentionSuppressed && mentionQuery !== undefined;
 
@@ -161,18 +164,17 @@ export function Composer({
         description: t("mentionGroupOpen"),
       }));
     const other: MentionRow[] = mergeMentions(
-      skills,
       fileResults[mentionRequestId.current] ?? [],
       mentionQuery ?? "",
     ).map((option) => ({
       group: "other" as const,
-      key: `${option.kind}-${option.value}`,
-      name: option.kind === "skill" ? `@${option.label}` : option.label,
+      key: option.value,
+      name: option.label,
       description: option.description,
       option,
     }));
     return [...selected, ...open, ...other];
-  }, [mentionOpen, mentionQuery, editors, skills, fileResults]);
+  }, [mentionOpen, mentionQuery, editors, fileResults]);
 
   useEffect(() => {
     handleRef?.({
@@ -234,7 +236,7 @@ export function Composer({
     } else {
       setActive(undefined);
     }
-  }, [commandMode, mentionOpen, commandList.length, mentionRows.length]);
+  }, [commandMode, mentionOpen, commandList.length, skillRows.length, mentionRows.length]);
 
   // Keyboard navigation must scroll the highlighted row into view.
   useEffect(() => {
@@ -281,6 +283,15 @@ export function Composer({
     textareaRef.current?.focus();
   };
 
+  /** Selecting a skill inserts its mention (`@<id>` — the id, not the display
+   *  name, is what the server resolves) and suppresses the file picker that
+   *  the fresh `@` tail would otherwise open. */
+  const acceptSkill = (skill: SkillOption) => {
+    setText(`@${skill.id} `);
+    setMentionSuppressed(true);
+    textareaRef.current?.focus();
+  };
+
   const acceptMention = (row: MentionRow) => {
     setText((current) => current.replace(/@([^\s@]*)$/, ""));
     if (row.group === "selected" && row.path) {
@@ -295,11 +306,7 @@ export function Composer({
     if (!option) {
       return;
     }
-    if (option.kind === "skill") {
-      setText((current) => `${current}@${option.label} `);
-    } else {
-      addChip({ path: option.value, name: option.label, kind: "file" });
-    }
+    addChip({ path: option.value, name: option.label, kind: "file" });
   };
 
   const stageImageFile = (file: File) => {
@@ -388,9 +395,16 @@ export function Composer({
 
   const acceptActive = () => {
     if (active?.kind === "commands") {
-      const command = commandList[active.index];
-      if (command) {
-        acceptCommand(command.name);
+      if (active.index < commandList.length) {
+        const command = commandList[active.index];
+        if (command) {
+          acceptCommand(command.name);
+        }
+      } else {
+        const skill = skillRows[active.index - commandList.length];
+        if (skill) {
+          acceptSkill(skill);
+        }
       }
       return true;
     }
@@ -480,13 +494,13 @@ export function Composer({
     }
     if (event.key === "ArrowDown" && active) {
       event.preventDefault();
-      const length = active.kind === "commands" ? commandList.length : mentionRows.length;
+      const length = active.kind === "commands" ? commandList.length + skillRows.length : mentionRows.length;
       setActive({ ...active, index: (active.index + 1) % Math.max(length, 1) });
       return;
     }
     if (event.key === "ArrowUp" && active) {
       event.preventDefault();
-      const length = active.kind === "commands" ? commandList.length : mentionRows.length;
+      const length = active.kind === "commands" ? commandList.length + skillRows.length : mentionRows.length;
       setActive({ ...active, index: (active.index - 1 + length) % Math.max(length, 1) });
       return;
     }
@@ -675,26 +689,43 @@ export function Composer({
         {imageNotice && <div className="image-notice">{imageNotice}</div>}
         {commandMode && (
           <div className="mention-list" ref={listRef}>
-            {commandList.length === 0 ? (
+            {commandList.length === 0 && skillRows.length === 0 ? (
               <div className="mention-empty">{t("noMatchingCommands")}</div>
             ) : (
-              commandList.map((command, index) => (
-                <button
-                  key={command.name}
-                  className={`mention-item${active?.kind === "commands" && active.index === index ? " active" : ""}`}
-                  onClick={() => acceptCommand(command.name)}
-                >
-                  <span className="mention-name">/{command.name}</span>
-                  <span className="mention-desc">{commandDescription(command.name)}</span>
-                </button>
-              ))
+              <>
+                {commandList.map((command, index) => (
+                  <button
+                    key={command.name}
+                    className={`mention-item${active?.kind === "commands" && active.index === index ? " active" : ""}`}
+                    onClick={() => acceptCommand(command.name)}
+                  >
+                    <span className="mention-name">/{command.name}</span>
+                    <span className="mention-desc">{commandDescription(command.name)}</span>
+                  </button>
+                ))}
+                {skillRows.length > 0 && (
+                  <div className="mention-section">{t("commandGroupSkills")}</div>
+                )}
+                {skillRows.map((skill, index) => (
+                  <button
+                    key={`skill-${skill.id}`}
+                    className={`mention-item${
+                      active?.kind === "commands" && active.index === commandList.length + index ? " active" : ""
+                    }`}
+                    onClick={() => acceptSkill(skill)}
+                  >
+                    <span className="mention-name">{skill.name}</span>
+                    <span className="mention-desc">{skill.description}</span>
+                  </button>
+                ))}
+              </>
             )}
           </div>
         )}
         {mentionOpen && (
           <div className="mention-list" ref={listRef}>
             {mentionRows.length === 0 ? (
-              <div className="mention-empty">{t("noMatchingSkillsFiles")}</div>
+              <div className="mention-empty">{t("noMatchingFiles")}</div>
             ) : (
               mentionRows.map((row, index) => (
                 <div key={row.key}>

@@ -23,3 +23,4 @@ import "./queue.test";
 import "./sessions.test";
 import "./settings-items.test";
 import "./settings-render.test";
+import "./tokens.test";

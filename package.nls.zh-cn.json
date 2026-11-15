@@ -11,6 +11,7 @@
   "opencode.composer.submitKey.enter": "Enter 发送，Shift+Enter 换行。",
   "opencode.composer.submitKey.ctrlEnter": "Ctrl+Enter（macOS 上为 ⌘Enter）发送，Enter 换行。",
   "opencode.composer.showContextBar.description": "显示输入框下方的信息条（git 分支、工作区路径、上下文用量与费用）。",
+  "opencode.diffList.maxVisibleRows.description": "改动文件列表展开时，超出多少行后出现滚动条。",
   "opencode.ui.preferredLocation.description": "OpenCode: Open 命令与状态栏按钮的打开位置。",
   "opencode.ui.preferredLocation.sidebar": "聚焦侧栏面板。",
   "opencode.ui.preferredLocation.editor": "在编辑器标签页中打开聊天。",

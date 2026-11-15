@@ -98,11 +98,12 @@ const en = {
   chipHintImage: "Click to preview · sent as inline data URI",
   chipHintUrl: "Ctrl+click to open in browser · click to preview link",
   chipHintFile: "Ctrl+click to open in editor{range} · click to preview",
-  noMatchingCommands: "No matching commands",
-  noMatchingSkillsFiles: "No matching skills or files",
+  noMatchingCommands: "No matching commands or skills",
+  noMatchingFiles: "No matching files",
   mentionGroupSelected: "Active editor · selected",
   mentionGroupOpen: "Open · no selection",
-  mentionGroupOther: "Files & skills",
+  mentionGroupOther: "Files",
+  commandGroupSkills: "Skills",
   mentionSelectedHint: "{range} · selected",
   "builtin.new": "New session",
   "builtin.undo": "Undo last message",
@@ -136,7 +137,7 @@ const en = {
   // context bar
   noGit: "no git",
   contextTokensTitle: "Context tokens used",
-  sessionCostTitle: "Session cost",
+  cacheHitRateTitle: "Cache hit rate",
 
   // plan hand-off
   proceedInBuild: "▶ Proceed with the plan in build mode",
@@ -293,11 +294,12 @@ const zhCn: Record<MessageKey, string> = {
   chipHintImage: "单击 预览图片 · 发送时以 inline data URI 传递",
   chipHintUrl: "Ctrl+单击 在浏览器中打开 · 单击 预览链接",
   chipHintFile: "Ctrl+单击 在编辑器中打开{range} · 单击 预览",
-  noMatchingCommands: "没有匹配的命令",
-  noMatchingSkillsFiles: "没有匹配的技能或文件",
+  noMatchingCommands: "没有匹配的命令或技能",
+  noMatchingFiles: "没有匹配的文件",
   mentionGroupSelected: "当前编辑器 · 已选中",
   mentionGroupOpen: "已打开 · 无选区",
-  mentionGroupOther: "文件与技能",
+  mentionGroupOther: "文件",
+  commandGroupSkills: "技能",
   mentionSelectedHint: "{range} · 已选中",
   "builtin.new": "新会话",
   "builtin.undo": "撤销上一条消息",
@@ -331,7 +333,7 @@ const zhCn: Record<MessageKey, string> = {
   // context bar
   noGit: "无 git",
   contextTokensTitle: "已用上下文 token",
-  sessionCostTitle: "会话花费",
+  cacheHitRateTitle: "缓存命中率",
 
   // plan hand-off
   proceedInBuild: "▶ 以 build 模式执行计划",

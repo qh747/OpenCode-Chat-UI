@@ -247,6 +247,7 @@ export function App({ state, send, composerHandleRef }: Props) {
       {hasMessages && (
         <DiffList
           diffs={state.diffs}
+          maxVisibleRows={state.maxVisibleDiffRows}
           onOpen={(file) => send({ kind: "openDiff", file })}
           onKeep={(file) => send({ kind: "keepFile", file })}
           onRevert={(file) => send({ kind: "revertFile", file })}
@@ -277,8 +278,8 @@ export function App({ state, send, composerHandleRef }: Props) {
             ? {
                 git: state.git,
                 workspacePath: state.workspacePath,
-                cost: state.cost,
-                tokens: state.tokens,
+                contextTokens: state.contextTokens,
+                cacheHitRate: state.cacheHitRate,
                 contextLimit: activeModelInfo?.limit?.context,
               }
             : undefined

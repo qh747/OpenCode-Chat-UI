@@ -54,6 +54,7 @@ code --install-extension dist/opencode-vscode-<version>.vsix
 | `opencode.notifications.turnComplete` | `true` | Notify when a turn finishes. |
 | `opencode.notifications.permissionRequest` | `true` | Notify when the agent asks for permission. |
 | `opencode.notifications.errors` | `false` | Notify when the agent or the server reports an error. |
+| `opencode.diffList.maxVisibleRows` | `5` | Rows the expanded changed-files list shows before it scrolls. |
 
 The gear button in the chat header opens a settings panel. It edits these
 settings together with the opencode server's own configuration

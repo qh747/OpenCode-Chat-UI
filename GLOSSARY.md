@@ -22,6 +22,12 @@ A server-issued question (e.g. "run this command?") that blocks the agent loop u
 **Turn**
 One user prompt plus everything the agent produces until the session goes idle. File changes within a turn surface as diffs.
 
+**Cache hit rate**
+The share of a turn's prompt tokens that the provider served from its prompt cache rather than re-processing. Reported per assistant reply; a high rate means the ongoing conversation is reusing cached context.
+
+**Diff list**
+The collapsed-by-default strip listing the files the agent changed this turn: one quiet count row that expands into one row per file with Keep / Revert actions. Distinct from a file's diff view, which shows the actual edits.
+
 **Part**
 One ordered block inside an assistant reply: a passage of text, a passage of reasoning, or a tool call. Tool calls carry an identity of their own; text and reasoning parts are known by their position within the reply.
 
@@ -49,10 +55,10 @@ The server's volatile SSE feed (`/api/event`). Lossy by design; consumers resync
 A webview surface (sidebar view or editor tab) attached to the shared controller. All sinks receive identical broadcasts.
 
 **Slash command**
-A `/`-prefixed command typed in the composer. Server/config commands (from `/api/command`) execute on the server; built-in client commands (`/new`, `/undo`, `/compact`, `/fork`, `/export`) are handled by the extension.
+A `/`-prefixed command typed in the composer, matched against server/config commands (from `/api/command`), built-in client commands (`/new`, `/undo`, `/compact`, `/fork`, `/export`), and the skill list. Commands execute server- or client-side; matching a skill id inserts (or sends) a `@<skill-id>` mention instead of running a command.
 
 **Skill**
-A named capability from the opencode server's skill list, mentioned in a message as `@<skill-name>` to steer the agent.
+A named capability from the opencode server's skill list, loaded by the agent's `skill` tool or by a mention in the user's message. A mention always spells the skill's id (`@<skill-id>`); the display name is for the picker UI only, since it can differ from the id. Skills are surfaced and selected from the slash-command picker.
 
 **Attachment**
 Something the user points a message at: a workspace file, a selection inside one, a pasted image, or a link. Files and images travel to the server as attachments; a link travels inside the message text, because the prompt API has no attachment form for it.

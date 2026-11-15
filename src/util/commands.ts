@@ -132,28 +132,55 @@ export function groupModels(
 }
 
 /**
- * Merge skill and file mentions for the `@` picker, filtered by the query
- * after the `@`. Skills first (CommandCode/desktop order), then files.
+ * File mentions for the `@` picker, filtered by the query after the `@`.
+ * Skills are only surfaced by the `/` picker (see filterSkills) — a skill
+ * mention must use the skill's id, which the user cannot guess from the
+ * display name alone.
  */
 export interface MentionOption {
-  kind: "skill" | "file";
-  value: string; // skill name or absolute file path
+  value: string; // absolute file path
   label: string;
   description?: string;
 }
 
 export function mergeMentions(
-  skills: { name: string; description?: string }[],
   files: { path: string; name: string }[],
   query: string,
 ): MentionOption[] {
   const q = query.trim().toLowerCase();
-  const skillOptions: MentionOption[] = skills
-    .filter((s) => !q || s.name.toLowerCase().includes(q))
-    .map((s) => ({ kind: "skill" as const, value: s.name, label: s.name, description: s.description }));
-  const fileOptions: MentionOption[] = files
+  return files
     .filter((f) => !q || f.name.toLowerCase().includes(q))
     .slice(0, 15)
-    .map((f) => ({ kind: "file" as const, value: f.path, label: f.name, description: f.path }));
-  return [...skillOptions, ...fileOptions];
+    .map((f) => ({ value: f.path, label: f.name, description: f.path }));
+}
+
+/**
+ * Skills for the `/` picker, matched on the id (what a mention must spell) and
+ * the display name (what the user looks for). The display name is shown in the
+ * row; selecting a row inserts `@<id>`.
+ */
+export interface SkillOption {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export function filterSkills(skills: SkillOption[], query: string): SkillOption[] {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return [...skills];
+  }
+  return skills.filter(
+    (skill) => skill.id.toLowerCase().includes(q) || skill.name.toLowerCase().includes(q),
+  );
+}
+
+/** Exact id match for a typed `/command`: an id that names a skill is a skill
+ *  mention, not a server command. */
+export function findSkillByCommand(skills: SkillOption[], command: string): SkillOption | undefined {
+  const normalized = command.replace(/^\//, "").trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  return skills.find((skill) => skill.id.toLowerCase() === normalized);
 }

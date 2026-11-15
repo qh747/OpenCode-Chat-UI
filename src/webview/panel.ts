@@ -9,7 +9,6 @@ import type {
   MessageInfo,
   PermissionRequest,
   PromptFileAttachment,
-  TokenUsage,
   UserMessage,
 } from "../opencode/types";
 import { promptAttachment, rangeAttachment, type StagedImage } from "../util/attachments";
@@ -18,7 +17,8 @@ import { getLocale, t, type MessageKey } from "../util/i18n";
 import { reverseApply } from "../util/diffapply";
 import { LiveStream, mergeLiveContent, type SegmentKind } from "../util/live-segments";
 import { orderMessages } from "../util/messages";
-import { resolveCommandAction } from "../util/commands";
+import { cacheHitRateOf, contextTokensOf } from "../util/tokens";
+import { resolveCommandAction, findSkillByCommand } from "../util/commands";
 import { deriveSessionStatus, groupSessionsByDate } from "../util/sessions";
 import { GitStatusProvider } from "../git";
 import type {
@@ -82,10 +82,15 @@ export class ChatController implements vscode.Disposable {
   /** Choices made before a session exists; applied when it is created. */
   private pendingAgent: string | undefined;
   private pendingModel: { providerID: string; id: string; variant?: string } | undefined;
-  private cost: number | undefined;
-  private tokens: TokenUsage | undefined;
+  /** Cache hit rate of the latest billed assistant message (0..1). */
+  private cacheHitRate: number | undefined;
+  /** Context-window occupancy: tokens of the latest billed assistant message. */
+  private contextTokens: number | undefined;
+  /** Revert point reported by the server, when the session has been rewound. */
+  private revertMessageID: string | undefined;
   private git: GitInfo = {};
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  private metaRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   private permissionTimer: ReturnType<typeof setInterval> | undefined;
   private fileCache: { path: string; name: string }[] | undefined;
   /** Images staged by the composer, keyed by the reference sent back to the webview. */
@@ -369,6 +374,9 @@ export class ChatController implements vscode.Disposable {
         submitKey: config.get<"enter" | "ctrlEnter">("composer.submitKey", "enter"),
         showContextBar: config.get<boolean>("composer.showContextBar", true),
       },
+      diffList: {
+        maxVisibleRows: Math.max(1, config.get<number>("diffList.maxVisibleRows", 5)),
+      },
     });
   }
 
@@ -458,6 +466,9 @@ export class ChatController implements vscode.Disposable {
       this.diffs = [];
       this.dismissed.clear();
       this.busy = false;
+      this.cacheHitRate = undefined;
+      this.contextTokens = undefined;
+      this.revertMessageID = undefined;
       this.resetQueue();
       this.title = created.data.title;
       this.agent = created.data.agent ?? "build";
@@ -844,6 +855,14 @@ export class ChatController implements vscode.Disposable {
           return;
       }
     }
+    // A `/name` that names a skill is a skill mention, not a server command:
+    // the server loads skills from `@<id>` in the prompt text, so the typed
+    // command (and any arguments) is forwarded as the message.
+    const skill = findSkillByCommand(this.host.catalog.skills, command);
+    if (skill) {
+      await this.send(`@${skill.id}${args ? ` ${args}` : ""}`, []);
+      return;
+    }
     const client = this.client();
     if (!client || !this.sessionId) {
       return;
@@ -886,6 +905,9 @@ export class ChatController implements vscode.Disposable {
       await client.revertCommit(this.sessionId ?? "");
       this.resetStreams();
       this.dismissed.clear();
+      // Pick up the server's revert point before recomputing the context
+      // gauge, which stops at that point.
+      await this.refreshSessionMeta();
       await this.refreshMessages();
       await this.refreshDiffs();
     });
@@ -1144,6 +1166,7 @@ export class ChatController implements vscode.Disposable {
           } else if (!wasBusy) {
             this.scheduleMessagesRefresh(0);
           }
+          this.scheduleSessionMetaRefresh();
           void this.refreshDiffs();
         }
         break;
@@ -1197,6 +1220,9 @@ export class ChatController implements vscode.Disposable {
           this.pending = [];
           this.diffs = [];
           this.busy = false;
+          this.cacheHitRate = undefined;
+          this.contextTokens = undefined;
+          this.revertMessageID = undefined;
           this.resetQueue();
           void this.context.workspaceState.update(this.storageKey(), undefined);
           this.postSnapshot();
@@ -1219,6 +1245,24 @@ export class ChatController implements vscode.Disposable {
     }, delayMs);
   }
 
+  /**
+   * End-of-turn events arrive in bursts (idle + execution.succeeded …), and
+   * the server finalizes the session's token totals after the last
+   * message lands. One debounced `GET /api/session/{id}` refreshes the
+   * context-usage readouts the webview shows under the composer;
+   * without it they stay frozen at the values fetched when the session was
+   * created.
+   */
+  private scheduleSessionMetaRefresh(delayMs = 300): void {
+    if (this.metaRefreshTimer) {
+      return;
+    }
+    this.metaRefreshTimer = setTimeout(() => {
+      this.metaRefreshTimer = undefined;
+      void this.refreshSessionMeta();
+    }, delayMs);
+  }
+
   private async refreshMessages(): Promise<void> {
     if (!this.sessionId) {
       return;
@@ -1231,6 +1275,10 @@ export class ChatController implements vscode.Disposable {
       const page = await client.listMessages(this.sessionId ?? "");
       // The v2 endpoint returns newest-first; the UI renders oldest-first.
       this.messages = orderMessages(page.data);
+      // Context gauge and cache-hit rate read the latest assistant usage, not
+      // the cumulative session counters; see contextTokensOf / cacheHitRateOf.
+      this.contextTokens = contextTokensOf(this.messages, this.revertMessageID);
+      this.cacheHitRate = cacheHitRateOf(this.messages, this.revertMessageID);
       this.flushDeltas();
       this.post({ kind: "messages", sessionID: this.sessionId ?? "", messages: this.mergedMessages() });
       this.pruneStreams();
@@ -1430,8 +1478,7 @@ export class ChatController implements vscode.Disposable {
       this.title = result.data.title;
       this.agent = result.data.agent;
       this.model = result.data.model;
-      this.cost = result.data.cost;
-      this.tokens = result.data.tokens;
+      this.revertMessageID = result.data.revert?.messageID;
       if (result.data.time.busy && !result.data.time.idle) {
         this.busy = true;
       }
@@ -1442,8 +1489,8 @@ export class ChatController implements vscode.Disposable {
         agent: this.agent,
         model: this.model,
         busy: this.busy,
-        cost: this.cost,
-        tokens: this.tokens,
+        contextTokens: this.contextTokens,
+        cacheHitRate: this.cacheHitRate,
       });
     });
   }
@@ -1479,8 +1526,8 @@ export class ChatController implements vscode.Disposable {
         pending: this.pending,
         diffs: this.visibleDiffs(),
         catalog: this.host.catalog,
-        cost: this.cost,
-        tokens: this.tokens,
+        contextTokens: this.contextTokens,
+        cacheHitRate: this.cacheHitRate,
         workspacePath: this.folder.uri.fsPath,
         git: this.git,
         editors: this.editors,
@@ -1493,6 +1540,10 @@ export class ChatController implements vscode.Disposable {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
+    }
+    if (this.metaRefreshTimer) {
+      clearTimeout(this.metaRefreshTimer);
+      this.metaRefreshTimer = undefined;
     }
     if (this.deltaTimer) {
       clearTimeout(this.deltaTimer);

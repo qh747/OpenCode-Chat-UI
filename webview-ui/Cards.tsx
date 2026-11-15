@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import type { FileDiffInfo, PermissionRequest } from "../src/opencode/types";
 import { t } from "../src/util/i18n";
@@ -41,6 +42,8 @@ export function PermissionCard({ request, onReply }: PermissionProps) {
 
 interface DiffProps {
   diffs: FileDiffInfo[];
+  /** Rows visible before the expanded list scrolls (from `opencode.diffList.maxVisibleRows`). */
+  maxVisibleRows: number;
   onOpen: (file: string) => void;
   onKeep: (file: string) => void;
   onRevert: (file: string) => void;
@@ -49,9 +52,10 @@ interface DiffProps {
 /**
  * The files the agent changed. Collapsed to a single header row by default —
  * the counts are the signal, the rows are only for acting on one — expanding
- * reveals the per-file Keep / Revert.
+ * reveals the per-file Keep / Revert. When open, rows beyond `maxVisibleRows`
+ * scroll inside the card instead of stretching the panel.
  */
-export function DiffList({ diffs, onOpen, onKeep, onRevert }: DiffProps) {
+export function DiffList({ diffs, maxVisibleRows, onOpen, onKeep, onRevert }: DiffProps) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -83,31 +87,36 @@ export function DiffList({ diffs, onOpen, onKeep, onRevert }: DiffProps) {
           </span>
         </button>
       </div>
-      {open &&
-        diffs.map((diff) => (
-          <div key={diff.file} className="diff-card">
-            <button className="diff-file" onClick={() => onOpen(diff.file)} title={diff.file}>
-              <span className="diff-status-badge">{diff.status}</span>
-              <span className="diff-name">{fileName(diff.file)}</span>
-            </button>
-            <span className="diff-stats">
-              <span className="additions">+{diff.additions}</span>
-              <span className="deletions">-{diff.deletions}</span>
-            </span>
-            <span className="diff-buttons">
-              <button className="btn small" onClick={() => onKeep(diff.file)} title={t("keepChangeTitle")}>
-                {t("keep")}
+      <div
+        className="diff-rows"
+        style={{ "--diff-max-rows": String(maxVisibleRows) } as CSSProperties}
+      >
+        {open &&
+          diffs.map((diff) => (
+            <div key={diff.file} className="diff-card">
+              <button className="diff-file" onClick={() => onOpen(diff.file)} title={diff.file}>
+                <span className="diff-status-badge">{diff.status}</span>
+                <span className="diff-name">{fileName(diff.file)}</span>
               </button>
-              <button
-                className="btn small danger"
-                onClick={() => onRevert(diff.file)}
-                title={t("revertFileTitle")}
-              >
-                {t("revert")}
-              </button>
-            </span>
-          </div>
-        ))}
+              <span className="diff-stats">
+                <span className="additions">+{diff.additions}</span>
+                <span className="deletions">-{diff.deletions}</span>
+              </span>
+              <span className="diff-buttons">
+                <button className="btn small" onClick={() => onKeep(diff.file)} title={t("keepChangeTitle")}>
+                  {t("keep")}
+                </button>
+                <button
+                  className="btn small danger"
+                  onClick={() => onRevert(diff.file)}
+                  title={t("revertFileTitle")}
+                >
+                  {t("revert")}
+                </button>
+              </span>
+            </div>
+          ))}
+      </div>
     </div>
   );
 }

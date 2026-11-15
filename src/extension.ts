@@ -125,7 +125,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (
         event.affectsConfiguration("opencode.composer.submitKey") ||
-        event.affectsConfiguration("opencode.composer.showContextBar")
+        event.affectsConfiguration("opencode.composer.showContextBar") ||
+        event.affectsConfiguration("opencode.diffList.maxVisibleRows")
       ) {
         chat.refreshUiSettings();
       }
