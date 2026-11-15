@@ -70,6 +70,10 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
                       }}
                       title={session.title}
                     >
+                      <span
+                        className={`history-dot status-${session.status}`}
+                        aria-hidden="true"
+                      />
                       <span className="history-title">{session.title || "Untitled"}</span>
                       <span className="history-time">{relativeSessionTime(session.updated)}</span>
                     </button>

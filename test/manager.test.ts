@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { spawn, type SpawnOptions } from "node:child_process";
-import { ServerManager } from "../src/server/manager";
+import {
+  ServerManager,
+  isFetchBlockedPort,
+  pickFreePort,
+} from "../src/server/manager";
 
 // Tests are bundled to out/tests.cjs by esbuild, so __dirname is out/ —
 // resolve the mock script from the repo root instead.
@@ -23,6 +27,25 @@ function makeManager(overrides: Partial<ConstructorParameters<typeof ServerManag
   });
   return { manager, logs, getState: () => state };
 }
+
+test("never picks a port the Fetch stack rejects as bad", async () => {
+  // Windows ephemeral ports start at 1024, so IRC/X11 ports are in the pool.
+  assert.equal(isFetchBlockedPort(6665), true);
+  assert.equal(isFetchBlockedPort(6667), true);
+  assert.equal(isFetchBlockedPort(6000), true);
+  assert.equal(isFetchBlockedPort(10080), true);
+  assert.equal(isFetchBlockedPort(6664), false);
+  assert.equal(isFetchBlockedPort(6670), false);
+  assert.equal(isFetchBlockedPort(3685), false);
+
+  const candidates = [6667, 6000, 3685];
+  const chosen = await pickFreePort(async () => candidates.shift() ?? 4000);
+  assert.equal(chosen, 3685);
+});
+
+test("gives up instead of returning a fetch-blocked port", async () => {
+  await assert.rejects(() => pickFreePort(async () => 6667), /Node's fetch/);
+});
 
 test("spawns a server, health-checks it and disposes the process", async () => {
   const { manager, getState } = makeManager({

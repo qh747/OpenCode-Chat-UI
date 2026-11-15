@@ -1,6 +1,12 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
-import { groupModels, isFreeModel, mergeMentions, providerDisplayName } from "../src/util/commands";
+import {
+  groupModels,
+  isFreeModel,
+  mergeMentions,
+  modelShortName,
+  providerDisplayName,
+} from "../src/util/commands";
 
 const model = (providerID: string, modelID: string, name: string) => ({
   providerID,
@@ -54,6 +60,24 @@ describe("isFreeModel", () => {
     assert.equal(isFreeModel(model("opencode", "x", "DeepSeek Free")), true);
     assert.equal(isFreeModel(model("opencode", "beam-free", "Beam")), true);
     assert.equal(isFreeModel(model("opencode", "kimi", "Kimi K3")), false);
+  });
+});
+
+describe("modelShortName", () => {
+  test("keeps the leading two words", () => {
+    assert.equal(modelShortName("DeepSeek V4.1 Flash 1017"), "DeepSeek V4.1");
+    assert.equal(modelShortName("LongCat 2.5 Free"), "LongCat 2.5");
+    assert.equal(modelShortName("MiniMax M3.1 Flash"), "MiniMax M3.1");
+  });
+
+  test("leaves an already-short name alone", () => {
+    assert.equal(modelShortName("Kimi K3"), "Kimi K3");
+    assert.equal(modelShortName("Hy4"), "Hy4");
+    assert.equal(modelShortName("  spaced   out  "), "spaced out");
+  });
+
+  test("never returns an empty label", () => {
+    assert.equal(modelShortName(""), "");
   });
 });
 

@@ -1,8 +1,5 @@
 import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
-import { promises as fsp } from "node:fs";
-import * as os from "node:os";
-import * as nodePath from "node:path";
 import type { OpencodeHost } from "../host";
 import { toServerPath } from "../host";
 import type {
@@ -14,12 +11,20 @@ import type {
   TokenUsage,
   UserMessage,
 } from "../opencode/types";
+import { promptAttachment, rangeAttachment, type StagedImage } from "../util/attachments";
 import { reverseApply } from "../util/diffapply";
 import { orderMessages } from "../util/messages";
 import { resolveCommandAction } from "../util/commands";
-import { groupSessionsByDate } from "../util/sessions";
+import { deriveSessionStatus, groupSessionsByDate } from "../util/sessions";
 import { GitStatusProvider } from "../git";
-import type { GitInfo, HostToWeb, WebToHost } from "./protocol";
+import type {
+  AttachmentRef,
+  EditorFile,
+  GitInfo,
+  HostToWeb,
+  QueuedMessage,
+  WebToHost,
+} from "./protocol";
 
 interface Sink {
   post(message: HostToWeb): void;
@@ -41,15 +46,28 @@ export class ChatController implements vscode.Disposable {
   private diffs: FileDiffInfo[] = [];
   private dismissed = new Set<string>();
   private busy = false;
+  /** Messages held until the running turn finishes. */
+  private queue: QueuedMessage[] = [];
+  /** Held after a stop/failure until the user explicitly resumes. */
+  private queuePaused = false;
+  /** A forced message waiting for the interrupted turn to actually end. */
+  private pendingForce: QueuedMessage | undefined;
   private title: string | undefined;
   private agent: string | undefined;
   private model: { providerID: string; id: string; variant?: string } | undefined;
+  /** Choices made before a session exists; applied when it is created. */
+  private pendingAgent: string | undefined;
+  private pendingModel: { providerID: string; id: string; variant?: string } | undefined;
   private cost: number | undefined;
   private tokens: TokenUsage | undefined;
   private git: GitInfo = {};
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private permissionTimer: ReturnType<typeof setInterval> | undefined;
   private fileCache: { path: string; name: string }[] | undefined;
+  /** Images staged by the composer, keyed by the reference sent back to the webview. */
+  private readonly stagedImages = new Map<string, StagedImage>();
+  /** Open editor tabs, refreshed whenever the selection or the tabs change. */
+  private editors: EditorFile[] = [];
   private readonly beforeDocs = new Map<string, string>();
   private readonly subscriptions: vscode.Disposable[] = [];
 
@@ -84,8 +102,12 @@ export class ChatController implements vscode.Disposable {
         this.post({ kind: "state", state: "error", error: message });
         this.post({ kind: "error", message });
       }),
+      vscode.window.onDidChangeTextEditorSelection(() => this.postEditors()),
+      vscode.window.onDidChangeVisibleTextEditors(() => this.postEditors()),
+      vscode.window.tabGroups.onDidChangeTabs(() => this.postEditors()),
     );
     this.broadcastState();
+    this.postEditors();
   }
 
   dispose(): void {
@@ -115,10 +137,36 @@ export class ChatController implements vscode.Disposable {
         await this.fullResync();
         break;
       case "send":
-        await this.send(web.text, web.files);
+        await this.send(web.text, web.attachments);
+        break;
+      case "removeQueued":
+        this.removeQueued(web.id);
+        break;
+      case "forceQueued":
+        await this.forceQueued(web.id);
+        break;
+      case "resumeQueue":
+        this.resumeQueue();
         break;
       case "abort":
-        await this.safeCall(() => this.client()?.interrupt(this.sessionId ?? ""));
+        if (this.sessionId) {
+          await this.safeCall(() => this.client()?.interrupt(this.sessionId ?? ""));
+          if (this.busy && this.queue.length > 0) {
+            this.queuePaused = true;
+            this.postQueue();
+          }
+        }
+        break;
+      case "openFile":
+        await this.safeCall(() => this.openFile(web.path, web.start, web.end));
+        break;
+      case "openUrl":
+        await this.safeCall(() => vscode.env.openExternal(vscode.Uri.parse(web.url)));
+        break;
+      case "previewAttachment":
+        await this.safeCall(() =>
+          this.previewAttachment(web.requestId, web.ref, web.start, web.end),
+        );
         break;
       case "newSession":
         await this.newSession();
@@ -144,23 +192,51 @@ export class ChatController implements vscode.Disposable {
       case "switchSession":
         await this.switchSession(web.id);
         break;
-      case "setAgent":
-        await this.safeCall(() => this.client()?.setAgent(this.sessionId ?? "", web.agent));
+      case "setAgent": {
+        if (!this.sessionId) {
+          // No server session yet — remember the choice and send it with the
+          // session creation instead of calling /api/session//agent.
+          this.pendingAgent = web.agent;
+          this.agent = web.agent;
+          this.post({ kind: "sessionMeta", agent: web.agent });
+          break;
+        }
+        await this.safeCall(async () => {
+          const client = this.client();
+          if (!client || !this.sessionId) {
+            return;
+          }
+          await client.setAgent(this.sessionId, web.agent);
+          this.agent = web.agent;
+          this.post({ kind: "sessionMeta", sessionID: this.sessionId, agent: web.agent });
+        });
         break;
-      case "setModel":
-        await this.safeCall(() =>
-          this.client()?.setModel(this.sessionId ?? "", {
-            providerID: web.providerID,
-            id: web.id,
-            variant: web.variant,
-          }),
-        );
+      }
+      case "setModel": {
+        const model = {
+          providerID: web.providerID,
+          id: web.id,
+          variant: web.variant,
+        };
+        if (!this.sessionId) {
+          this.pendingModel = model;
+          this.model = model;
+          this.post({ kind: "sessionMeta", model });
+          break;
+        }
+        await this.safeCall(async () => {
+          const client = this.client();
+          if (!client || !this.sessionId) {
+            return;
+          }
+          await client.setModel(this.sessionId, model);
+          this.model = model;
+          this.post({ kind: "sessionMeta", sessionID: this.sessionId, model });
+        });
         break;
-      case "toggleFavorite":
-        this.host.toggleFavoriteModel({ providerID: web.providerID, id: web.id });
-        break;
+      }
       case "stageImage":
-        await this.stageImage(web.requestId, web.name, web.dataBase64);
+        this.stageImage(web.requestId, web.name, web.dataBase64, web.mime);
         break;
       case "rewindTo":
         await this.rewindTo(web.messageID);
@@ -238,16 +314,73 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
+  // --- editor context ------------------------------------------------
+
+  /**
+   * Editor tabs know whether they hold a selection: only a selected editor is
+   * a citable range, an open-but-unselected one is just a suggestion.
+   *
+   * A tab is not necessarily a `TabInputText`: a Markdown/notebook preview is a
+   * custom editor or a notebook, and the file behind those is just as citable,
+   * so any tab pointing at a real file counts.
+   */
+  private collectEditors(): EditorFile[] {
+    const selected = new Map<string, { start: number; end: number }>();
+    for (const editor of vscode.window.visibleTextEditors) {
+      if (!editor.selection.isEmpty) {
+        selected.set(editor.document.uri.fsPath, {
+          start: editor.selection.start.line + 1,
+          end: editor.selection.end.line + 1,
+        });
+      }
+    }
+    const files: EditorFile[] = [];
+    const seen = new Set<string>();
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        const fsPath = tabFilePath(tab.input);
+        if (!fsPath || seen.has(fsPath)) {
+          continue;
+        }
+        seen.add(fsPath);
+        files.push({ path: fsPath, name: pathBasename(fsPath), selected: selected.get(fsPath) });
+      }
+    }
+    return files.sort((a, b) => Number(Boolean(b.selected)) - Number(Boolean(a.selected)));
+  }
+
+  private postEditors(): void {
+    const editors = this.collectEditors();
+    if (JSON.stringify(editors) === JSON.stringify(this.editors)) {
+      return;
+    }
+    this.editors = editors;
+    this.post({ kind: "editors", editors });
+  }
+
   // --- session lifecycle ---------------------------------------------
 
   async newSession(): Promise<void> {
+    await this.createSession();
+  }
+
+  /**
+   * Create a fresh session. Picker choices made on the empty panel are sent in
+   * the create body so the session starts with the requested agent/model.
+   */
+  private async createSession(): Promise<string | undefined> {
     const client = this.client();
     if (!client) {
-      return;
+      return undefined;
     }
+    const pendingAgent = this.pendingAgent;
+    const pendingModel = this.pendingModel;
+    this.pendingAgent = undefined;
+    this.pendingModel = undefined;
     try {
       const created = await client.createSession({ location: { directory: this.host.folderPath } });
-      this.sessionId = created.data.id;
+      const sessionId = created.data.id;
+      this.sessionId = sessionId;
       this.messages = [];
       this.textBuffers.clear();
       this.reasoningBuffers.clear();
@@ -255,19 +388,35 @@ export class ChatController implements vscode.Disposable {
       this.diffs = [];
       this.dismissed.clear();
       this.busy = false;
+      this.resetQueue();
       this.title = created.data.title;
       this.agent = created.data.agent ?? "build";
       this.model = created.data.model;
       await this.context.workspaceState.update(this.storageKey(), this.sessionId);
+      // Apply the pre-session picker choices through the same endpoints the
+      // pickers use once a session exists; the create body is not guaranteed
+      // to carry them on every server build.
+      if (pendingAgent) {
+        await this.safeCall(() => client.setAgent(sessionId, pendingAgent));
+      }
+      if (pendingModel) {
+        await this.safeCall(() => client.setModel(sessionId, pendingModel));
+      }
       await this.refreshSessionMeta();
       this.postSnapshot();
+      return this.sessionId;
     } catch (error) {
-      this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+      this.pendingAgent = pendingAgent;
+      this.pendingModel = pendingModel;
+      this.post({ kind: "error", message: errorMessage(error) });
+      return undefined;
     }
   }
 
   async switchSession(id: string): Promise<void> {
     this.sessionId = id;
+    this.pendingAgent = undefined;
+    this.pendingModel = undefined;
     await this.context.workspaceState.update(this.storageKey(), id);
     this.messages = [];
     this.textBuffers.clear();
@@ -275,44 +424,62 @@ export class ChatController implements vscode.Disposable {
     this.pending = [];
     this.diffs = [];
     this.dismissed.clear();
+    this.resetQueue();
     await this.fullResync();
     await vscode.commands.executeCommand("opencode.chat.focus");
   }
 
   // --- messaging ------------------------------------------------------
 
-  async send(text: string, files: string[]): Promise<void> {
+  async send(text: string, attachments: AttachmentRef[]): Promise<void> {
     const client = this.client();
     if (!client) {
       return;
     }
     if (!this.sessionId) {
-      try {
-        const created = await client.createSession({ location: { directory: this.host.folderPath } });
-        this.sessionId = created.data.id;
-        await this.context.workspaceState.update(this.storageKey(), this.sessionId);
-      } catch (error) {
-        this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+      const created = await this.createSession();
+      if (!created) {
         return;
       }
     }
-    const attachments: PromptFileAttachment[] = files.map((uri) => ({
-      uri,
-      name: pathBasename(uri),
-    }));
+    if (this.busy) {
+      this.queue.push({ id: randomBytes(6).toString("hex"), text, attachments });
+      // A new user message means the queue should move again after this turn.
+      this.queuePaused = false;
+      this.postQueue();
+      return;
+    }
+    await this.sendNow(text, attachments);
+  }
+
+  /** Start a turn immediately. Callers guarantee that the session is idle. */
+  private async sendNow(text: string, attachments: AttachmentRef[]): Promise<void> {
+    const client = this.client();
+    if (!client || !this.sessionId) {
+      return;
+    }
+    // Links have no attachment form on the prompt API; they travel in the text.
+    const links = attachments.filter((attachment) => attachment.kind === "url");
+    const staged = attachments.filter((attachment) => attachment.kind !== "url");
+    const promptAttachments: PromptFileAttachment[] = staged.map((attachment) =>
+      this.toPromptAttachment(attachment),
+    );
     const autoAttach = vscode.workspace
       .getConfiguration("opencode")
       .get<boolean>("context.autoAttachSelection", true);
     if (autoAttach) {
       const selection = this.activeSelection();
-      if (selection && !files.includes(selection.uri)) {
-        attachments.push({
-          uri: selection.uri,
-          name: pathBasename(selection.uri),
-          description: selection.range,
-        });
+      const alreadyAttached = staged.some((a) => a.ref === selection?.path);
+      if (selection && !alreadyAttached) {
+        promptAttachments.push(this.selectionAttachment(selection));
       }
     }
+    for (const attachment of staged) {
+      this.stagedImages.delete(attachment.ref);
+    }
+    const promptText = links.length
+      ? `${text}\n\n${links.map((link) => `参考链接: ${link.ref}`).join("\n")}`
+      : text;
     this.dismissed.clear();
     this.busy = true;
     this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
@@ -333,10 +500,209 @@ export class ChatController implements vscode.Disposable {
     if (usedModel) {
       this.host.recordModelUsed(usedModel);
     }
-    await this.safeCall(() => client.prompt(this.sessionId ?? "", { text, files: attachments }));
+    try {
+      await client.prompt(this.sessionId ?? "", { text: promptText, files: promptAttachments });
+    } catch (error) {
+      // The server never accepted the turn, so nothing will emit session.idle:
+      // end it here or the send button stays in its stop state forever.
+      this.failTurn(error);
+    }
   }
 
-  private activeSelection(): { uri: string; range: string } | undefined {
+  // --- queued messages ---------------------------------------------------
+
+  private postQueue(): void {
+    this.post({ kind: "queue", sessionID: this.sessionId, queue: this.queue, paused: this.queuePaused });
+  }
+
+  private removeQueued(id: string): void {
+    const removed = this.queue.find((item) => item.id === id);
+    if (!removed) {
+      return;
+    }
+    this.discardQueuedAttachments([removed]);
+    this.queue = this.queue.filter((item) => item.id !== id);
+    if (this.queue.length === 0) {
+      this.queuePaused = false;
+    }
+    this.postQueue();
+  }
+
+  /** Drop staged images held for messages that will never be sent. */
+  private discardQueuedAttachments(items: QueuedMessage[]): void {
+    for (const item of items) {
+      for (const attachment of item.attachments) {
+        this.stagedImages.delete(attachment.ref);
+      }
+    }
+  }
+
+  private resumeQueue(): void {
+    this.queuePaused = false;
+    this.postQueue();
+    this.drainQueue();
+  }
+
+  private async forceQueued(id: string): Promise<void> {
+    const item = this.queue.find((entry) => entry.id === id);
+    if (!item) {
+      return;
+    }
+    this.queue = this.queue.filter((entry) => entry.id !== id);
+    this.queuePaused = false;
+    this.postQueue();
+    if (!this.busy) {
+      await this.sendNow(item.text, item.attachments);
+      return;
+    }
+    const client = this.client();
+    if (!client || !this.sessionId) {
+      this.queue.unshift(item);
+      this.postQueue();
+      return;
+    }
+    // The prompt must not reach the server while the old turn is still running:
+    // hold the item and start it from the interrupted turn's end event.
+    this.pendingForce = item;
+    try {
+      await client.interrupt(this.sessionId);
+    } catch (error) {
+      this.pendingForce = undefined;
+      this.queue.unshift(item);
+      this.postQueue();
+      this.post({ kind: "error", message: errorMessage(error) });
+    }
+  }
+
+  /** Start the queue head if the turn is over. Returns whether it did. */
+  private drainQueue(): boolean {
+    if (this.queuePaused || this.busy || this.queue.length === 0) {
+      return false;
+    }
+    const head = this.queue.shift();
+    if (!head) {
+      return false;
+    }
+    this.postQueue();
+    this.startQueued(head);
+    return true;
+  }
+
+  private startQueued(item: QueuedMessage): void {
+    void this.sendNow(item.text, item.attachments);
+  }
+
+  /** A session switch must not leak messages into the new conversation. */
+  private resetQueue(): void {
+    this.discardQueuedAttachments(this.pendingForce ? [...this.queue, this.pendingForce] : this.queue);
+    this.queue = [];
+    this.queuePaused = false;
+    this.pendingForce = undefined;
+  }
+
+  /** Map a composer attachment to the prompt body's file shape. */
+  private toPromptAttachment(attachment: AttachmentRef): PromptFileAttachment {
+    const staged = this.stagedImages.get(attachment.ref);
+    if (staged) {
+      return promptAttachment(attachment.ref, staged);
+    }
+    if (attachment.kind === "selection" && attachment.range) {
+      return rangeAttachment(
+        attachment.ref,
+        attachment.name,
+        attachment.range.start,
+        attachment.range.end,
+      );
+    }
+    return promptAttachment(attachment.ref);
+  }
+
+  private selectionAttachment(selection: {
+    path: string;
+    start?: number;
+    end?: number;
+    note?: string;
+  }): PromptFileAttachment {
+    if (selection.start === undefined || selection.end === undefined) {
+      return { ...promptAttachment(selection.path), description: selection.note };
+    }
+    return rangeAttachment(
+      selection.path,
+      pathBasename(selection.path),
+      selection.start,
+      selection.end,
+    );
+  }
+
+  /** Open a file (optionally revealing a line range) in the editor. */
+  private async openFile(file: string, start?: number, end?: number): Promise<void> {
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+    const editor = await vscode.window.showTextDocument(document, { preview: true });
+    if (start === undefined) {
+      return;
+    }
+    const first = Math.min(Math.max(1, start), document.lineCount);
+    const last = Math.min(Math.max(first, end ?? first), document.lineCount);
+    const range = new vscode.Range(first - 1, 0, last - 1, document.lineAt(last - 1).text.length);
+    editor.selection = new vscode.Selection(range.start, range.end);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+  }
+
+  /**
+   * Read what an attachment points at so the composer can preview it without
+   * leaving the panel: images come back inline, files as a window of lines.
+   */
+  private async previewAttachment(
+    requestId: string,
+    ref: string,
+    start?: number,
+    end?: number,
+  ): Promise<void> {
+    const staged = this.stagedImages.get(ref);
+    if (staged) {
+      this.post({
+        kind: "attachmentPreview",
+        preview: { requestId, dataUrl: `data:${staged.mime};base64,${staged.data}` },
+      });
+      return;
+    }
+    try {
+      const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(ref));
+      const lines = Buffer.from(bytes).toString("utf8").split(/\r?\n/);
+      const firstLine = Math.max(1, (start ?? 1) - 6);
+      const lastLine = Math.min(lines.length, Math.max(end ?? start ?? 1, firstLine) + 12);
+      this.post({
+        kind: "attachmentPreview",
+        preview: {
+          requestId,
+          text: lines.slice(firstLine - 1, lastLine).join("\n"),
+          firstLine,
+          highlight: start !== undefined ? { start, end: end ?? start } : undefined,
+        },
+      });
+    } catch (error) {
+      this.post({
+        kind: "attachmentPreview",
+        preview: { requestId, error: errorMessage(error) },
+      });
+    }
+  }
+
+  /** Abort the local turn after a request that never reached the agent loop. */
+  private failTurn(error: unknown): void {
+    this.busy = false;
+    this.stopPermissionPolling();
+    this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
+    if (this.queue.length > 0) {
+      this.queuePaused = true;
+      this.postQueue();
+    }
+    this.post({ kind: "error", message: errorMessage(error) });
+  }
+
+  private activeSelection():
+    | { path: string; start?: number; end?: number; note?: string }
+    | undefined {
     const max = vscode.workspace
       .getConfiguration("opencode")
       .get<number>("context.maxSelectionLength", 2000);
@@ -344,17 +710,18 @@ export class ChatController implements vscode.Disposable {
     if (!editor || editor.selection.isEmpty) {
       return undefined;
     }
-    const uri = toServerPath(editor.document.uri.fsPath);
-    const folderPath = toServerPath(this.folder.uri.fsPath);
-    if (!uri.startsWith(folderPath)) {
+    const path = editor.document.uri.fsPath;
+    if (!path.startsWith(this.folder.uri.fsPath)) {
       return undefined;
     }
     if (editor.document.getText(editor.selection).length > max) {
-      return { uri, range: "(selection too long to auto-attach)" };
+      return { path, note: "(selection too long to auto-attach)" };
     }
-    const start = editor.selection.start.line + 1;
-    const end = editor.selection.end.line + 1;
-    return { uri, range: `L${start}-L${end}` };
+    return {
+      path,
+      start: editor.selection.start.line + 1,
+      end: editor.selection.end.line + 1,
+    };
   }
 
   async executePlan(): Promise<void> {
@@ -396,8 +763,10 @@ export class ChatController implements vscode.Disposable {
           }
           return;
         case "compact":
-          await this.safeCall(() => this.client()?.compact(this.sessionId ?? ""));
-          await this.refreshMessages();
+          if (this.sessionId) {
+            await this.safeCall(() => this.client()?.compact(this.sessionId ?? ""));
+            await this.refreshMessages();
+          }
           return;
       }
     }
@@ -409,18 +778,19 @@ export class ChatController implements vscode.Disposable {
     await this.refreshMessages();
   }
 
-  /** Persist a pasted/dropped image to a temp file the server can read. */
-  private async stageImage(requestId: string, name: string, dataBase64: string): Promise<void> {
-    try {
-      const dir = nodePath.join(os.tmpdir(), "opencode-vscode-attachments");
-      await fsp.mkdir(dir, { recursive: true });
-      const safeName = name.replace(/[^\w.-]/g, "_") || "image.png";
-      const file = nodePath.join(dir, `${Date.now()}-${randomBytes(4).toString("hex")}-${safeName}`);
-      await fsp.writeFile(file, Buffer.from(dataBase64, "base64"));
-      this.post({ kind: "imageStaged", requestId, path: file, name: safeName });
-    } catch (error) {
-      this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
-    }
+  /**
+   * Hold a pasted/dropped image in memory until the message is sent: the
+   * prompt API rejects temp-file paths, and inline data URIs also work when
+   * the server runs on another host.
+   */
+  private stageImage(requestId: string, name: string, dataBase64: string, mime: string): void {
+    const ref = `staged:${requestId}`;
+    this.stagedImages.set(ref, {
+      name: name || "image.png",
+      mime: mime || "image/png",
+      data: dataBase64,
+    });
+    this.post({ kind: "imageStaged", requestId, path: ref, name });
   }
 
   /** Rewind the session to just before the given message, reverting its file changes. */
@@ -455,18 +825,32 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     await this.safeCall(async () => {
-      const page = await client.listSessions({
-        directory: this.host.folderPath,
-        limit: 100,
-        order: "desc",
-        archived: false,
-      });
+      const [page, active, permissions] = await Promise.all([
+        client.listSessions({
+          directory: this.host.folderPath,
+          limit: 100,
+          order: "desc",
+          archived: false,
+        }),
+        // Older servers may not expose the active-session map; a missing dot
+        // state is better than a history menu that refuses to open.
+        client
+          .activeSessions()
+          .catch(() => ({ data: {} as Record<string, { type?: string }> })),
+        client.pendingPermissions(this.host.folderPath),
+      ]);
+      const activeIDs = new Set(Object.keys(active.data));
+      if (this.busy && this.sessionId) {
+        activeIDs.add(this.sessionId);
+      }
+      const blockedIDs = new Set(permissions.data.map((request) => request.sessionID));
       const groups = groupSessionsByDate(page.data).map((group) => ({
         label: group.label,
         sessions: group.sessions.map((s) => ({
           id: s.id,
           title: s.title,
           updated: s.time.updated,
+          status: deriveSessionStatus(s, activeIDs, blockedIDs),
         })),
       }));
       this.post({ kind: "history", groups });
@@ -493,6 +877,7 @@ export class ChatController implements vscode.Disposable {
         this.pending = [];
         this.diffs = [];
         this.busy = false;
+        this.resetQueue();
         void this.context.workspaceState.update(this.storageKey(), undefined);
         this.postSnapshot();
       }
@@ -621,10 +1006,30 @@ export class ChatController implements vscode.Disposable {
       case "session.execution.failed":
       case "session.execution.interrupted":
         if (eventSession === this.sessionId) {
+          const wasBusy = this.busy;
           this.busy = false;
           this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
           this.stopPermissionPolling();
-          this.scheduleMessagesRefresh(0);
+          if (wasBusy && this.pendingForce) {
+            // The interrupted turn is finally over — start the forced message.
+            const forced = this.pendingForce;
+            this.pendingForce = undefined;
+            this.startQueued(forced);
+          } else if (
+            wasBusy &&
+            (event.type === "session.execution.failed" ||
+              event.type === "session.execution.interrupted")
+          ) {
+            if (this.queue.length > 0) {
+              this.queuePaused = true;
+              this.postQueue();
+            }
+            this.scheduleMessagesRefresh(0);
+          } else if (wasBusy && !this.drainQueue()) {
+            this.scheduleMessagesRefresh(0);
+          } else if (!wasBusy) {
+            this.scheduleMessagesRefresh(0);
+          }
           void this.refreshDiffs();
         }
         break;
@@ -677,6 +1082,7 @@ export class ChatController implements vscode.Disposable {
           this.pending = [];
           this.diffs = [];
           this.busy = false;
+          this.resetQueue();
           void this.context.workspaceState.update(this.storageKey(), undefined);
           this.postSnapshot();
         }
@@ -861,6 +1267,8 @@ export class ChatController implements vscode.Disposable {
         agent: this.agent,
         model: this.model,
         busy: this.busy,
+        queue: this.queue,
+        queuePaused: this.queuePaused,
         messages: this.mergedMessages(),
         pending: this.pending,
         diffs: this.diffs.filter((d) => !this.dismissed.has(d.file)),
@@ -869,6 +1277,7 @@ export class ChatController implements vscode.Disposable {
         tokens: this.tokens,
         workspacePath: this.folder.uri.fsPath,
         git: this.git,
+        editors: this.editors,
       },
     });
   }
@@ -1046,10 +1455,31 @@ export class ChatController implements vscode.Disposable {
   }
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function pathBasename(p: string): string {
   const normalized = p.replace(/\\/g, "/");
   const index = normalized.lastIndexOf("/");
   return index >= 0 ? normalized.slice(index + 1) : normalized;
+}
+
+/**
+ * The file a tab points at, whatever kind of tab it is: a plain text editor, a
+ * custom editor such as the Markdown preview, or a notebook. Anything without
+ * an on-disk file (settings UI, webviews, diffs) has nothing to cite.
+ */
+function tabFilePath(input: unknown): string | undefined {
+  const uri =
+    input instanceof vscode.TabInputText
+      ? input.uri
+      : input instanceof vscode.TabInputCustom
+        ? input.uri
+        : input instanceof vscode.TabInputNotebook
+          ? input.uri
+          : undefined;
+  return uri?.scheme === "file" ? uri.fsPath : undefined;
 }
 
 function toolLine(tool: string, input: Record<string, unknown> | undefined): string {

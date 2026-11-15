@@ -1,3 +1,4 @@
+import type { SessionRunStatus } from "../util/sessions";
 import type {
   AgentInfo,
   CommandInfo,
@@ -24,8 +25,14 @@ export interface Catalog {
   commands: CommandInfo[];
   skills: SkillInfo[];
   recentModels: ModelRef[];
-  favoriteModels: ModelRef[];
   defaultModel?: ModelRef;
+}
+
+/** A user message held until the running turn finishes. */
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  attachments: AttachmentRef[];
 }
 
 export interface Snapshot {
@@ -42,11 +49,44 @@ export interface Snapshot {
   tokens?: TokenUsage;
   workspacePath?: string;
   git?: GitInfo;
+  editors?: EditorFile[];
+  queue: QueuedMessage[];
+  queuePaused: boolean;
 }
 
 export interface HistoryGroup {
   label: string;
-  sessions: { id: string; title?: string; updated: number }[];
+  sessions: { id: string; title?: string; updated: number; status: SessionRunStatus }[];
+}
+
+/** What the user attached to a message. */
+export type AttachmentKind = "image" | "file" | "selection" | "url";
+
+export interface AttachmentRef {
+  /** Staged image reference (`staged:<id>`), absolute file path, or URL. */
+  ref: string;
+  name: string;
+  kind: AttachmentKind;
+  /** 1-indexed inclusive line range; selection attachments only. */
+  range?: { start: number; end: number };
+}
+
+/** An editor tab open in the window; `selected` is set only with a live selection. */
+export interface EditorFile {
+  path: string;
+  name: string;
+  selected?: { start: number; end: number };
+}
+
+export interface AttachmentPreview {
+  requestId: string;
+  /** Images come back inline. */
+  dataUrl?: string;
+  /** Files come back as a window of lines around the range. */
+  text?: string;
+  firstLine?: number;
+  highlight?: { start: number; end: number };
+  error?: string;
 }
 
 export type HostToWeb =
@@ -70,17 +110,26 @@ export type HostToWeb =
   | { kind: "reasoningDelta"; sessionID: string; messageID: string; delta: string }
   | { kind: "messages"; sessionID: string; messages: MessageInfo[] }
   | { kind: "busy"; sessionID?: string; busy: boolean }
+  | { kind: "queue"; sessionID?: string; queue: QueuedMessage[]; paused: boolean }
   | { kind: "permissions"; sessionID?: string; pending: PermissionRequest[] }
   | { kind: "diffs"; sessionID?: string; diffs: FileDiffInfo[] }
   | { kind: "catalog"; catalog: Catalog }
+  | { kind: "editors"; editors: EditorFile[] }
+  | { kind: "attachmentPreview"; preview: AttachmentPreview }
   | { kind: "error"; message: string }
   | { kind: "fileResults"; requestId: string; results: { path: string; name: string }[] }
   | { kind: "pickedPaths"; requestId: string; paths: string[] };
 
 export type WebToHost =
   | { kind: "ready" }
-  | { kind: "send"; text: string; files: string[] }
+  | { kind: "send"; text: string; attachments: AttachmentRef[] }
+  | { kind: "removeQueued"; id: string }
+  | { kind: "forceQueued"; id: string }
+  | { kind: "resumeQueue" }
   | { kind: "abort" }
+  | { kind: "openFile"; path: string; start?: number; end?: number }
+  | { kind: "openUrl"; url: string }
+  | { kind: "previewAttachment"; requestId: string; ref: string; start?: number; end?: number }
   | { kind: "newSession" }
   | { kind: "showHistory" }
   | { kind: "runCommand"; command: string; arguments: string }
@@ -91,8 +140,7 @@ export type WebToHost =
   | { kind: "switchSession"; id: string }
   | { kind: "setAgent"; agent: string }
   | { kind: "setModel"; providerID: string; id: string; variant?: string }
-  | { kind: "toggleFavorite"; providerID: string; id: string }
-  | { kind: "stageImage"; requestId: string; name: string; dataBase64: string }
+  | { kind: "stageImage"; requestId: string; name: string; dataBase64: string; mime: string }
   | { kind: "rewindTo"; messageID: string }
   | { kind: "permissionReply"; requestID: string; decision: "once" | "always" | "reject" }
   | { kind: "openDiff"; file: string }

@@ -152,6 +152,21 @@ function UserMessage({ message, onRewind }: { message: MessageInfo; onRewind: (m
   );
 }
 
+export function ConversationErrors({ errors }: { errors: string[] }) {
+  if (errors.length === 0) {
+    return null;
+  }
+  return (
+    <div className="conversation-errors">
+      {errors.map((error, index) => (
+        <div key={index} className="msg-failure">
+          {error}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface Props {
   messages: MessageInfo[];
   busy: boolean;

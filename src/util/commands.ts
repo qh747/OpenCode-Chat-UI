@@ -83,6 +83,16 @@ export function isFreeModel(model: ModelInfo): boolean {
   return /free/i.test(model.name) || /free/i.test(model.modelID);
 }
 
+/**
+ * Short form of a model name for narrow panels: the leading two words.
+ * "DeepSeek V4.1 Flash 1017" → "DeepSeek V4.1", "Kimi K3.1 Pro" → "Kimi K3.1".
+ * Names already that short come back unchanged.
+ */
+export function modelShortName(name: string): string {
+  const tokens = name.trim().split(/\s+/).filter(Boolean);
+  return tokens.length <= 2 ? tokens.join(" ") : tokens.slice(0, 2).join(" ");
+}
+
 export function groupModels(
   models: ModelInfo[],
   recentRefs: { providerID: string; id: string }[],

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatState } from "./state";
 import type { WebToHost } from "../src/webview/protocol";
-import { MessageList } from "./MessageList";
+import { MessageList, ConversationErrors } from "./MessageList";
 import { Composer } from "./Composer";
 import { DiffList, PermissionCard, Welcome } from "./Cards";
 import { Dropdown } from "./Dropdown";
 import { ModelPicker } from "./ModelPicker";
 import { HistoryMenu } from "./HistoryMenu";
+import { QueueStrip } from "./QueueStrip";
 import type { ComposerHandle } from "./composerTypes";
 
 interface Props {
@@ -26,7 +27,7 @@ export function App({ state, send, composerHandleRef }: Props) {
     for (const [requestId, paths] of Object.entries(state.pickedPaths)) {
       if (!consumedPicks.current.has(requestId)) {
         consumedPicks.current.add(requestId);
-        composerHandleRef.current?.setChips(paths.map((path) => ({ path })));
+        composerHandleRef.current?.setChips(paths.map((path) => ({ path, kind: "file" })));
       }
     }
   }, [state.pickedPaths, composerHandleRef]);
@@ -36,7 +37,7 @@ export function App({ state, send, composerHandleRef }: Props) {
     for (const [requestId, image] of Object.entries(state.stagedImages)) {
       if (!consumedImages.current.has(requestId)) {
         consumedImages.current.add(requestId);
-        composerHandleRef.current?.setChips([{ path: image.path, name: image.name, image: true }]);
+        composerHandleRef.current?.setChips([{ path: image.path, name: image.name, kind: "image" }]);
       }
     }
   }, [state.stagedImages, composerHandleRef]);
@@ -47,7 +48,7 @@ export function App({ state, send, composerHandleRef }: Props) {
     if (list && stickToBottom.current) {
       list.scrollTop = list.scrollHeight;
     }
-  }, [state.messages, state.busy, state.diffs, state.pending]);
+  }, [state.messages, state.busy, state.diffs, state.pending, state.errors]);
 
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
 
@@ -80,45 +81,56 @@ export function App({ state, send, composerHandleRef }: Props) {
   ];
   const [effortOpen, setEffortOpen] = useState(false);
 
-  const pickers =
-    state.connection === "connected" ? (
-      <>
-        <Dropdown
-          value={agent ?? ""}
-          options={agentOptions}
-          onChange={(value) => send({ kind: "setAgent", agent: value })}
-          title="Agent (Shift+Tab cycles)"
-        />
-        {(state.catalog.models.length > 0 || activeModel) && (
-          <ModelPicker
-            models={state.catalog.models}
-            recentModels={state.catalog.recentModels}
-            favoriteModels={state.catalog.favoriteModels}
-            activeModel={activeModel}
-            onSelect={(ref) => send({ kind: "setModel", providerID: ref.providerID, id: ref.id, variant: ref.variant })}
-            onToggleFavorite={(ref) => send({ kind: "toggleFavorite", providerID: ref.providerID, id: ref.id })}
+  // The first snapshot carries everything the panel needs — catalog, title,
+  // git, messages — while the state/catalog messages before it describe only
+  // part of the screen. Painting those would show a half-built panel that then
+  // pops in piece by piece, so hold the very first paint until it lands. On a
+  // connection error the banner is the point, so show it right away.
+  if (!state.hydrated && state.connection !== "error") {
+    return null;
+  }
+
+  // The connection reports "connected" before the catalog is posted, so gating
+  // each picker on its own data makes them pop in one at a time. They all read
+  // from the same catalog, so waiting for it renders the whole row — mode,
+  // model and effort — in a single commit.
+  const catalogReady = state.connection === "connected" && state.catalogLoaded;
+
+  const pickers = catalogReady ? (
+    <>
+      <Dropdown
+        value={agent ?? ""}
+        options={agentOptions}
+        onChange={(value) => send({ kind: "setAgent", agent: value })}
+        title="Agent (Shift+Tab cycles)"
+        className="agent-picker"
+      />
+      <ModelPicker
+        models={state.catalog.models}
+        recentModels={state.catalog.recentModels}
+        activeModel={activeModel}
+        onSelect={(ref) => send({ kind: "setModel", providerID: ref.providerID, id: ref.id, variant: ref.variant })}
+      />
+      {variants.length > 0 && activeModel && (
+        <span className={`effort-wrap${effortOpen ? " open" : ""}`}>
+          <Dropdown
+            value={variants.some((v) => v.id === state.model?.variant) ? (state.model?.variant ?? "") : ""}
+            options={effortOptions}
+            onChange={(value) =>
+              send({
+                kind: "setModel",
+                providerID: activeModel.providerID,
+                id: activeModel.id,
+                variant: value || undefined,
+              })
+            }
+            onOpenChange={setEffortOpen}
+            title="Reasoning effort"
           />
-        )}
-        {variants.length > 0 && activeModel && (
-          <span className={`effort-wrap${effortOpen ? " open" : ""}`}>
-            <Dropdown
-              value={variants.some((v) => v.id === state.model?.variant) ? (state.model?.variant ?? "") : ""}
-              options={effortOptions}
-              onChange={(value) =>
-                send({
-                  kind: "setModel",
-                  providerID: activeModel.providerID,
-                  id: activeModel.id,
-                  variant: value || undefined,
-                })
-              }
-              onOpenChange={setEffortOpen}
-              title="Reasoning effort"
-            />
-          </span>
-        )}
-      </>
-    ) : null;
+        </span>
+      )}
+    </>
+  ) : null;
 
   return (
     <div className="app">
@@ -171,24 +183,25 @@ export function App({ state, send, composerHandleRef }: Props) {
         </div>
       )}
 
-      {!hasMessages && state.connection !== "error" ? (
-        <Welcome version={state.version} />
-      ) : (
-        <div
-          className="scroll-area"
-          ref={listRef}
-          onScroll={(event) => {
-            const el = event.currentTarget;
-            stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-          }}
-        >
+      <div
+        className="scroll-area"
+        ref={listRef}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        }}
+      >
+        {!hasMessages && state.connection !== "error" ? (
+          <Welcome version={state.version} />
+        ) : (
           <MessageList
-          messages={state.messages}
-          busy={state.busy}
-          onRewind={(messageID) => send({ kind: "rewindTo", messageID })}
-        />
-        </div>
-      )}
+            messages={state.messages}
+            busy={state.busy}
+            onRewind={(messageID) => send({ kind: "rewindTo", messageID })}
+          />
+        )}
+        <ConversationErrors errors={state.errors} />
+      </div>
 
       {hasMessages && state.pending.map((request) => (
         <PermissionCard
@@ -213,6 +226,14 @@ export function App({ state, send, composerHandleRef }: Props) {
         </button>
       )}
 
+      <QueueStrip
+        queue={state.queue}
+        paused={state.queuePaused}
+        onForce={(id) => send({ kind: "forceQueued", id })}
+        onRemove={(id) => send({ kind: "removeQueued", id })}
+        onResume={() => send({ kind: "resumeQueue" })}
+      />
+
       <Composer
         dispatch={send}
         busy={state.busy}
@@ -228,18 +249,14 @@ export function App({ state, send, composerHandleRef }: Props) {
         fileResults={state.fileResults}
         commands={state.catalog.commands}
         skills={state.catalog.skills}
+        editors={state.editors}
+        previews={state.previews}
         onRunCommand={(command, args) => send({ kind: "runCommand", command, arguments: args })}
         onAbort={() => send({ kind: "abort" })}
         handleRef={(handle) => {
           composerHandleRef.current = handle;
         }}
       />
-
-      {state.errors.map((error, index) => (
-        <div key={index} className="banner error small-banner">
-          {error}
-        </div>
-      ))}
     </div>
   );
 }

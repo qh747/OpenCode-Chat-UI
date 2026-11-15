@@ -2,6 +2,7 @@ node_modules/
 dist/
 out/
 dev/
+prototype/
 *.vsix
 .DS_Store
 .zcode/

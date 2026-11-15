@@ -89,7 +89,11 @@ export interface SkillInfo {
   content?: string;
 }
 
-/** POST /api/session/{id}/prompt body attachment (only `uri` is required). */
+/**
+ * POST /api/session/{id}/prompt body attachment. `uri` must be a `data:` or
+ * `file:` URL — the server resolves it with `new URL()` and rejects bare
+ * filesystem paths with "Unsupported attachment URI".
+ */
 export interface PromptFileAttachment {
   uri: string;
   source?: { type: "inline" } | { type: "uri"; uri: string };

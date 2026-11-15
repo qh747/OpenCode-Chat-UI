@@ -2,6 +2,7 @@ src/
 webview-ui/
 test/
 dev/
+prototype/
 out/
 .zcode/
 .vscode/

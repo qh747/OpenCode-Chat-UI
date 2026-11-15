@@ -32,6 +32,25 @@ export interface ServerManagerOptions {
 
 const LOG_RING_LIMIT = 200;
 
+/**
+ * Ports the Fetch spec declares unsafe, so undici rejects them before opening a
+ * socket with the opaque `fetch failed` / `bad port` error. Windows hands out
+ * ephemeral ports from 1024 by default, which includes IRC 6665-6669 and X11
+ * 6000 — a random internal-server port can land there. Keep them out of the
+ * pool instead of diagnosing the resulting "all requests fail" later.
+ */
+const FETCH_BLOCKED_PORTS = new Set<number>([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102,
+  103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465,
+  512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993,
+  995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668,
+  6669, 6679, 6697, 10080,
+]);
+
+export function isFetchBlockedPort(port: number): boolean {
+  return FETCH_BLOCKED_PORTS.has(port);
+}
+
 /** Startup failure that retrying cannot fix (e.g. the binary is opencode v1). */
 class FatalStartError extends Error {}
 
@@ -91,6 +110,24 @@ export class ServerManager {
 
   private async connectExternal(url: string): Promise<ActiveServer> {
     this.setState("starting");
+    let port: number;
+    try {
+      const parsed = new URL(url);
+      port = Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80));
+    } catch (error) {
+      const detail = `invalid opencode.serverUrl: ${message(error)}`;
+      this.log(detail);
+      this.setState("error", detail);
+      throw new Error(detail);
+    }
+    if (isFetchBlockedPort(port)) {
+      const detail =
+        `port ${port} is blocked by Node's Fetch implementation; ` +
+        `use a different port in "opencode.serverUrl".`;
+      this.log(detail);
+      this.setState("error", detail);
+      throw new Error(detail);
+    }
     const password = this.options.settings.serverPassword;
     const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
     const infoUrl = `${url.replace(/\/+$/, "")}/api/info`;
@@ -318,10 +355,16 @@ export class ServerManager {
 }
 
 export function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  return error.cause instanceof Error
+    ? `${error.message} (${error.cause.message})`
+    : error.message;
 }
 
-async function pickFreePort(): Promise<number> {
+/** Ask the OS for an ephemeral port. */
+function pickOsPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.unref();
@@ -332,6 +375,22 @@ async function pickFreePort(): Promise<number> {
       server.close(() => resolve(port));
     });
   });
+}
+
+/**
+ * Loop until the OS hands out a port the Fetch stack accepts. `allocate` is a
+ * test seam; production callers omit it.
+ */
+export async function pickFreePort(
+  allocate: () => Promise<number> = pickOsPort,
+): Promise<number> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const port = await allocate();
+    if (!isFetchBlockedPort(port)) {
+      return port;
+    }
+  }
+  throw new Error("could not find a port that Node's fetch will connect to");
 }
 
 function delay(ms: number): Promise<void> {

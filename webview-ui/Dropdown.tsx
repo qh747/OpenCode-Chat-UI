@@ -17,6 +17,8 @@ interface DropdownProps {
   wide?: boolean;
   /** Notified when the menu opens/closes (e.g. to keep hover-only UI alive). */
   onOpenChange?: (open: boolean) => void;
+  /** Extra class on the root, so a container query can target this picker. */
+  className?: string;
 }
 
 /**
@@ -31,6 +33,7 @@ export function Dropdown({
   title,
   wide,
   onOpenChange,
+  className,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -73,7 +76,7 @@ export function Dropdown({
   }
 
   return (
-    <div className={`dropdown${wide ? " dropdown-wide" : ""}`} ref={rootRef}>
+    <div className={`dropdown${wide ? " dropdown-wide" : ""}${className ? ` ${className}` : ""}`} ref={rootRef}>
       <button
         className="dropdown-button"
         onClick={() => setOpen((current) => !current)}

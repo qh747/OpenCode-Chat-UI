@@ -28,6 +28,29 @@ export class ApiError extends Error {
   }
 }
 
+/** Keep the underlying network cause; bare "fetch failed" hides bad-port/proxy issues. */
+function requestError(url: string, error: unknown): Error {
+  if (!(error instanceof Error)) {
+    return new Error(`opencode request failed: ${url} — ${String(error)}`);
+  }
+  const cause = error.cause instanceof Error ? `: ${error.cause.message}` : "";
+  return new Error(`opencode request failed: ${url} — ${error.message}${cause}`, {
+    cause: error,
+  });
+}
+
+/**
+ * Every session-scoped route funnels through here. An empty id used to build
+ * `/api/session//model` (and friends), which the server answers with a 404 that
+ * looked like a feature bug; fail loudly at the boundary instead.
+ */
+function sessionPath(id: string, suffix = ""): string {
+  if (!id.trim()) {
+    throw new Error("opencode: a session id is required");
+  }
+  return `/api/session/${encodeURIComponent(id)}${suffix}`;
+}
+
 /** Append the deepObject location query when a directory is provided. */
 function withLocation(path: string, directory?: string): string {
   if (!directory) {
@@ -72,15 +95,20 @@ export class OpencodeClient {
     body?: unknown,
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const response = await this.fetchImpl(url, {
-      method,
-      headers: {
-        Authorization: this.auth,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method,
+        headers: {
+          Authorization: this.auth,
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (error) {
+      throw requestError(url, error);
+    }
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new ApiError(response.status, url, text);
@@ -134,6 +162,11 @@ export class OpencodeClient {
     return this.request<ListPage<SessionInfo>>("GET", `/api/session${qs ? `?${qs}` : ""}`);
   }
 
+  /** Sessions currently running on this server; absent means inactive. */
+  async activeSessions(): Promise<{ data: Record<string, { type?: string }> }> {
+    return this.request<{ data: Record<string, { type?: string }> }>("GET", "/api/session/active");
+  }
+
   async createSession(body: {
     title?: string;
     agent?: string;
@@ -144,7 +177,7 @@ export class OpencodeClient {
   }
 
   async getSession(id: string): Promise<{ data: SessionInfo }> {
-    return this.request<{ data: SessionInfo }>("GET", `/api/session/${encodeURIComponent(id)}`);
+    return this.request<{ data: SessionInfo }>("GET", sessionPath(id));
   }
 
   async patchSession(
@@ -153,19 +186,19 @@ export class OpencodeClient {
   ): Promise<{ data: SessionInfo }> {
     return this.request<{ data: SessionInfo }>(
       "PATCH",
-      `/api/session/${encodeURIComponent(id)}`,
+      sessionPath(id),
       body,
     );
   }
 
   async deleteSession(id: string): Promise<void> {
-    await this.request<void>("DELETE", `/api/session/${encodeURIComponent(id)}`);
+    await this.request<void>("DELETE", sessionPath(id));
   }
 
   async listMessages(id: string): Promise<ListPage<MessageInfo>> {
     return this.request<ListPage<MessageInfo>>(
       "GET",
-      `/api/session/${encodeURIComponent(id)}/message`,
+      sessionPath(id, "/message"),
     );
   }
 
@@ -176,7 +209,7 @@ export class OpencodeClient {
   ): Promise<void> {
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(id)}/prompt`,
+      sessionPath(id, "/prompt"),
       body,
     );
   }
@@ -184,7 +217,7 @@ export class OpencodeClient {
   async interrupt(id: string): Promise<void> {
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(id)}/interrupt`,
+      sessionPath(id, "/interrupt"),
       {},
     );
   }
@@ -192,7 +225,7 @@ export class OpencodeClient {
   async setAgent(id: string, agent: string): Promise<void> {
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(id)}/agent`,
+      sessionPath(id, "/agent"),
       { agent },
     );
   }
@@ -204,7 +237,7 @@ export class OpencodeClient {
     }
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(id)}/model`,
+      sessionPath(id, "/model"),
       { model: ref },
     );
   }
@@ -213,7 +246,7 @@ export class OpencodeClient {
   async forkSession(id: string): Promise<SessionInfo> {
     const result = await this.request<{ data: SessionInfo }>(
       "POST",
-      `/api/session/${encodeURIComponent(id)}/fork`,
+      sessionPath(id, "/fork"),
     );
     return result.data;
   }
@@ -271,7 +304,7 @@ export class OpencodeClient {
   async runCommand(sessionID: string, name: string, text: string): Promise<void> {
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(sessionID)}/command`,
+      sessionPath(sessionID, "/command"),
       { name, text },
     );
   }
@@ -280,7 +313,7 @@ export class OpencodeClient {
   async compact(sessionID: string): Promise<void> {
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(sessionID)}/compact`,
+      sessionPath(sessionID, "/compact"),
       {},
     );
   }
@@ -293,7 +326,7 @@ export class OpencodeClient {
   ): Promise<void> {
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(sessionID)}/permission/${encodeURIComponent(requestID)}/reply`,
+      sessionPath(sessionID, `/permission/${encodeURIComponent(requestID)}/reply`),
       { decision },
     );
   }
@@ -302,7 +335,7 @@ export class OpencodeClient {
   async sessionDiff(id: string): Promise<{ data: FileDiffInfo[] }> {
     return this.request<{ data: FileDiffInfo[] }>(
       "GET",
-      `/api/session/${encodeURIComponent(id)}/diff`,
+      sessionPath(id, "/diff"),
     );
   }
 
@@ -310,7 +343,7 @@ export class OpencodeClient {
   async assistantMessage(sessionID: string, messageID: string): Promise<AssistantMessage> {
     return this.request<AssistantMessage>(
       "GET",
-      `/api/session/${encodeURIComponent(sessionID)}/message/${encodeURIComponent(messageID)}`,
+      sessionPath(sessionID, `/message/${encodeURIComponent(messageID)}`),
     );
   }
 
@@ -321,7 +354,7 @@ export class OpencodeClient {
   ): Promise<{ data: { messageID: string; files?: FileDiffInfo[] } }> {
     return this.request(
       "POST",
-      `/api/session/${encodeURIComponent(sessionID)}/revert/stage`,
+      sessionPath(sessionID, "/revert/stage"),
       { messageID },
     );
   }
@@ -330,7 +363,7 @@ export class OpencodeClient {
   async revertCommit(sessionID: string): Promise<void> {
     await this.request<unknown>(
       "POST",
-      `/api/session/${encodeURIComponent(sessionID)}/revert/commit`,
+      sessionPath(sessionID, "/revert/commit"),
       {},
     );
   }

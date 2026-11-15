@@ -2,13 +2,19 @@
 
 ## 0.4.1
 
-- Fix: the send button always showed the square "stop" icon, even when idle. Idle now shows the up arrow; the square appears only while a turn is in progress (click it to stop).
+- Fix: choosing a model or agent on an empty "New session" panel produced a 404 from `/api/session//model` — no server session existed yet, so the request had an empty id. Choices are now kept locally and sent in the body of the lazily created session. Session-scoped client methods also reject an empty id instead of emitting a malformed URL, and abort/compact no longer fire without a session.
+- Messages sent while the model is working are now queued instead of being dropped. The queue is a collapsed `QUEUE n` header above the composer; expanding it shows each message with force-send (interrupts the current turn) and delete. Queued messages send automatically when the turn ends; a failed or stopped turn holds the queue until resumed.
+- Fix: the send button always showed the square "stop" icon, even when idle. It is now a single up-arrow button in both states; Esc stops the running turn.
 - The empty-state welcome screen is now a single terminal-style prompt line (`› What should we work on?`) with the version below it. The logo and the clickable prompt suggestions are gone.
 - The composer input, its pickers and every dropdown opened from it now use the monospace font of the welcome screen. The send button is blue instead of following the theme's button color.
 - A context strip under the composer shows the current git branch (`*` when the working tree is dirty) and the workspace path on the left, with context tokens used and the session cost on the right.
 - Fix: the context strip said "no git" inside git repositories. The branch is now read from `.git/HEAD` directly (with the built-in git extension as the source for the dirty marker), and the details are logged to the "OpenCode" output channel.
 - The header mark is now a rounded badge holding the OpenCode glyph, centred with the session title on a tighter line box.
 - Fix: the composer input showed scrollbar arrows on Windows. The scrollbar is hidden and the auto-resize now accounts for the textarea padding.
+- Model picker: the favourite star is gone from the effort row, and per-row family icons are gone too — rows show name, provider and the cost/effort hint only. The narrow-panel ladder loses its icon step, so the model button goes straight from the short name to hidden.
+- The action bar (mode, model, reasoning effort) now renders in one commit once the catalog arrives, instead of popping in picker by picker as each one's data landed.
+- The first paint now waits for the host's initial snapshot: the panel used to show a half-built header, welcome and composer that then filled in piece by piece (title, context strip, pickers). Connection errors still render immediately so the retry banner is visible.
+- Session history rows gained a leading status dot that only lights up for live work: green while the model is working, yellow when the session is blocked on a permission reply, red when its last turn failed or was interrupted. Idle, successful and never-run sessions show no colour. States are read when the menu opens, from the session list (`time.busy`/`time.idle` and `outcome`), `/api/session/active` plus the pending permission requests.
 
 ## 0.4.0
 

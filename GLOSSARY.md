@@ -22,6 +22,9 @@ A server-issued question (e.g. "run this command?") that blocks the agent loop u
 **Turn**
 One user prompt plus everything the agent produces until the session goes idle. File changes within a turn surface as diffs.
 
+**Queued message**
+A user message sent while the model is still working. The host holds it in FIFO order and sends it when the turn ends; it can be deleted or force-sent (interrupting the current turn). A failed or stopped turn holds the queue until it is resumed.
+
 **Rewind point**
 A user message used as the boundary for a revert: everything after it (messages and their file changes) is rolled back via the server's staged revert.
 
@@ -53,6 +56,3 @@ A context item the user attaches to a message: a workspace file, the active edit
 
 **Recent models**
 The extension's local, per-workspace list of the last five model refs used — shown as the first section of the model picker.
-
-**Favorite model**
-A globally pinned model ref shown via the model picker's effort flyout (`Favorite`).

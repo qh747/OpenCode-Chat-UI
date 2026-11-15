@@ -1,9 +1,12 @@
 import type {
+  AttachmentPreview,
   Catalog,
   ConnectionState,
+  EditorFile,
   GitInfo,
   HistoryGroup,
   HostToWeb,
+  QueuedMessage,
   Snapshot,
   WebToHost,
 } from "../src/webview/protocol";
@@ -25,10 +28,16 @@ export interface ChatState {
   agent?: string;
   model?: { providerID: string; id: string; variant?: string };
   busy: boolean;
+  queue: QueuedMessage[];
+  queuePaused: boolean;
   messages: MessageInfo[];
   pending: PermissionRequest[];
   diffs: FileDiffInfo[];
   catalog: Catalog;
+  /** True once the first catalog (or snapshot carrying one) has arrived. */
+  catalogLoaded: boolean;
+  /** True once the host's first snapshot has been applied. */
+  hydrated: boolean;
   errors: string[];
   fileResults: Record<string, { path: string; name: string }[]>;
   pickedPaths: Record<string, string[]>;
@@ -38,20 +47,28 @@ export interface ChatState {
   tokens?: TokenUsage;
   workspacePath?: string;
   git?: GitInfo;
+  editors: EditorFile[];
+  previews: Record<string, AttachmentPreview>;
 }
 
 export const initialState: ChatState = {
   connection: "starting",
   busy: false,
+  queue: [],
+  queuePaused: false,
   messages: [],
   pending: [],
   diffs: [],
-  catalog: { agents: [], models: [], commands: [], skills: [], recentModels: [], favoriteModels: [] },
+  catalog: { agents: [], models: [], commands: [], skills: [], recentModels: [] },
+  catalogLoaded: false,
+  hydrated: false,
   errors: [],
   fileResults: {},
   pickedPaths: {},
   stagedImages: {},
   historyGroups: [],
+  editors: [],
+  previews: {},
 };
 
 function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
@@ -62,14 +79,19 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     agent: snapshot.agent,
     model: snapshot.model,
     busy: snapshot.busy,
+    queue: snapshot.queue,
+    queuePaused: snapshot.queuePaused,
     messages: snapshot.messages,
     pending: snapshot.pending,
     diffs: snapshot.diffs,
     catalog: snapshot.catalog,
+    catalogLoaded: true,
+    hydrated: true,
     cost: snapshot.cost,
     tokens: snapshot.tokens,
     workspacePath: snapshot.workspacePath,
     git: snapshot.git,
+    editors: snapshot.editors ?? state.editors,
   };
 }
 
@@ -89,7 +111,14 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
     case "snapshot":
       return applySnapshot(state, message.snapshot);
     case "catalog":
-      return { ...state, catalog: message.catalog };
+      return { ...state, catalog: message.catalog, catalogLoaded: true };
+    case "editors":
+      return { ...state, editors: message.editors };
+    case "attachmentPreview":
+      return {
+        ...state,
+        previews: { ...state.previews, [message.preview.requestId]: message.preview },
+      };
     case "sessionMeta": {
       if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
         return state;
@@ -180,7 +209,15 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
         return state;
       }
-      return { ...state, busy: message.busy };
+      // Inline failures belong to the turn that produced them: once a new turn
+      // starts they no longer describe the current state of the conversation.
+      return { ...state, busy: message.busy, errors: message.busy ? [] : state.errors };
+    }
+    case "queue": {
+      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+        return state;
+      }
+      return { ...state, queue: message.queue, queuePaused: message.paused };
     }
     case "permissions": {
       if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {

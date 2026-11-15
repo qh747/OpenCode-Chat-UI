@@ -136,6 +136,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src webview-ui test",
     "test": "node esbuild.mjs --tests && node out/tests.cjs",
+    "prototype:history": "node prototype/history-status/build.mjs",
+    "prototype:queue": "node prototype/message-queue/build.mjs",
     "vscode:prepublish": "npm run typecheck && npm run lint && npm run compile",
     "package": "node scripts/release.mjs",
     "release": "node scripts/release.mjs"

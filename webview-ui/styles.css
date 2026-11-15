@@ -38,6 +38,10 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  /* Width of the panel decides how the action bar degrades. Queries live next
+     to the rules they gate, further down. */
+  container-type: inline-size;
+  container-name: panel;
 }
 
 /* header */
@@ -194,9 +198,6 @@ body {
   display: flex;
   gap: 6px;
 }
-.small-banner {
-  font-size: 11px;
-}
 
 /* welcome */
 .welcome {
@@ -231,29 +232,49 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
 }
 .message-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+/* sent messages: right aligned, no bubble — a quiet rule instead of colour */
 .msg.user {
   position: relative;
   align-self: flex-end;
   max-width: 88%;
-  background: var(--vscode-button-background, #0078d4);
-  color: var(--vscode-button-foreground, #ffffff);
-  border-radius: 10px 10px 2px 10px;
-  padding: 6px 10px;
+  padding-right: 10px;
+  border-right: 2px solid rgba(160, 160, 160, 0.35);
+  text-align: right;
 }
 .msg.user .md p {
   margin: 0;
 }
+.chip-file {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .msg.user .chip-file {
   margin: 4px 4px 0 0;
-  display: inline-block;
   font-size: 11px;
   opacity: 0.9;
+}
+.msg-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
 }
 .msg.assistant {
   align-self: stretch;
@@ -278,6 +299,23 @@ body {
   color: var(--muted);
   font-size: 10px;
   text-align: right;
+}
+/* failed turn: surfaced inline with the conversation, not as a page banner */
+.conversation-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.msg-failure {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-left: 2px solid var(--danger);
+  padding: 1px 0 1px 8px;
 }
 
 /* markdown */
@@ -628,44 +666,246 @@ body {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
 
+/* queued messages: one collapsed header row by default, aligned with the
+   composer box (hence the same 10px side margin as .composer's padding) */
+.queue-strip {
+  flex: none;
+  max-height: 148px;
+  margin: 0 10px 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+}
+.queue-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.queue-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.queue-toggle:hover {
+  color: var(--fg);
+}
+.queue-caret {
+  flex: none;
+  font-size: 8px;
+  opacity: 0.7;
+}
+.queue-count {
+  color: var(--fg);
+  font-weight: 700;
+}
+.queue-note {
+  font-size: 9.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.queue-note.paused {
+  color: var(--warn);
+}
+.queue-head-btn {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.queue-head-btn:hover {
+  color: var(--fg);
+}
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  padding: 2px 10px;
+}
+.queue-row + .queue-row {
+  border-top: 1px dashed color-mix(in srgb, var(--border) 65%, transparent);
+}
+.queue-index {
+  flex: none;
+  width: 12px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--muted);
+}
+.queue-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg);
+}
+.queue-force {
+  flex: none;
+  background: none;
+  border: none;
+  color: #4da3ff;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.queue-force:hover {
+  text-decoration: underline;
+}
+.queue-remove {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.queue-remove:hover {
+  color: var(--danger);
+}
+
 /* composer */
 .composer {
   flex: none;
   padding: 0 10px 10px;
   position: relative;
 }
-.chips-row {
+
+/* attachment tokens live inside the input box */
+.token-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 6px;
+  gap: 5px;
+  padding: 8px 10px 0;
 }
-.chip {
+/* No frame: --border is darker than the chip fill in Dark Modern, so a 1px
+   ring there reads as a black outline. A fill plus an inner top highlight
+   separates the chip without drawing a box. */
+.token {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.075);
+  border: none;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  padding: 1px 4px 1px 5px;
   font-family: var(--mono);
   font-size: 10px;
-  padding: 1px 8px;
-  max-width: 220px;
-  white-space: nowrap;
+  line-height: 1.5;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+  max-width: 240px;
+}
+.token:hover {
+  background: rgba(255, 255, 255, 0.135);
+}
+.token-name {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.chip-remove {
+.token-range {
+  color: var(--muted);
+  font-size: 9px;
+  flex: none;
+}
+.token-x {
   background: none;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 1px;
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.token:hover .token-x {
+  opacity: 1;
+}
+.token-x:hover,
+.token-x:focus-visible {
+  color: var(--danger);
+  opacity: 1;
+}
+.token-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+.token-clear {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9px;
+  cursor: pointer;
   padding: 0;
 }
-.chip-remove:hover {
-  color: var(--danger);
+.token-clear:hover {
+  color: var(--fg);
+  text-decoration: underline;
 }
+
+/* attachment type badge */
+.type {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  padding: 1px 3px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.9;
+}
+/* Inside a chip the badge would be a second frame on top of a framed chip;
+   the coloured letters are enough to name the type there. */
+.token .type {
+  border: none;
+  border-radius: 2px;
+  padding: 1px 3px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.t-image { color: #7aa2f7; }
+.t-file { color: #a8adb5; }
+.t-url { color: #6fbf9b; }
+.t-selection { color: #e0af68; }
 .image-notice {
   color: var(--warn);
   font-size: 11px;
@@ -728,8 +968,47 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px 8px 6px;
-  flex-wrap: wrap;
+  /* Never wrap: as the panel narrows the controls degrade instead (see the
+     container queries below). */
+  flex-wrap: nowrap;
+  min-width: 0;
 }
+/* The left group may shrink and clip its own inline content, but it must NOT
+   clip overflow: each picker renders its menu as an absolutely-positioned child
+   of .dropdown, i.e. inside this element. `overflow: hidden` here made all three
+   menus open invisibly (they were laid out at full size but clipped away).
+
+   So the shrinking is expressed on the children instead: they may not grow, and
+   the container query ladder removes them from the end. Nothing here clips. */
+.composer-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Exactly one label face shows at a time. */
+.dropdown-button .label-short {
+  display: none;
+}
+
+/*
+  Degradation ladder. As the panel narrows, one control gives way per step and
+  nothing ever comes back; widening retraces the same steps in reverse, because
+  the whole thing is driven by width alone.
+
+    全量 → 藏思考深度 → 模型简称 → 模型消失 → 模式消失
+
+  The thresholds are the widths measured in dev/action-bar-prototype.html
+  (S0 483, S1 335, S2 100), with a little slack so a level never renders clipped
+  at its own boundary.
+
+  These rules live at the end of the file on purpose: container queries carry no
+  extra specificity, so an earlier `.effort-wrap { display: inline-flex }` would
+  win on source order.
+*/
+
 
 /* context strip under the composer: branch + path | usage + cost */
 .ctx-bar {
@@ -768,6 +1047,117 @@ body {
   flex: none;
 }
 
+/* attachment preview (click a token) */
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  z-index: 60;
+}
+.preview-card {
+  width: 100%;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-editorWidget-background, #252526);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  min-width: 0;
+}
+.preview-head .spacer {
+  flex: 1;
+}
+.preview-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-sub {
+  color: var(--muted);
+  font-size: 9px;
+  flex: none;
+}
+.preview-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.preview-close:hover {
+  color: var(--fg);
+}
+.preview-body {
+  overflow: auto;
+  padding: 10px;
+  min-height: 60px;
+}
+.preview-image {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.preview-code {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--fg);
+  white-space: pre;
+  overflow-x: auto;
+}
+.preview-line {
+  display: block;
+}
+.preview-line.hit {
+  background: rgba(224, 175, 104, 0.14);
+}
+.preview-ln {
+  color: #5f6368;
+  padding-right: 10px;
+  user-select: none;
+}
+.preview-url {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.preview-url-address {
+  color: var(--vscode-textLink-foreground, #4daafc);
+  overflow-wrap: anywhere;
+}
+.preview-url-note,
+.preview-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
+.preview-note {
+  border-top: 1px solid var(--border);
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+
 /* @ mention dropdown */
 .mention-list {
   position: absolute;
@@ -801,6 +1191,22 @@ body {
 .mention-item:hover,
 .mention-item.active {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+/* open-but-unselected editor files are suggestions, never citable ranges */
+.mention-item.dim .mention-name,
+.mention-item.dim .mention-desc {
+  color: #8a8f96;
+}
+.mention-section {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 5px 10px 2px;
+  border-top: 1px solid var(--border);
+}
+.mention-section:first-child {
+  border-top: none;
 }
 .mention-icon {
   flex: none;
@@ -846,11 +1252,6 @@ body {
 .send-btn:disabled {
   opacity: 0.45;
   cursor: default;
-}
-.send-btn.stop {
-  background: transparent;
-  color: var(--danger);
-  border: 1px solid var(--danger);
 }
 .model-row-wrap {
   position: relative;
@@ -923,24 +1324,34 @@ body {
   padding: 4px 8px;
   outline: none;
 }
-.model-flyout {
-  position: absolute;
-  left: calc(100% + 4px);
-  top: 0;
-  min-width: 190px;
-  background: var(--vscode-editorWidget-background, #252526);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-  z-index: 30;
-  padding: 4px 0;
+/* Variant (reasoning effort) row, expanded in place under the model it belongs
+   to. A side flyout would be clipped: the menu scrolls vertically, which also
+   clips horizontally, and the menu already spans the sidebar's width. */
+.model-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 12px 7px 34px;
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
-.model-meta {
-  border-top: 1px solid var(--border);
+.model-variant {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   color: var(--muted);
+  font-family: var(--mono);
   font-size: 10px;
-  padding: 6px 10px;
-  white-space: normal;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+.model-variant:hover {
+  color: var(--fg);
+  border-color: rgba(160, 160, 160, 0.55);
+}
+.model-variant.selected {
+  color: var(--fg);
+  border-color: rgba(122, 162, 247, 0.6);
+  background: rgba(122, 162, 247, 0.14);
 }
 
 /* history menu (header clock button) */
@@ -989,6 +1400,49 @@ body {
 .history-row:hover {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
+/* Status dot: only live work is coloured — green while the model runs,
+   yellow while the session waits on the user, red when its last turn failed.
+   Idle and never-run sessions keep the slot but stay invisible. */
+.history-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.history-dot.status-idle {
+  background: transparent;
+}
+.history-dot.status-working {
+  background: var(--ok);
+  animation: history-dot-pulse 1.4s ease-in-out infinite;
+}
+.history-dot.status-blocked {
+  background: var(--warn);
+  animation: history-dot-ring 1.8s ease-out infinite;
+}
+.history-dot.status-failed {
+  background: var(--danger);
+}
+@keyframes history-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes history-dot-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--warn) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 0%, transparent);
+  }
+}
 .history-title {
   flex: none;
   max-width: 240px;
@@ -1033,4 +1487,45 @@ body {
 }
 .history-action.danger {
   color: var(--danger);
+}
+
+/* ---- narrow-panel degradation (see the ladder note above) ---- */
+
+/* S1 · reasoning effort leaves first: the panel cannot even hold its value. */
+@container panel (max-width: 500px) {
+  .effort-wrap {
+    display: none;
+  }
+}
+
+/* S2 · the full provider/name pair no longer fits: keep the short name. */
+@container panel (max-width: 350px) {
+  .dropdown-button .label-full {
+    display: none;
+  }
+  .dropdown-button .label-short {
+    display: inline;
+  }
+}
+
+/* S3 · even the short name does not fit: the model picker retires entirely. */
+@container panel (max-width: 200px) {
+  .model-picker {
+    display: none;
+  }
+}
+
+/* S4 · last to go: the mode picker. */
+@container panel (max-width: 90px) {
+  .agent-picker {
+    display: none;
+  }
+}
+
+/* The placeholder is a hint, not content. Once it cannot be read in full it is
+   just clipped noise, so it goes rather than being cut mid-sentence. */
+@container panel (max-width: 260px) {
+  .composer-box textarea::placeholder {
+    color: transparent;
+  }
 }

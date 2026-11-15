@@ -1,5 +1,40 @@
 import type { SessionInfo } from "../opencode/types";
 
+/** Four-state summary rendered as the history menu's status dot. */
+export type SessionRunStatus = "idle" | "working" | "blocked" | "failed";
+
+/** The session fields the status depends on; `SessionInfo` satisfies it. */
+export interface SessionRunInfo {
+  id: string;
+  time: { busy?: number; idle?: number };
+  outcome?: SessionInfo["outcome"];
+}
+
+/**
+ * Blocked wins over running: a session awaiting a permission reply is stuck.
+ * Running wins over the previous outcome, which still describes the last
+ * finished turn while a new one is in flight. Everything else is idle — a
+ * session that never ran, or whose last turn succeeded, shows no dot.
+ */
+export function deriveSessionStatus(
+  session: SessionRunInfo,
+  activeIDs: ReadonlySet<string>,
+  blockedIDs: ReadonlySet<string>,
+): SessionRunStatus {
+  if (blockedIDs.has(session.id)) {
+    return "blocked";
+  }
+  const busy = session.time.busy ?? 0;
+  const idle = session.time.idle ?? 0;
+  if (activeIDs.has(session.id) || busy > idle) {
+    return "working";
+  }
+  if (session.outcome === "failed" || session.outcome === "interrupted") {
+    return "failed";
+  }
+  return "idle";
+}
+
 /** Date-group a session list (newest first within groups). */
 export function groupSessionsByDate(sessions: SessionInfo[]): {
   label: string;

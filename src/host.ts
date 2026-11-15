@@ -27,7 +27,6 @@ export class OpencodeHost {
     commands: [],
     skills: [],
     recentModels: [],
-    favoriteModels: [],
   };
 
   private readonly stateEmitter = new vscode.EventEmitter<ServerState>();
@@ -50,10 +49,6 @@ export class OpencodeHost {
     this.manager = this.buildManager();
     this.catalogCache.recentModels = this.options.context.workspaceState.get<ModelRef[]>(
       this.recentKey(),
-      [],
-    );
-    this.catalogCache.favoriteModels = this.options.context.globalState.get<ModelRef[]>(
-      "opencode.favoriteModels",
       [],
     );
   }
@@ -127,19 +122,6 @@ export class OpencodeHost {
       // Only resync when the entry is new to the list (avoid churn per send).
       this.resyncEmitter.fire();
     }
-  }
-
-  /** Toggle a model favorite (global, shared across workspaces). */
-  toggleFavoriteModel(ref: ModelRef): void {
-    const key = `${ref.providerID}/${ref.id}`;
-    const current = this.options.context.globalState.get<ModelRef[]>("opencode.favoriteModels", []);
-    const exists = current.some((m) => `${m.providerID}/${m.id}` === key);
-    const list = exists
-      ? current.filter((m) => `${m.providerID}/${m.id}` !== key)
-      : [...current, { providerID: ref.providerID, id: ref.id }];
-    void this.options.context.globalState.update("opencode.favoriteModels", list);
-    this.catalogCache.favoriteModels = list;
-    this.resyncEmitter.fire();
   }
 
   log(line: string): void {
@@ -274,7 +256,6 @@ export class OpencodeHost {
       commands,
       skills,
       recentModels: this.catalogCache.recentModels,
-      favoriteModels: this.catalogCache.favoriteModels,
       defaultModel: defaultModel ?? fallbackModel,
     };
     this.resyncEmitter.fire();
