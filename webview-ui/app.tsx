@@ -9,6 +9,7 @@ import { Dropdown } from "./Dropdown";
 import { ModelPicker } from "./ModelPicker";
 import { HistoryMenu } from "./HistoryMenu";
 import { QueueStrip } from "./QueueStrip";
+import { SessionInfo } from "./SessionInfo";
 import type { ComposerHandle } from "./composerTypes";
 
 interface Props {
@@ -98,6 +99,7 @@ export function App({ state, send, composerHandleRef }: Props) {
     ...variants.map((v) => ({ value: v.id, label: v.id ? `${v.id.charAt(0).toUpperCase()}${v.id.slice(1)}` : v.id })),
   ];
   const [effortOpen, setEffortOpen] = useState(false);
+  const [sessionInfoOpen, setSessionInfoOpen] = useState(false);
 
   // The first snapshot carries everything the panel needs — catalog, title,
   // git, messages — while the state/catalog messages before it describe only
@@ -281,6 +283,13 @@ export function App({ state, send, composerHandleRef }: Props) {
                 contextTokens: state.contextTokens,
                 cacheHitRate: state.cacheHitRate,
                 contextLimit: activeModelInfo?.limit?.context,
+                onSessionInfo: () => setSessionInfoOpen(true),
+                onOpenSourceControl: () => send({ kind: "openSourceControl" }),
+                onRevealInExplorer: () => {
+                  if (state.workspacePath) {
+                    send({ kind: "revealInExplorer", path: state.workspacePath });
+                  }
+                },
               }
             : undefined
         }
@@ -294,6 +303,24 @@ export function App({ state, send, composerHandleRef }: Props) {
         onAbort={() => send({ kind: "abort" })}
         handleRef={(handle) => {
           composerHandleRef.current = handle;
+        }}
+      />
+      <SessionInfo
+        open={sessionInfoOpen}
+        onClose={() => setSessionInfoOpen(false)}
+        title={state.title}
+        providerID={activeModelInfo?.providerID ?? activeModel?.providerID}
+        modelName={activeModelInfo?.name ?? activeModel?.id}
+        contextLimit={activeModelInfo?.limit?.context}
+        created={state.created}
+        updated={state.updated}
+        cost={state.cost}
+        contextTokens={state.contextTokens}
+        messages={state.messages}
+        onExport={() => {
+          if (state.sessionID) {
+            send({ kind: "exportSession", id: state.sessionID });
+          }
         }}
       />
     </div>

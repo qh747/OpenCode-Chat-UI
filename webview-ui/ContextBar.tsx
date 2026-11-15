@@ -10,13 +10,29 @@ export interface ContextBarProps {
   cacheHitRate?: number;
   /** Context window of the active model, when known. */
   contextLimit?: number;
+  /** Opens the session-info slide-over; absent leaves the plain readout. */
+  onSessionInfo?: () => void;
+  /** Switches to the Source Control view; absent leaves the plain text. */
+  onOpenSourceControl?: () => void;
+  /** Reveals the workspace folder in the Explorer; absent leaves plain text. */
+  onRevealInExplorer?: () => void;
 }
 
 /**
  * One-line context strip under the composer: git branch and workspace path on
- * the left, context usage and cache hit rate on the right.
+ * the left, context usage and cache hit rate on the right. The usage segment
+ * doubles as the session-info opener when a handler is passed.
  */
-export function ContextBar({ git, workspacePath, contextTokens, cacheHitRate, contextLimit }: ContextBarProps) {
+export function ContextBar({
+  git,
+  workspacePath,
+  contextTokens,
+  cacheHitRate,
+  contextLimit,
+  onSessionInfo,
+  onOpenSourceControl,
+  onRevealInExplorer,
+}: ContextBarProps) {
   const used = contextTokens;
   const hasUsage = used !== undefined || cacheHitRate !== undefined;
   if (!git?.branch && !workspacePath && !hasUsage) {
@@ -26,7 +42,17 @@ export function ContextBar({ git, workspacePath, contextTokens, cacheHitRate, co
     <div className="ctx-bar">
       {git?.branch ? (
         <>
-          <span className="ctx-branch">⎇ {git.branch}</span>
+          {onOpenSourceControl ? (
+            <button
+              className="ctx-branch ctx-link"
+              title={t("openSourceControlTitle")}
+              onClick={onOpenSourceControl}
+            >
+              ⎇ {git.branch}
+            </button>
+          ) : (
+            <span className="ctx-branch">⎇ {git.branch}</span>
+          )}
           {git.dirty && <span className="ctx-dirty">*</span>}
           <span className="ctx-sep">|</span>
         </>
@@ -36,26 +62,56 @@ export function ContextBar({ git, workspacePath, contextTokens, cacheHitRate, co
           <span className="ctx-sep">|</span>
         </>
       ) : null}
-      {workspacePath && (
-        <span className="ctx-path" title={workspacePath}>
-          {workspacePath}
-        </span>
-      )}
-      {hasUsage && (
-        <span className="ctx-right">
-          {used !== undefined && (
-            <span title={t("contextTokensTitle")}>
-              {formatTokens(used)}
-              {contextLimit ? ` / ${formatTokens(contextLimit)}` : ""}
-            </span>
-          )}
-          {used !== undefined && cacheHitRate !== undefined && <span className="ctx-sep">|</span>}
-          {cacheHitRate !== undefined && (
-            <span title={t("cacheHitRateTitle")}>{(cacheHitRate * 100).toFixed(0)}%</span>
-          )}
-        </span>
-      )}
+      {workspacePath &&
+        (onRevealInExplorer ? (
+          <button
+            className="ctx-path ctx-link"
+            title={`${t("revealInExplorerTitle")} · ${workspacePath}`}
+            onClick={onRevealInExplorer}
+          >
+            {workspacePath}
+          </button>
+        ) : (
+          <span className="ctx-path" title={workspacePath}>
+            {workspacePath}
+          </span>
+        ))}
+      {hasUsage &&
+        (onSessionInfo ? (
+          <button className="ctx-right ctx-usage-btn" title={t("sessionInfoTitle")} onClick={onSessionInfo}>
+            <UsageReadout used={used} contextLimit={contextLimit} cacheHitRate={cacheHitRate} />
+          </button>
+        ) : (
+          <span className="ctx-right">
+            <UsageReadout used={used} contextLimit={contextLimit} cacheHitRate={cacheHitRate} />
+          </span>
+        ))}
     </div>
+  );
+}
+
+function UsageReadout({
+  used,
+  contextLimit,
+  cacheHitRate,
+}: {
+  used?: number;
+  contextLimit?: number;
+  cacheHitRate?: number;
+}) {
+  return (
+    <>
+      {used !== undefined && (
+        <span title={t("contextTokensTitle")}>
+          {formatTokens(used)}
+          {contextLimit ? ` / ${formatTokens(contextLimit)}` : ""}
+        </span>
+      )}
+      {used !== undefined && cacheHitRate !== undefined && <span className="ctx-sep">|</span>}
+      {cacheHitRate !== undefined && (
+        <span title={t("cacheHitRateTitle")}>{(cacheHitRate * 100).toFixed(0)}%</span>
+      )}
+    </>
   );
 }
 

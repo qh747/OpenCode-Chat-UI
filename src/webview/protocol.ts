@@ -13,6 +13,9 @@ import type {
   SkillInfo,
 } from "../opencode/types";
 
+/** Re-exported for the webview components that render messages. */
+export type { MessageInfo };
+
 export type ConnectionState = "stopped" | "starting" | "connected" | "error";
 
 /** Branch / dirty state of the workspace folder (absent when git is unavailable). */
@@ -121,6 +124,11 @@ export type HostToWeb =
       busy?: boolean;
       contextTokens?: number;
       cacheHitRate?: number;
+      /** Session timestamps, epoch ms (session info panel). */
+      created?: number;
+      updated?: number;
+      /** Server-computed session cost, USD (0 for subscription models). */
+      cost?: number;
     }
   | { kind: "git"; git: GitInfo }
   | { kind: "textStarted"; sessionID: string; messageID: string; ordinal: number }
@@ -161,6 +169,8 @@ export type WebToHost =
   | { kind: "deleteSession"; id: string }
   | { kind: "forkSession"; id: string }
   | { kind: "exportSession"; id: string }
+  | { kind: "openSourceControl" }
+  | { kind: "revealInExplorer"; path: string }
   | { kind: "switchSession"; id: string }
   | { kind: "setAgent"; agent: string }
   | { kind: "setModel"; providerID: string; id: string; variant?: string }

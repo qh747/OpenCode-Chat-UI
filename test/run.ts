@@ -21,6 +21,8 @@ import "./opencode-config.test";
 import "./pending-selection.test";
 import "./queue.test";
 import "./sessions.test";
+import "./session-info.test";
+import "./context-bar.test";
 import "./settings-items.test";
 import "./settings-render.test";
 import "./tokens.test";

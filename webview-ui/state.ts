@@ -50,6 +50,11 @@ export interface ChatState {
   contextTokens?: number;
   /** Cache hit rate of the same message (0..1). */
   cacheHitRate?: number;
+  /** Session timestamps, epoch ms — the session info panel. */
+  created?: number;
+  updated?: number;
+  /** Server-computed session cost, USD (0 for subscription models). */
+  cost?: number;
   workspacePath?: string;
   git?: GitInfo;
   editors: EditorFile[];
@@ -209,6 +214,9 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         busy: message.busy ?? state.busy,
         contextTokens: message.contextTokens ?? state.contextTokens,
         cacheHitRate: message.cacheHitRate ?? state.cacheHitRate,
+        created: message.created ?? state.created,
+        updated: message.updated ?? state.updated,
+        cost: message.cost ?? state.cost,
       };
     }
     case "git": {

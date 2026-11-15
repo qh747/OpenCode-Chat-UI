@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.4.7
+## 0.4.10
+
+- The context strip's git branch and workspace path are actionable now: clicking the branch switches the workbench to the Source Control view, and clicking the path reveals the workspace folder in the Explorer (falling back to a plain view switch when reveal is unavailable). Both hover with a brighten and carry tooltips; without a git branch the notice stays inert.
+
+## 0.4.9
+
+- Session info aligns with the desktop view in two details: the system prompt shown is the session's LAST system message, trimmed (a whitespace-only notice no longer surfaces an empty block), and "last activity" shows the latest billed turn's time rather than the session's `time.updated`, matching the figure the desktop renders.
+
+## 0.4.8
+
+- Clicking the usage segment in the context strip (`43k / 1.0M | 95%`) opens a session-info slide-over mirroring the opencode desktop's session view: the two-column stat grid (session, provider, model, context limit and usage, the token breakdown of the latest billed turn, message counts, cost, timestamps), the session's system prompt collapsed by default, and the raw message list — one row per message, expandable to its text — with an export button. In a narrow sidebar the grid folds to one column.
 
 - Skills are picked from the slash-command menu: `/` now lists the server's skills below the commands, filtered as you type, keyboard-selectable. Selecting one inserts the skill mention `@<id>` so the message can carry more context before it is sent; sending `/skill-id arguments` directly starts the turn with that mention.
 - Fixed: the `@` mention picker showed skills by their display name, but the server resolves mentions by the skill's id — which often differs (`OpenCode` vs `opencode`, `Report` vs `report`), so selected skills could fail to load. Mentions now always spell the id; the display name is shown in the row.

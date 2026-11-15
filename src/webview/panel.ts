@@ -245,6 +245,12 @@ export class ChatController implements vscode.Disposable {
       case "exportSession":
         await this.exportSession(web.id);
         break;
+      case "openSourceControl":
+        await this.safeCall(() => this.openSourceControl());
+        break;
+      case "revealInExplorer":
+        await this.safeCall(() => this.revealInExplorer(web.path));
+        break;
       case "runCommand":
         await this.executeRunCommand(web.command, web.arguments);
         break;
@@ -714,6 +720,21 @@ export class ChatController implements vscode.Disposable {
       selection.start,
       selection.end,
     );
+  }
+
+  /** Switch the workbench to the Source Control view. */
+  private async openSourceControl(): Promise<void> {
+    await vscode.commands.executeCommand("workbench.view.scm");
+  }
+
+  /** Switch to the Explorer view and highlight the workspace folder; fall back
+   *  to a plain view switch when the reveal command is not available. */
+  private async revealInExplorer(path: string): Promise<void> {
+    try {
+      await vscode.commands.executeCommand("revealInExplorer", vscode.Uri.file(path));
+    } catch {
+      await vscode.commands.executeCommand("workbench.view.explorer");
+    }
   }
 
   /** Open a file (optionally revealing a line range) in the editor. */
@@ -1491,6 +1512,9 @@ export class ChatController implements vscode.Disposable {
         busy: this.busy,
         contextTokens: this.contextTokens,
         cacheHitRate: this.cacheHitRate,
+        created: result.data.time?.created,
+        updated: result.data.time?.updated,
+        cost: result.data.cost,
       });
     });
   }

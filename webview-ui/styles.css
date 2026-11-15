@@ -1280,6 +1280,154 @@ body {
 */
 
 
+/* session info slide-over */
+.session-info-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, #000 45%, transparent);
+  z-index: 40;
+}
+.session-info {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(430px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  animation: session-info-slide 0.18s ease-out;
+  overflow: hidden;
+}
+@keyframes session-info-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.session-info-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.session-info-title {
+  font-weight: 700;
+  font-size: 12px;
+}
+.session-info-head-actions {
+  display: flex;
+  gap: 4px;
+}
+.session-info-body {
+  overflow-y: auto;
+  padding: 10px;
+}
+.session-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+.session-info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.session-info-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.session-info-value {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-info-section {
+  margin-top: 12px;
+}
+.session-info-section-head {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.session-info-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.session-info-rows {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.session-info-row + .session-info-row {
+  border-top: 1px solid var(--border);
+}
+.session-info-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.session-info-row-head:hover {
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.session-info-row-type {
+  flex: none;
+  font-weight: 700;
+}
+.session-info-row-id {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.session-info-row-time {
+  flex: none;
+  color: var(--muted);
+}
+.session-info-pre {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid var(--border);
+}
+
 /* context strip under the composer: branch + path | usage + cache hit rate */
 .ctx-bar {
   display: flex;
@@ -1315,6 +1463,30 @@ body {
   align-items: center;
   gap: 7px;
   flex: none;
+}
+.ctx-usage-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.ctx-usage-btn:hover {
+  filter: brightness(1.2);
+}
+/* 可点击的上下文段（git 分支 / 工作区路径）：按钮复位 + hover 提亮 */
+.ctx-link {
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+.ctx-link:hover {
+  filter: brightness(1.2);
 }
 
 /* attachment preview (click a token) */
