@@ -27,9 +27,10 @@ else, resolved from `vscode.env.language`.
 
 ## Consequences
 
-- Two settings entries exist in the command palette; the chat header's gear
-  opens the server config panel, the palette's "OpenCode: Settings" the native
-  page.
+- Two settings entries exist in the command palette. The chat header's gear
+  opens the native settings page — the one users expect a "Settings" button to
+  open — while the server config panel is reachable from the palette's
+  "OpenCode: Server Configuration".
 - Server config cannot be fully localized through `package.nls` alone; the
   webview dictionary carries its share.
 

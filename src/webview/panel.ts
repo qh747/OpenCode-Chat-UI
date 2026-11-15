@@ -329,8 +329,8 @@ export class ChatController implements vscode.Disposable {
       case "restartServer":
         await this.host.restart();
         break;
-      case "openServerConfig":
-        await vscode.commands.executeCommand("opencode.openServerConfig");
+      case "openSettings":
+        await vscode.commands.executeCommand("opencode.openSettings");
         break;
       case "focusChanged":
         // Handled by the surface bridge, which knows which sink sent it.

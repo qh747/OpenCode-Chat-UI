@@ -171,6 +171,6 @@ export type WebToHost =
   | { kind: "executePlan" }
   | { kind: "cycleAgent"; direction: 1 | -1 }
   | { kind: "restartServer" }
-  | { kind: "openServerConfig" }
+  | { kind: "openSettings" }
   /** Whether the user is currently looking at this surface. */
   | { kind: "focusChanged"; focused: boolean };
