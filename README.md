@@ -52,6 +52,13 @@ code --install-extension dist/opencode-vscode-<version>.vsix
 | `opencode.serverPassword` | `""` | Password for the external server (basic-auth user is always `opencode`). |
 | `opencode.context.autoAttachSelection` | `true` | Attach the active editor's selection as context. |
 | `opencode.context.maxSelectionLength` | `2000` | Max characters of a selection to attach. |
+| `opencode.notifications.turnComplete` | `true` | Notify when a turn finishes. |
+| `opencode.notifications.permissionRequest` | `true` | Notify when the agent asks for permission. |
+| `opencode.notifications.errors` | `false` | Notify when the agent or the server reports an error. |
+
+The gear button in the chat header opens a settings panel. It edits these
+settings together with the opencode server's own configuration
+(`opencode.json`), in one place.
 
 ## Keyboard shortcuts
 

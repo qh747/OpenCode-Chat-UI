@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatState } from "./state";
 import type { WebToHost } from "../src/webview/protocol";
+import { t } from "../src/util/i18n";
 import { MessageList, ConversationErrors } from "./MessageList";
 import { Composer } from "./Composer";
 import { DiffList, PermissionCard, Welcome } from "./Cards";
@@ -52,6 +53,23 @@ export function App({ state, send, composerHandleRef }: Props) {
 
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
 
+  // New content does not always arrive through React state (an expanded card,
+  // a late image, a font reflow), so keep following the bottom while it grows.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !hasMessages) {
+      return;
+    }
+    const target = list.querySelector(".message-list") ?? list;
+    const observer = new ResizeObserver(() => {
+      if (stickToBottom.current) {
+        list.scrollTop = list.scrollHeight;
+      }
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMessages]);
+
   const activeModel = state.model ?? state.catalog.defaultModel;
   // Never show a placeholder for the mode: default to build until known.
   const agent = state.agent ?? state.catalog.agents[0]?.id ?? "build";
@@ -76,7 +94,7 @@ export function App({ state, send, composerHandleRef }: Props) {
           },
         ];
   const effortOptions = [
-    { value: "", label: "Default" },
+    { value: "", label: t("effortDefault") },
     ...variants.map((v) => ({ value: v.id, label: v.id ? `${v.id.charAt(0).toUpperCase()}${v.id.slice(1)}` : v.id })),
   ];
   const [effortOpen, setEffortOpen] = useState(false);
@@ -102,7 +120,7 @@ export function App({ state, send, composerHandleRef }: Props) {
         value={agent ?? ""}
         options={agentOptions}
         onChange={(value) => send({ kind: "setAgent", agent: value })}
-        title="Agent (Shift+Tab cycles)"
+        title={t("agentPickerTitle")}
         className="agent-picker"
       />
       <ModelPicker
@@ -125,7 +143,7 @@ export function App({ state, send, composerHandleRef }: Props) {
               })
             }
             onOpenChange={setEffortOpen}
-            title="Reasoning effort"
+            title={t("effortPickerTitle")}
           />
         </span>
       )}
@@ -152,11 +170,23 @@ export function App({ state, send, composerHandleRef }: Props) {
           </g>
         </svg>
         <span className="header-title" title={state.title}>
-          {state.title ?? "New session"}
+          {state.title ?? t("newSession")}
         </span>
         <span className="spacer" />
+        <button className="icon-btn" onClick={() => send({ kind: "openServerConfig" })} title={t("serverConfigEntry")}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
+          </svg>
+        </button>
         <HistoryMenu dispatch={send} groups={state.historyGroups} onOpen={() => send({ kind: "showHistory" })} />
-        <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title="New session">
+        <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title={t("newSession")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
@@ -164,20 +194,20 @@ export function App({ state, send, composerHandleRef }: Props) {
       </div>
 
       {state.connection === "starting" && (
-        <div className="banner info">Starting opencode server…</div>
+        <div className="banner info">{t("startingServer")}</div>
       )}
       {state.connection === "connected" && state.compatWarning && (
         <div className="banner warn">{state.compatWarning}</div>
       )}
       {state.connection === "error" && (
         <div className="banner error">
-          <span>{state.connectionError ?? "opencode server is not running."}</span>
+          <span>{state.connectionError ?? t("serverNotRunning")}</span>
           <span className="banner-buttons">
             <button className="btn small" onClick={() => send({ kind: "restartServer" })}>
-              Retry
+              {t("retry")}
             </button>
             <button className="btn small" onClick={() => send({ kind: "showLogs" })}>
-              Show logs
+              {t("showLogs")}
             </button>
           </span>
         </div>
@@ -198,6 +228,9 @@ export function App({ state, send, composerHandleRef }: Props) {
             messages={state.messages}
             busy={state.busy}
             onRewind={(messageID) => send({ kind: "rewindTo", messageID })}
+            onOpenUrl={(url) => send({ kind: "openUrl", url })}
+            onOpenFile={(path, start, end) => send({ kind: "openFile", path, start, end })}
+            onCopyCode={(text) => send({ kind: "copyCode", text })}
           />
         )}
         <ConversationErrors errors={state.errors} />
@@ -222,7 +255,7 @@ export function App({ state, send, composerHandleRef }: Props) {
 
       {agent === "plan" && !state.busy && hasMessages && (
         <button className="btn plan-execute" onClick={() => send({ kind: "executePlan" })}>
-          ▶ Proceed with the plan in build mode
+          {t("proceedInBuild")}
         </button>
       )}
 

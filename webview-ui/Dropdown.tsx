@@ -19,6 +19,10 @@ interface DropdownProps {
   onOpenChange?: (open: boolean) => void;
   /** Extra class on the root, so a container query can target this picker. */
   className?: string;
+  /** Opens the menu downwards instead of upwards. */
+  below?: boolean;
+  /** Greys the control out and stops it from opening. */
+  disabled?: boolean;
 }
 
 /**
@@ -34,6 +38,8 @@ export function Dropdown({
   wide,
   onOpenChange,
   className,
+  below,
+  disabled,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -76,11 +82,15 @@ export function Dropdown({
   }
 
   return (
-    <div className={`dropdown${wide ? " dropdown-wide" : ""}${className ? ` ${className}` : ""}`} ref={rootRef}>
+    <div
+      className={`dropdown${wide ? " dropdown-wide" : ""}${below ? " dropdown-below" : ""}${disabled ? " dropdown-disabled" : ""}${className ? ` ${className}` : ""}`}
+      ref={rootRef}
+    >
       <button
         className="dropdown-button"
         onClick={() => setOpen((current) => !current)}
         title={title ?? selected?.label ?? placeholder}
+        disabled={disabled}
       >
         <span className="dropdown-label">{selected?.label ?? placeholder}</span>
         <span className="dropdown-caret">▾</span>

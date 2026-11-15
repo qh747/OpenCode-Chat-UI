@@ -300,6 +300,29 @@ export class OpencodeClient {
     return this.request<{ data: SkillInfo[] }>("GET", "/api/skill");
   }
 
+  /**
+   * The shells the server can run commands with. The response shape is not
+   * pinned down by the OpenAPI document, so the entries are handed back
+   * untyped and mapped defensively by the caller.
+   */
+  async shells(): Promise<unknown[]> {
+    const payload = await this.request<unknown>("GET", "/api/config/shell");
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    const data = (payload as { data?: unknown[] } | undefined)?.data;
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * Write the server's `shell` key. This is the one config key the server
+   * accepts over HTTP (`PATCH /api/experimental/config`); every other key has
+   * to be written into the config file directly.
+   */
+  async updateShell(shell: string | null): Promise<void> {
+    await this.request<void>("PATCH", "/api/experimental/config", { shell });
+  }
+
   /** Execute a slash command within a session. */
   async runCommand(sessionID: string, name: string, text: string): Promise<void> {
     await this.request<unknown>(

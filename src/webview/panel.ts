@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { OpencodeHost } from "../host";
 import { toServerPath } from "../host";
 import type {
+  AssistantContent,
   AssistantMessage,
   FileDiffInfo,
   MessageInfo,
@@ -12,7 +13,10 @@ import type {
   UserMessage,
 } from "../opencode/types";
 import { promptAttachment, rangeAttachment, type StagedImage } from "../util/attachments";
+import { appendLinks } from "../util/message-attachments";
+import { getLocale, t, type MessageKey } from "../util/i18n";
 import { reverseApply } from "../util/diffapply";
+import { LiveStream, mergeLiveContent, type SegmentKind } from "../util/live-segments";
 import { orderMessages } from "../util/messages";
 import { resolveCommandAction } from "../util/commands";
 import { deriveSessionStatus, groupSessionsByDate } from "../util/sessions";
@@ -28,6 +32,8 @@ import type {
 
 interface Sink {
   post(message: HostToWeb): void;
+  /** True while the webview holds keyboard focus. */
+  focused: boolean;
 }
 
 const SCHEME = "opencode-diff-before";
@@ -40,12 +46,30 @@ export class ChatController implements vscode.Disposable {
   private readonly sinks = new Set<Sink>();
   private sessionId: string | undefined;
   private messages: MessageInfo[] = [];
-  private textBuffers = new Map<string, string>();
-  private reasoningBuffers = new Map<string, string>();
+  /** Streaming text/reasoning of the current turn, per assistant message. */
+  private liveStreams = new Map<string, LiveStream>();
+  /** Authoritative content pushed by `session.message.content.updated`. */
+  private liveContent = new Map<string, AssistantContent[]>();
+  /** Deltas waiting for the flush timer, so a burst becomes one post. */
+  private pendingDeltas: Array<{
+    sessionID: string;
+    messageID: string;
+    kind: SegmentKind;
+    ordinal: number;
+    delta: string;
+  }> = [];
+  private deltaTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: PermissionRequest[] = [];
   private diffs: FileDiffInfo[] = [];
-  private dismissed = new Set<string>();
+  /**
+   * Files the user chose not to see, keyed by the diff they dismissed. A file
+   * whose diff has changed since comes back: the agent editing it again is
+   * news, even if the user already kept an earlier round of it.
+   */
+  private dismissed = new Map<string, string>();
   private busy = false;
+  /** Set when the running turn failed, so the completion notice stays quiet. */
+  private turnFailed = false;
   /** Messages held until the running turn finishes. */
   private queue: QueuedMessage[] = [];
   /** Held after a stop/failure until the user explicitly resumes. */
@@ -101,6 +125,7 @@ export class ChatController implements vscode.Disposable {
       this.host.onError((message) => {
         this.post({ kind: "state", state: "error", error: message });
         this.post({ kind: "error", message });
+        this.notify("notifications.errors", false, t("errorNotice", { message }));
       }),
       vscode.window.onDidChangeTextEditorSelection(() => this.postEditors()),
       vscode.window.onDidChangeVisibleTextEditors(() => this.postEditors()),
@@ -122,6 +147,7 @@ export class ChatController implements vscode.Disposable {
   attachSink(webview: vscode.Webview): Sink {
     const sink: Sink = {
       post: (message) => void webview.postMessage(message),
+      focused: false,
     };
     this.sinks.add(sink);
     return sink;
@@ -129,6 +155,31 @@ export class ChatController implements vscode.Disposable {
 
   detachSink(sink: Sink): void {
     this.sinks.delete(sink);
+  }
+
+  /** True while any chat surface holds keyboard focus. */
+  private anySinkFocused(): boolean {
+    for (const sink of this.sinks) {
+      if (sink.focused) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Show a VS Code notification. It is skipped when the user is already
+   * looking at the chat — the panel says the same thing — and when the
+   * matching setting is off.
+   */
+  private notify(key: string, fallback: boolean, message: string): void {
+    if (this.anySinkFocused()) {
+      return;
+    }
+    if (!vscode.workspace.getConfiguration("opencode").get<boolean>(key, fallback)) {
+      return;
+    }
+    void vscode.window.showInformationMessage(message);
   }
 
   async handleMessage(web: WebToHost): Promise<void> {
@@ -162,6 +213,9 @@ export class ChatController implements vscode.Disposable {
         break;
       case "openUrl":
         await this.safeCall(() => vscode.env.openExternal(vscode.Uri.parse(web.url)));
+        break;
+      case "copyCode":
+        await this.safeCall(() => vscode.env.clipboard.writeText(web.text));
         break;
       case "previewAttachment":
         await this.safeCall(() =>
@@ -248,7 +302,7 @@ export class ChatController implements vscode.Disposable {
         await this.openDiff(web.file);
         break;
       case "keepFile":
-        this.dismissed.add(web.file);
+        this.dismiss(web.file);
         this.broadcastDiffs();
         break;
       case "revertFile":
@@ -274,6 +328,12 @@ export class ChatController implements vscode.Disposable {
         break;
       case "restartServer":
         await this.host.restart();
+        break;
+      case "openServerConfig":
+        await vscode.commands.executeCommand("opencode.openServerConfig");
+        break;
+      case "focusChanged":
+        // Handled by the surface bridge, which knows which sink sent it.
         break;
     }
   }
@@ -303,6 +363,7 @@ export class ChatController implements vscode.Disposable {
       version: this.host.server?.version,
       error: this.host.lastError,
       compatWarning: this.host.compatWarning,
+      locale: getLocale(),
     });
   }
 
@@ -382,8 +443,7 @@ export class ChatController implements vscode.Disposable {
       const sessionId = created.data.id;
       this.sessionId = sessionId;
       this.messages = [];
-      this.textBuffers.clear();
-      this.reasoningBuffers.clear();
+      this.resetStreams();
       this.pending = [];
       this.diffs = [];
       this.dismissed.clear();
@@ -419,8 +479,7 @@ export class ChatController implements vscode.Disposable {
     this.pendingModel = undefined;
     await this.context.workspaceState.update(this.storageKey(), id);
     this.messages = [];
-    this.textBuffers.clear();
-    this.reasoningBuffers.clear();
+    this.resetStreams();
     this.pending = [];
     this.diffs = [];
     this.dismissed.clear();
@@ -477,11 +536,13 @@ export class ChatController implements vscode.Disposable {
     for (const attachment of staged) {
       this.stagedImages.delete(attachment.ref);
     }
-    const promptText = links.length
-      ? `${text}\n\n${links.map((link) => `参考链接: ${link.ref}`).join("\n")}`
-      : text;
+    const promptText = appendLinks(
+      text,
+      links.map((link) => link.ref),
+    );
     this.dismissed.clear();
     this.busy = true;
+    this.turnFailed = false;
     this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
     this.startPermissionPolling();
     // Optimistic local bubble: the user sees their message instantly instead
@@ -691,13 +752,16 @@ export class ChatController implements vscode.Disposable {
   /** Abort the local turn after a request that never reached the agent loop. */
   private failTurn(error: unknown): void {
     this.busy = false;
+    this.turnFailed = true;
     this.stopPermissionPolling();
     this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
     if (this.queue.length > 0) {
       this.queuePaused = true;
       this.postQueue();
     }
-    this.post({ kind: "error", message: errorMessage(error) });
+    const message = errorMessage(error);
+    this.post({ kind: "error", message });
+    this.notify("notifications.errors", false, t("errorNotice", { message }));
   }
 
   private activeSelection():
@@ -715,7 +779,7 @@ export class ChatController implements vscode.Disposable {
       return undefined;
     }
     if (editor.document.getText(editor.selection).length > max) {
-      return { path, note: "(selection too long to auto-attach)" };
+      return { path, note: t("selectionTooLong") };
     }
     return {
       path,
@@ -748,7 +812,7 @@ export class ChatController implements vscode.Disposable {
           if (lastUser) {
             await this.rewindTo(lastUser.id);
           } else {
-            this.post({ kind: "error", message: "Nothing to undo yet." });
+            this.post({ kind: "error", message: t("nothingToUndo") });
           }
           return;
         }
@@ -800,18 +864,17 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     const confirm = await vscode.window.showWarningMessage(
-      "Rewind to before this message? Later messages are removed and their file changes are reverted.",
+      t("rewindConfirm"),
       { modal: true },
-      "Rewind",
+      t("rewindButton"),
     );
-    if (confirm !== "Rewind") {
+    if (confirm !== t("rewindButton")) {
       return;
     }
     await this.safeCall(async () => {
       await client.revertStage(this.sessionId ?? "", messageID);
       await client.revertCommit(this.sessionId ?? "");
-      this.textBuffers.clear();
-      this.reasoningBuffers.clear();
+      this.resetStreams();
       this.dismissed.clear();
       await this.refreshMessages();
       await this.refreshDiffs();
@@ -859,7 +922,7 @@ export class ChatController implements vscode.Disposable {
 
   private async renameSessionById(id: string, currentTitle?: string): Promise<void> {
     const name = await vscode.window.showInputBox({
-      prompt: "Session name",
+      prompt: t("sessionNamePrompt"),
       value: currentTitle ?? "",
     });
     if (name !== undefined) {
@@ -868,8 +931,12 @@ export class ChatController implements vscode.Disposable {
   }
 
   private async deleteSessionById(id: string): Promise<void> {
-    const confirm = await vscode.window.showWarningMessage("Delete this session?", { modal: true }, "Delete");
-    if (confirm === "Delete") {
+    const confirm = await vscode.window.showWarningMessage(
+      t("deleteSessionConfirm"),
+      { modal: true },
+      t("deleteButton"),
+    );
+    if (confirm === t("deleteButton")) {
       await this.safeCall(() => this.client()?.deleteSession(id));
       if (this.sessionId === id) {
         this.sessionId = undefined;
@@ -942,7 +1009,7 @@ export class ChatController implements vscode.Disposable {
         return;
       }
       await vscode.workspace.fs.writeFile(target, Buffer.from(lines.join("\n"), "utf8"));
-      void vscode.window.showInformationMessage(`Session exported to ${target.fsPath}`);
+      void vscode.window.showInformationMessage(t("exportedTo", { path: target.fsPath }));
     } catch (error) {
       this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
     }
@@ -951,49 +1018,74 @@ export class ChatController implements vscode.Disposable {
   // --- event handling ---------------------------------------------------
 
   private handleEvent(event: { type: string; data: Record<string, unknown> }): void {
-    const data = event.data as Record<string, string | number | undefined>;
+    const data = event.data;
     const eventSession = typeof data.sessionID === "string" ? data.sessionID : undefined;
     switch (event.type) {
       case "session.text.started":
-        if (this.sessionId && eventSession === this.sessionId && typeof data.assistantMessageID === "string") {
-          this.textBuffers.set(data.assistantMessageID, "");
-          this.post({
-            kind: "textStarted",
-            sessionID: eventSession,
-            messageID: data.assistantMessageID,
-          });
+      case "session.reasoning.started": {
+        const kind: SegmentKind = event.type === "session.text.started" ? "text" : "reasoning";
+        const messageID =
+          typeof data.assistantMessageID === "string" ? data.assistantMessageID : undefined;
+        if (this.sessionId && eventSession === this.sessionId && messageID) {
+          const ordinal = ordinalOf(data);
+          this.streamFor(messageID).start(kind, ordinal);
+          this.post(
+            kind === "text"
+              ? { kind: "textStarted", sessionID: eventSession, messageID, ordinal }
+              : { kind: "reasoningStarted", sessionID: eventSession, messageID, ordinal },
+          );
         }
         break;
+      }
       case "session.text.delta":
-        if (this.sessionId && eventSession === this.sessionId && typeof data.assistantMessageID === "string") {
-          const delta = typeof data.delta === "string" ? data.delta : "";
-          this.textBuffers.set(
-            data.assistantMessageID,
-            (this.textBuffers.get(data.assistantMessageID) ?? "") + delta,
-          );
-          this.post({
-            kind: "textDelta",
-            sessionID: eventSession,
-            messageID: data.assistantMessageID,
-            delta,
-          });
+      case "session.reasoning.delta": {
+        const kind: SegmentKind = event.type === "session.text.delta" ? "text" : "reasoning";
+        const messageID =
+          typeof data.assistantMessageID === "string" ? data.assistantMessageID : undefined;
+        const delta = typeof data.delta === "string" ? data.delta : "";
+        if (this.sessionId && eventSession === this.sessionId && messageID && delta) {
+          const ordinal = ordinalOf(data);
+          this.streamFor(messageID).append(kind, ordinal, delta);
+          this.queueDelta(eventSession, messageID, kind, ordinal, delta);
         }
         break;
-      case "session.reasoning.delta":
-        if (this.sessionId && eventSession === this.sessionId && typeof data.assistantMessageID === "string") {
-          this.reasoningBuffers.set(
-            data.assistantMessageID,
-            (this.reasoningBuffers.get(data.assistantMessageID) ?? "") +
-              (typeof data.delta === "string" ? data.delta : ""),
+      }
+      case "session.text.ended":
+      case "session.reasoning.ended": {
+        const kind: SegmentKind = event.type === "session.text.ended" ? "text" : "reasoning";
+        const messageID =
+          typeof data.assistantMessageID === "string" ? data.assistantMessageID : undefined;
+        if (this.sessionId && eventSession === this.sessionId && messageID) {
+          const ordinal = ordinalOf(data);
+          const text = typeof data.text === "string" ? data.text : "";
+          // Queued deltas belong before the closing text, otherwise the webview
+          // would append an older tail on top of the authoritative part.
+          this.flushDeltas();
+          this.streamFor(messageID).end(kind, ordinal, text);
+          this.post(
+            kind === "text"
+              ? { kind: "textEnded", sessionID: eventSession, messageID, ordinal, text }
+              : { kind: "reasoningEnded", sessionID: eventSession, messageID, ordinal, text },
           );
-          this.post({
-            kind: "reasoningDelta",
-            sessionID: eventSession,
-            messageID: data.assistantMessageID,
-            delta: typeof data.delta === "string" ? data.delta : "",
-          });
         }
         break;
+      }
+      case "session.message.content.updated": {
+        // The server pushes the message's whole content array as it changes;
+        // this is the authoritative part list, so it replaces polling guesses.
+        const messageID = typeof data.messageID === "string" ? data.messageID : undefined;
+        if (
+          this.sessionId &&
+          eventSession === this.sessionId &&
+          messageID &&
+          Array.isArray(data.content)
+        ) {
+          const content = data.content as AssistantContent[];
+          this.liveContent.set(messageID, content);
+          this.post({ kind: "messageContent", sessionID: eventSession, messageID, content });
+        }
+        break;
+      }
       case "session.step.started":
       case "session.execution.started":
         if (eventSession === this.sessionId) {
@@ -1008,8 +1100,20 @@ export class ChatController implements vscode.Disposable {
         if (eventSession === this.sessionId) {
           const wasBusy = this.busy;
           this.busy = false;
+          this.flushDeltas();
           this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
           this.stopPermissionPolling();
+          if (wasBusy) {
+            if (event.type === "session.execution.failed") {
+              this.notify("notifications.errors", false, t("turnFailed"));
+            } else if (!this.turnFailed && event.type !== "session.execution.interrupted") {
+              this.notify(
+                "notifications.turnComplete",
+                true,
+                this.title ? t("turnCompleteNamed", { title: this.title }) : t("turnComplete"),
+              );
+            }
+          }
           if (wasBusy && this.pendingForce) {
             // The interrupted turn is finally over — start the forced message.
             const forced = this.pendingForce;
@@ -1079,6 +1183,7 @@ export class ChatController implements vscode.Disposable {
         if (eventSession === this.sessionId) {
           this.sessionId = undefined;
           this.messages = [];
+          this.resetStreams();
           this.pending = [];
           this.diffs = [];
           this.busy = false;
@@ -1116,44 +1221,120 @@ export class ChatController implements vscode.Disposable {
       const page = await client.listMessages(this.sessionId ?? "");
       // The v2 endpoint returns newest-first; the UI renders oldest-first.
       this.messages = orderMessages(page.data);
+      this.flushDeltas();
       this.post({ kind: "messages", sessionID: this.sessionId ?? "", messages: this.mergedMessages() });
+      this.pruneStreams();
     });
   }
 
-  /** Apply live streaming buffers on top of fetched messages. */
+  /**
+   * Overlay the live turn onto the fetched messages.
+   *
+   * Two sources, in order of authority: `session.message.content.updated`
+   * (the server's own content array) and the delta segments, which only fill
+   * the gap while the server is still writing. Nothing here mutates
+   * `this.messages` — a previous version patched parts in place, which made the
+   * short-lived guess outlive its turn.
+   */
   private mergedMessages(): MessageInfo[] {
-    const merged: MessageInfo[] = this.messages.map((m) => m);
-    for (const message of merged) {
+    return this.messages.map((message) => {
+      if (message.type !== "assistant") {
+        return message;
+      }
+      const assistant = message as AssistantMessage;
+      const content = this.liveContent.get(assistant.id);
+      if (content) {
+        return { ...assistant, content };
+      }
+      const stream = this.liveStreams.get(assistant.id);
+      if (!stream || stream.size === 0) {
+        return assistant;
+      }
+      return { ...assistant, content: mergeLiveContent(assistant.content, stream) };
+    });
+  }
+
+  private streamFor(messageID: string): LiveStream {
+    const existing = this.liveStreams.get(messageID);
+    if (existing) {
+      return existing;
+    }
+    const stream = new LiveStream();
+    this.liveStreams.set(messageID, stream);
+    return stream;
+  }
+
+  /** Coalesce deltas: a fast stream must not turn into one post per token. */
+  private queueDelta(
+    sessionID: string,
+    messageID: string,
+    kind: SegmentKind,
+    ordinal: number,
+    delta: string,
+  ): void {
+    const pending = this.pendingDeltas.find(
+      (item) => item.messageID === messageID && item.kind === kind && item.ordinal === ordinal,
+    );
+    if (pending) {
+      pending.delta += delta;
+    } else {
+      this.pendingDeltas.push({ sessionID, messageID, kind, ordinal, delta });
+    }
+    if (!this.deltaTimer) {
+      this.deltaTimer = setTimeout(() => this.flushDeltas(), 60);
+    }
+  }
+
+  private flushDeltas(): void {
+    if (this.deltaTimer) {
+      clearTimeout(this.deltaTimer);
+      this.deltaTimer = undefined;
+    }
+    const batch = this.pendingDeltas.splice(0);
+    for (const item of batch) {
+      this.post(
+        item.kind === "text"
+          ? {
+              kind: "textDelta",
+              sessionID: item.sessionID,
+              messageID: item.messageID,
+              ordinal: item.ordinal,
+              delta: item.delta,
+            }
+          : {
+              kind: "reasoningDelta",
+              sessionID: item.sessionID,
+              messageID: item.messageID,
+              ordinal: item.ordinal,
+              delta: item.delta,
+            },
+      );
+    }
+  }
+
+  private resetStreams(): void {
+    this.flushDeltas();
+    this.pendingDeltas.length = 0;
+    this.liveStreams.clear();
+    this.liveContent.clear();
+  }
+
+  /**
+   * Drop live state once the server has finished a message: from then on the
+   * fetched content is complete, and keeping the overlay would pin whatever the
+   * deltas happened to hold.
+   */
+  private pruneStreams(): void {
+    for (const message of this.messages) {
       if (message.type !== "assistant") {
         continue;
       }
-      const assistant = message as AssistantMessage;
-      const buffer = this.textBuffers.get(assistant.id);
-      if (buffer !== undefined && !assistant.finish) {
-        const textParts = assistant.content.filter((c) => c.type === "text");
-        if (textParts.length === 0) {
-          assistant.content.push({ type: "text", text: buffer });
-        } else {
-          const last = textParts[textParts.length - 1];
-          if (last && buffer.length > last.text.length) {
-            last.text = buffer;
-          }
-        }
+      if (!(message as AssistantMessage).finish) {
+        continue;
       }
-      const reasoningBuffer = this.reasoningBuffers.get(assistant.id);
-      if (reasoningBuffer !== undefined) {
-        const reasoningParts = assistant.content.filter((c) => c.type === "reasoning");
-        if (reasoningParts.length === 0) {
-          assistant.content.push({ type: "reasoning", text: reasoningBuffer });
-        } else {
-          const last = reasoningParts[reasoningParts.length - 1];
-          if (last && reasoningBuffer.length > last.text.length) {
-            last.text = reasoningBuffer;
-          }
-        }
-      }
+      this.liveStreams.delete(message.id);
+      this.liveContent.delete(message.id);
     }
-    return merged;
   }
 
   async refreshPermissions(): Promise<void> {
@@ -1166,8 +1347,12 @@ export class ChatController implements vscode.Disposable {
     }
     await this.safeCall(async () => {
       const result = await client.pendingPermissions(this.host.folderPath);
+      const previous = this.pending.length;
       this.pending = result.data.filter((p) => p.sessionID === this.sessionId);
       this.post({ kind: "permissions", sessionID: this.sessionId, pending: this.pending });
+      if (previous === 0 && this.pending.length > 0) {
+        this.notify("notifications.permissionRequest", true, t("permissionNotice"));
+      }
       if (this.pending.length === 0) {
         this.stopPermissionPolling();
       }
@@ -1203,11 +1388,22 @@ export class ChatController implements vscode.Disposable {
     });
   }
 
+  /** Stop showing a file, remembering which round of changes was dismissed. */
+  private dismiss(file: string): void {
+    const diff = this.diffs.find((entry) => entry.file === file);
+    this.dismissed.set(file, diff ? diffKey(diff) : "");
+  }
+
+  /** The diffs the user has not dismissed, or has dismissed in an older round. */
+  private visibleDiffs(): FileDiffInfo[] {
+    return this.diffs.filter((diff) => this.dismissed.get(diff.file) !== diffKey(diff));
+  }
+
   private broadcastDiffs(): void {
     this.post({
       kind: "diffs",
       sessionID: this.sessionId,
-      diffs: this.diffs.filter((d) => !this.dismissed.has(d.file)),
+      diffs: this.visibleDiffs(),
     });
   }
 
@@ -1271,13 +1467,14 @@ export class ChatController implements vscode.Disposable {
         queuePaused: this.queuePaused,
         messages: this.mergedMessages(),
         pending: this.pending,
-        diffs: this.diffs.filter((d) => !this.dismissed.has(d.file)),
+        diffs: this.visibleDiffs(),
         catalog: this.host.catalog,
         cost: this.cost,
         tokens: this.tokens,
         workspacePath: this.folder.uri.fsPath,
         git: this.git,
         editors: this.editors,
+        locale: getLocale(),
       },
     });
   }
@@ -1286,6 +1483,10 @@ export class ChatController implements vscode.Disposable {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
+    }
+    if (this.deltaTimer) {
+      clearTimeout(this.deltaTimer);
+      this.deltaTimer = undefined;
     }
     this.stopPermissionPolling();
   }
@@ -1342,7 +1543,7 @@ export class ChatController implements vscode.Disposable {
     const key = randomBytes(8).toString("hex");
     this.beforeDocs.set(key, before);
     const beforeUri = vscode.Uri.from({ scheme: SCHEME, fragment: key, path: `/${pathBasename(file)}` });
-    const title = `${pathBasename(file)} (${diff.status})`;
+    const title = `${pathBasename(file)} (${diffStatusKey(diff.status)})`;
     await vscode.commands.executeCommand("vscode.diff", beforeUri, uri, title, {
       preview: true,
     });
@@ -1366,7 +1567,7 @@ export class ChatController implements vscode.Disposable {
         }
         await vscode.workspace.fs.writeFile(uri, Buffer.from(before, "utf8"));
       }
-      this.dismissed.add(file);
+      this.dismiss(file);
       await this.refreshDiffs();
     } catch (error) {
       this.post({ kind: "error", message: error instanceof Error ? error.message : String(error) });
@@ -1414,7 +1615,7 @@ export class ChatController implements vscode.Disposable {
     }));
     const picked = await vscode.window.showQuickPick(items, {
       canPickMany: true,
-      placeHolder: "Attach files as context",
+      placeHolder: t("attachFilesPicker"),
       matchOnDescription: true,
     });
     this.post({
@@ -1429,9 +1630,7 @@ export class ChatController implements vscode.Disposable {
     const settings = vscode.workspace.getConfiguration("opencode");
     const resolved = await resolveBinary(settings.get<string>("path", ""));
     if (!resolved) {
-      await vscode.window.showErrorMessage(
-        "opencode CLI not found. Install it (https://opencode.ai/docs) or set \"opencode.path\".",
-      );
+      await vscode.window.showErrorMessage(t("cliNotFound"));
       return;
     }
     const terminal = vscode.window.createTerminal({
@@ -1457,6 +1656,21 @@ export class ChatController implements vscode.Disposable {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** The diff status as a localized word for the diff editor's title. */
+function diffStatusKey(status: FileDiffInfo["status"]): MessageKey {
+  return `diffStatus.${status}` as MessageKey;
+}
+
+/** What identifies one round of a file's changes, for the dismissed map. */
+function diffKey(diff: FileDiffInfo): string {
+  return `${diff.status}:${diff.additions}:${diff.deletions}`;
+}
+
+/** Stream ordinals are 0-based positions among a message's same-kind parts. */
+function ordinalOf(data: Record<string, unknown>): number {
+  return typeof data.ordinal === "number" && data.ordinal >= 0 ? data.ordinal : 0;
 }
 
 function pathBasename(p: string): string {

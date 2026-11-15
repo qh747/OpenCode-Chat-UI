@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ModelInfo, ModelRef } from "../src/opencode/types";
 import { groupModels, isFreeModel, modelShortName, providerDisplayName } from "../src/util/commands";
+import { t } from "../src/util/i18n";
 
 interface ModelPickerProps {
   models: ModelInfo[];
@@ -60,7 +61,7 @@ export function ModelPicker({
     : models;
   const sections = groupModels(filtered, recentModels);
 
-  const displayName = activeInfo?.name ?? activeModel?.id ?? "Model";
+  const displayName = activeInfo?.name ?? activeModel?.id ?? t("modelFallback");
 
   return (
     <div className={`dropdown dropdown-wide model-picker${open ? " open" : ""}`} ref={rootRef}>
@@ -82,11 +83,11 @@ export function ModelPicker({
               autoFocus
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索模型"
+              placeholder={t("searchModels")}
             />
           </div>
           {/* activeModel guard kept for the rows below */}
-          {sections.length === 0 && <div className="mention-empty">没有匹配的模型</div>}
+          {sections.length === 0 && <div className="mention-empty">{t("noMatchingModels")}</div>}
           {sections.map((section) => (
             <div key={section.label}>
               <div className="dropdown-group">{section.label}</div>
@@ -112,10 +113,10 @@ export function ModelPicker({
                       <span className="model-check">{selected ? "✓" : ""}</span>
                       <span className="model-name">{model.name}</span>
                       <span className="model-provider">{providerDisplayName(model.providerID)}</span>
-                      {free && <span className="model-badge">免费</span>}
+                      {free && <span className="model-badge">{t("freeBadge")}</span>}
                       {variants.length > 0 && (
                         <span className="model-effort-hint">
-                          {capitalize(variantOf(key) ?? "") || "默认"} ›
+                          {capitalize(variantOf(key) ?? "") || t("effortDefault")} ›
                         </span>
                       )}
                     </button>
@@ -131,7 +132,7 @@ export function ModelPicker({
                             setOpen(false);
                           }}
                         >
-                          默认
+                          {t("effortDefault")}
                         </button>
                         {variants.map((variant) => (
                           <button

@@ -22,6 +22,9 @@ A server-issued question (e.g. "run this command?") that blocks the agent loop u
 **Turn**
 One user prompt plus everything the agent produces until the session goes idle. File changes within a turn surface as diffs.
 
+**Part**
+One ordered block inside an assistant reply: a passage of text, a passage of reasoning, or a tool call. Tool calls carry an identity of their own; text and reasoning parts are known by their position within the reply.
+
 **Queued message**
 A user message sent while the model is still working. The host holds it in FIFO order and sends it when the turn ends; it can be deleted or force-sent (interrupting the current turn). A failed or stopped turn holds the queue until it is resumed.
 
@@ -51,8 +54,26 @@ A `/`-prefixed command typed in the composer. Server/config commands (from `/api
 **Skill**
 A named capability from the opencode server's skill list, mentioned in a message as `@<skill-name>` to steer the agent.
 
+**Attachment**
+Something the user points a message at: a workspace file, a selection inside one, a pasted image, or a link. Files and images travel to the server as attachments; a link travels inside the message text, because the prompt API has no attachment form for it.
+
 **Attachment chip**
-A context item the user attaches to a message: a workspace file, the active editor selection, or a staged pasted image.
+The token in the composer that holds an attachment before the message is sent. A workspace file, the active editor selection, a staged pasted image, or a link.
+
+**Reference link**
+A link the user attached to a message. It reaches the server inside the message text, marked so the transcript can show it as an attachment rather than as prose.
 
 **Recent models**
 The extension's local, per-workspace list of the last five model refs used — shown as the first section of the model picker.
+
+**Local preference**
+A setting the extension keeps for itself, stored in the VS Code configuration under the `opencode.*` prefix and edited on the native VS Code settings page. It belongs to this extension and travels with the editor, not with the opencode server.
+
+**Server config**
+A setting the opencode server reads from its own configuration file. The extension edits that file on the user's behalf, but the server owns the value and decides what an absent key means.
+
+**Explicit value**
+The value actually written in a config file, as opposed to the value the server falls back to when the key is absent. The panel shows the explicit value and names the fallback, so an unset row is never mistaken for a set one.
+
+**Server config panel**
+The editor tab where the opencode server's configuration is edited; every row writes into the server's config file. The extension's own preferences do not appear here — their surface is the native VS Code settings page.

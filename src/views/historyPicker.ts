@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { groupSessionsByDate } from "../util/sessions";
+import { t } from "../util/i18n";
 import type { OpencodeHost } from "../host";
 import type { SessionInfo } from "../opencode/types";
 
@@ -18,7 +19,7 @@ export interface HistoryActions {
 export async function showHistoryPicker(host: OpencodeHost, actions: HistoryActions): Promise<void> {
   const client = host.client();
   if (!client) {
-    void vscode.window.showInformationMessage("OpenCode server is not connected yet.");
+    void vscode.window.showInformationMessage(t("serverNotConnectedYet"));
     return;
   }
   const page = await client.listSessions({

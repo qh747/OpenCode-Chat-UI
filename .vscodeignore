@@ -16,5 +16,6 @@ tsconfig.json
 **/*.mts
 AGENTS.md
 .commandcode/
+.scratch/
 docs/
 .gitignore

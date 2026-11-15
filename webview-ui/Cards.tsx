@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { FileDiffInfo, PermissionRequest } from "../src/opencode/types";
+import { t } from "../src/util/i18n";
 
 export type { ComposerHandle } from "./composerTypes";
 
@@ -12,7 +14,7 @@ interface PermissionProps {
 export function PermissionCard({ request, onReply }: PermissionProps) {
   return (
     <div className="permission-card">
-      <div className="permission-title">Permission required</div>
+      <div className="permission-title">{t("permissionRequired")}</div>
       <div className="permission-action">
         <span className="action-badge">{request.action}</span>
         {request.resources.length > 0 && (
@@ -22,13 +24,13 @@ export function PermissionCard({ request, onReply }: PermissionProps) {
       {request.message && <div className="permission-message">{request.message}</div>}
       <div className="permission-buttons">
         <button className="btn primary" onClick={() => onReply(request.id, "once")}>
-          Allow once
+          {t("allowOnce")}
         </button>
         <button className="btn" onClick={() => onReply(request.id, "always")}>
-          Always allow
+          {t("alwaysAllow")}
         </button>
         <button className="btn danger" onClick={() => onReply(request.id, "reject")}>
-          Deny
+          {t("deny")}
         </button>
       </div>
     </div>
@@ -44,37 +46,68 @@ interface DiffProps {
   onRevert: (file: string) => void;
 }
 
+/**
+ * The files the agent changed. Collapsed to a single header row by default —
+ * the counts are the signal, the rows are only for acting on one — expanding
+ * reveals the per-file Keep / Revert.
+ */
 export function DiffList({ diffs, onOpen, onKeep, onRevert }: DiffProps) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (diffs.length === 0) {
+      setOpen(false);
+    }
+  }, [diffs.length]);
+
   if (diffs.length === 0) {
     return null;
   }
+  const additions = diffs.reduce((sum, diff) => sum + diff.additions, 0);
+  const deletions = diffs.reduce((sum, diff) => sum + diff.deletions, 0);
   return (
     <div className="diff-list">
-      <div className="diff-list-title">Changes</div>
-      {diffs.map((diff) => (
-        <div key={diff.file} className="diff-card">
-          <button className="diff-file" onClick={() => onOpen(diff.file)} title={diff.file}>
-            <span className="diff-status-badge">{diff.status}</span>
-            <span className="diff-name">{fileName(diff.file)}</span>
-          </button>
-          <span className="diff-stats">
-            <span className="additions">+{diff.additions}</span>
-            <span className="deletions">-{diff.deletions}</span>
+      <div className="diff-head">
+        <button
+          className="diff-toggle"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          title={open ? t("diffCollapse") : t("diffExpand")}
+        >
+          <span className="diff-caret" aria-hidden="true">
+            {open ? "▾" : "▸"}
           </span>
-          <span className="diff-buttons">
-            <button className="btn small" onClick={() => onKeep(diff.file)} title="Keep this change">
-              Keep
-            </button>
-            <button
-              className="btn small danger"
-              onClick={() => onRevert(diff.file)}
-              title="Revert this file to its previous state"
-            >
-              Revert
-            </button>
+          <span className="diff-count">{t("changesCount", { count: diffs.length })}</span>
+          <span className="diff-total">
+            <span className="additions">+{additions}</span> <span className="deletions">-{deletions}</span>
           </span>
-        </div>
-      ))}
+        </button>
+      </div>
+      {open &&
+        diffs.map((diff) => (
+          <div key={diff.file} className="diff-card">
+            <button className="diff-file" onClick={() => onOpen(diff.file)} title={diff.file}>
+              <span className="diff-status-badge">{diff.status}</span>
+              <span className="diff-name">{fileName(diff.file)}</span>
+            </button>
+            <span className="diff-stats">
+              <span className="additions">+{diff.additions}</span>
+              <span className="deletions">-{diff.deletions}</span>
+            </span>
+            <span className="diff-buttons">
+              <button className="btn small" onClick={() => onKeep(diff.file)} title={t("keepChangeTitle")}>
+                {t("keep")}
+              </button>
+              <button
+                className="btn small danger"
+                onClick={() => onRevert(diff.file)}
+                title={t("revertFileTitle")}
+              >
+                {t("revert")}
+              </button>
+            </span>
+          </div>
+        ))}
     </div>
   );
 }
@@ -94,7 +127,7 @@ export function Welcome({ version }: { version?: string }) {
         <span className="welcome-caret" aria-hidden="true">
           ›
         </span>
-        <span className="welcome-hint">What should we work on?</span>
+        <span className="welcome-hint">{t("welcomePrompt")}</span>
       </div>
       {version && <div className="welcome-version">opencode v{version}</div>}
     </div>

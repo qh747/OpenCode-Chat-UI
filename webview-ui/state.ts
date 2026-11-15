@@ -11,12 +11,15 @@ import type {
   WebToHost,
 } from "../src/webview/protocol";
 import type {
+  AssistantContent,
   AssistantMessage,
   FileDiffInfo,
   MessageInfo,
   PermissionRequest,
   TokenUsage,
 } from "../src/opencode/types";
+import type { SegmentKind } from "../src/util/live-segments";
+import { locatePart } from "../src/util/live-segments";
 
 export interface ChatState {
   connection: ConnectionState;
@@ -95,6 +98,70 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
   };
 }
 
+type StreamPart = Extract<AssistantContent, { type: "text" } | { type: "reasoning" }>;
+
+function partIndex(content: AssistantContent[], kind: SegmentKind, ordinal: number): number {
+  return locatePart(content, kind, ordinal);
+}
+
+function ensurePart(
+  content: AssistantContent[],
+  kind: SegmentKind,
+  ordinal: number,
+): AssistantContent[] {
+  if (partIndex(content, kind, ordinal) >= 0) {
+    return content;
+  }
+  return [...content, { type: kind, text: "" } as StreamPart];
+}
+
+function editPart(
+  content: AssistantContent[],
+  kind: SegmentKind,
+  ordinal: number,
+  edit: (text: string) => string,
+): AssistantContent[] {
+  const ensured = ensurePart(content, kind, ordinal);
+  const index = partIndex(ensured, kind, ordinal);
+  const next = [...ensured];
+  const part = next[index] as StreamPart;
+  next[index] = { ...part, text: edit(part.text) };
+  return next;
+}
+
+function withAssistant(
+  state: ChatState,
+  messageID: string,
+  transform: (message: AssistantMessage) => AssistantMessage,
+): ChatState {
+  const index = state.messages.findIndex(
+    (candidate) => candidate.type === "assistant" && candidate.id === messageID,
+  );
+  if (index < 0) {
+    return state;
+  }
+  const messages = [...state.messages];
+  messages[index] = transform(state.messages[index] as AssistantMessage);
+  return { ...state, messages };
+}
+
+/** The first events of a turn can arrive before the message list mentions it. */
+function ensureAssistant(state: ChatState, messageID: string): ChatState {
+  const known = state.messages.some(
+    (candidate) => candidate.type === "assistant" && candidate.id === messageID,
+  );
+  if (known) {
+    return state;
+  }
+  const synthetic: AssistantMessage = {
+    type: "assistant",
+    id: messageID,
+    time: { created: Date.now() },
+    content: [],
+  };
+  return { ...state, messages: [...state.messages, synthetic] };
+}
+
 export function reducer(state: ChatState, message: HostToWeb): ChatState {
   switch (message.kind) {
     case "state": {
@@ -136,68 +203,52 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
     case "git": {
       return { ...state, git: message.git };
     }
-    case "textStarted": {
+    case "textStarted":
+    case "reasoningStarted": {
       if (message.sessionID !== state.sessionID) {
         return state;
       }
-      if (state.messages.some((m) => m.type === "assistant" && m.id === message.messageID)) {
-        return state;
-      }
-      const synthetic = {
-        type: "assistant" as const,
-        id: message.messageID,
-        time: { created: Date.now() },
-        content: [],
-      };
-      return { ...state, messages: [...state.messages, synthetic] };
+      const kind: SegmentKind = message.kind === "textStarted" ? "text" : "reasoning";
+      const next = ensureAssistant(state, message.messageID);
+      return withAssistant(next, message.messageID, (assistant) => ({
+        ...assistant,
+        content: ensurePart(assistant.content, kind, message.ordinal),
+      }));
     }
-    case "textDelta": {
-      if (message.sessionID !== state.sessionID) {
-        return state;
-      }
-      return {
-        ...state,
-        messages: state.messages.map((m) => {
-          if (m.type !== "assistant" || m.id !== message.messageID) {
-            return m;
-          }
-          const assistant = m as AssistantMessage;
-          const content = [...assistant.content];
-          const textParts = content.filter((c) => c.type === "text");
-          const last = textParts[textParts.length - 1];
-          if (last?.type === "text") {
-            const index = content.indexOf(last);
-            content[index] = { type: "text", text: last.text + message.delta };
-          } else {
-            content.push({ type: "text", text: message.delta });
-          }
-          return { ...assistant, content };
-        }),
-      };
-    }
+    case "textDelta":
     case "reasoningDelta": {
       if (message.sessionID !== state.sessionID) {
         return state;
       }
-      return {
-        ...state,
-        messages: state.messages.map((m) => {
-          if (m.type !== "assistant" || m.id !== message.messageID) {
-            return m;
-          }
-          const assistant = m as AssistantMessage;
-          const content = [...assistant.content];
-          const reasoningParts = content.filter((c) => c.type === "reasoning");
-          const last = reasoningParts[reasoningParts.length - 1];
-          if (last?.type === "reasoning") {
-            const index = content.indexOf(last);
-            content[index] = { type: "reasoning", text: last.text + message.delta };
-          } else {
-            content.push({ type: "reasoning", text: message.delta });
-          }
-          return { ...assistant, content };
-        }),
-      };
+      const kind: SegmentKind = message.kind === "textDelta" ? "text" : "reasoning";
+      const next = ensureAssistant(state, message.messageID);
+      return withAssistant(next, message.messageID, (assistant) => ({
+        ...assistant,
+        content: editPart(assistant.content, kind, message.ordinal, (text) => text + message.delta),
+      }));
+    }
+    case "textEnded":
+    case "reasoningEnded": {
+      if (message.sessionID !== state.sessionID) {
+        return state;
+      }
+      const kind: SegmentKind = message.kind === "textEnded" ? "text" : "reasoning";
+      const next = ensureAssistant(state, message.messageID);
+      return withAssistant(next, message.messageID, (assistant) => ({
+        ...assistant,
+        content: editPart(assistant.content, kind, message.ordinal, () => message.text),
+      }));
+    }
+    case "messageContent": {
+      if (message.sessionID !== state.sessionID) {
+        return state;
+      }
+      // The server's own content array wins over anything assembled locally.
+      const next = ensureAssistant(state, message.messageID);
+      return withAssistant(next, message.messageID, (assistant) => ({
+        ...assistant,
+        content: message.content,
+      }));
     }
     case "messages": {
       if (message.sessionID !== state.sessionID) {

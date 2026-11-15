@@ -1,11 +1,14 @@
 import * as vscode from "vscode";
 import { OpencodeHost } from "./host";
 import { ChatController } from "./webview/panel";
-import { ChatViewProvider, openChatTab } from "./webview/view";
+import { SettingsController } from "./webview/settings-panel";
+import { ChatViewProvider, openChatTab, openServerConfigTab } from "./webview/view";
+import { resolveLocale, setLocale, t } from "./util/i18n";
 import { showHistoryPicker } from "./views/historyPicker";
 import type { SessionInfo } from "./opencode/types";
 
 export function activate(context: vscode.ExtensionContext): void {
+  setLocale(resolveLocale(vscode.env.language));
   const output = vscode.window.createOutputChannel("OpenCode");
   context.subscriptions.push(output);
 
@@ -18,10 +21,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const host = new OpencodeHost({ context, folder, output });
   const chat = new ChatController(host, context, folder, output);
+  const settings = new SettingsController(host, folder);
 
   context.subscriptions.push(
     host,
     chat,
+    settings,
     vscode.window.registerWebviewViewProvider("opencode.chat", new ChatViewProvider(chat, context.extensionUri), {
       webviewOptions: { retainContextWhenHidden: true },
     }),
@@ -96,6 +101,12 @@ export function activate(context: vscode.ExtensionContext): void {
       await host.restart();
     }),
     vscode.commands.registerCommand("opencode.openCLI", () => void chat.openCLI()),
+    vscode.commands.registerCommand("opencode.openSettings", () => {
+      void vscode.commands.executeCommand("workbench.action.openSettings", "@ext:qh747.opencode-vscode");
+    }),
+    vscode.commands.registerCommand("opencode.openServerConfig", () =>
+      openServerConfigTab(settings, context.extensionUri),
+    ),
   );
 
   // Auto-restart when connection-relevant settings change.
@@ -114,7 +125,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 async function renameSessionFlow(host: OpencodeHost, id: string, currentTitle: string | undefined): Promise<void> {
   const name = await vscode.window.showInputBox({
-    prompt: "Session name",
+    prompt: t("sessionNamePrompt"),
     value: currentTitle ?? "",
   });
   if (name !== undefined) {
@@ -123,8 +134,12 @@ async function renameSessionFlow(host: OpencodeHost, id: string, currentTitle: s
 }
 
 async function deleteSessionFlow(host: OpencodeHost, id: string): Promise<void> {
-  const confirm = await vscode.window.showWarningMessage("Delete this session?", { modal: true }, "Delete");
-  if (confirm === "Delete") {
+  const confirm = await vscode.window.showWarningMessage(
+    t("deleteSessionConfirm"),
+    { modal: true },
+    t("deleteButton"),
+  );
+  if (confirm === t("deleteButton")) {
     await host.client()?.deleteSession(id);
   }
 }
@@ -133,19 +148,26 @@ function registerUiOnlyCommands(context: vscode.ExtensionContext, output: vscode
   context.subscriptions.push(
     vscode.commands.registerCommand("opencode.showLogs", () => output.show(true)),
     vscode.commands.registerCommand("opencode.newSession", () => {
-      void vscode.window.showInformationMessage("OpenCode: open a workspace folder first.");
+      void vscode.window.showInformationMessage(t("noWorkspace"));
     }),
     vscode.commands.registerCommand("opencode.openChat", () => {
-      void vscode.window.showInformationMessage("OpenCode: open a workspace folder first.");
+      void vscode.window.showInformationMessage(t("noWorkspace"));
     }),
     vscode.commands.registerCommand("opencode.openChatTab", () => {
-      void vscode.window.showInformationMessage("OpenCode: open a workspace folder first.");
+      void vscode.window.showInformationMessage(t("noWorkspace"));
     }),
     vscode.commands.registerCommand("opencode.history", () => {
-      void vscode.window.showInformationMessage("OpenCode: open a workspace folder first.");
+      void vscode.window.showInformationMessage(t("noWorkspace"));
     }),
     vscode.commands.registerCommand("opencode.restartServer", () => undefined),
     vscode.commands.registerCommand("opencode.openCLI", () => undefined),
+    vscode.commands.registerCommand("opencode.openSettings", () => {
+      // The native settings page needs no workspace folder, unlike the rest.
+      void vscode.commands.executeCommand("workbench.action.openSettings", "@ext:qh747.opencode-vscode");
+    }),
+    vscode.commands.registerCommand("opencode.openServerConfig", () => {
+      void vscode.window.showInformationMessage(t("noWorkspace"));
+    }),
   );
 }
 

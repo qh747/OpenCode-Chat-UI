@@ -15,6 +15,9 @@ const extension = {
   platform: "node",
   target: "node20",
   external: ["vscode"],
+  // jsonc-parser's UMD build shadows `require` inside its factory, so esbuild
+  // cannot follow it; the ESM build is plain imports and bundles cleanly.
+  mainFields: ["module", "main"],
   sourcemap: true,
   minify: false,
   logLevel: "info",
@@ -35,6 +38,20 @@ const webview = {
 };
 
 /** @type {import('esbuild').BuildOptions} */
+const settings = {
+  entryPoints: ["webview-ui/settings.tsx"],
+  outfile: "dist/settings.js",
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "es2022",
+  sourcemap: false,
+  minify: true,
+  logLevel: "info",
+  define: { "process.env.NODE_ENV": '"production"' },
+};
+
+/** @type {import('esbuild').BuildOptions} */
 const testBuild = {
   entryPoints: ["test/run.ts"],
   outfile: "out/tests.cjs",
@@ -43,11 +60,13 @@ const testBuild = {
   platform: "node",
   target: "node20",
   external: ["vscode"],
+  mainFields: ["module", "main"],
   sourcemap: false,
+  minify: true,
   logLevel: "info",
 };
 
-const builds = tests ? [testBuild] : [extension, webview];
+const builds = tests ? [testBuild] : [extension, webview, settings];
 
 if (watch) {
   const contexts = await Promise.all(builds.map((b) => esbuild.context(b)));

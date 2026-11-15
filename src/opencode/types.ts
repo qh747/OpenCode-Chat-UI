@@ -125,7 +125,14 @@ export type ToolState =
       content: ToolContentChunk[];
       metadata?: Record<string, unknown>;
     }
-  | { status: "error"; input: Record<string, unknown>; metadata?: Record<string, unknown> };
+  | {
+      status: "error";
+      input: Record<string, unknown>;
+      /** Why the tool failed; carried by the part itself, not by `metadata`. */
+      error?: { type?: string; message?: string; status?: number };
+      content?: ToolContentChunk[];
+      metadata?: Record<string, unknown>;
+    };
 
 export type AssistantContent =
   | { type: "text"; text: string }

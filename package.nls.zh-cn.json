@@ -1,0 +1,11 @@
+{
+  "configuration.title": "OpenCode",
+  "opencode.path.description": "覆盖 opencode 可执行文件路径。留空则自动检测（先 PATH，再 OpenCode 桌面应用自带的 CLI）。",
+  "opencode.serverUrl.description": "连接到已在运行的 opencode v2 服务器（如 http://127.0.0.1:4096），而不是每个窗口各启动一个。",
+  "opencode.serverPassword.description": "opencode.serverUrl 所指外部服务器的密码（Basic auth 用户名固定为 \"opencode\"）。",
+  "opencode.context.autoAttachSelection.description": "发送消息时自动附加活动编辑器中的选区作为上下文。",
+  "opencode.context.maxSelectionLength.description": "选区可作为上下文附加的最大字符数。",
+  "opencode.notifications.turnComplete.description": "一轮回答结束时显示通知。",
+  "opencode.notifications.permissionRequest.description": "Agent 请求权限时显示通知。",
+  "opencode.notifications.errors.description": "Agent 或服务器报告错误时显示通知。"
+}

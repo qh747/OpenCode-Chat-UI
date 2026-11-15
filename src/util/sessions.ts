@@ -1,4 +1,5 @@
 import type { SessionInfo } from "../opencode/types";
+import { t, type MessageKey } from "./i18n";
 
 /** Four-state summary rendered as the history menu's status dot. */
 export type SessionRunStatus = "idle" | "working" | "blocked" | "failed";
@@ -62,19 +63,19 @@ export function groupSessionsByDate(sessions: SessionInfo[]): {
     buckets.set(key, list);
   }
   const order = ["today", "yesterday", "week", "month", "older"];
-  const labels: Record<string, string> = {
-    today: "Today",
-    yesterday: "Yesterday",
-    week: "Last 7 days",
-    month: "Last 30 days",
-    older: "Earlier",
+  const labels: Record<string, MessageKey> = {
+    today: "group.today",
+    yesterday: "group.yesterday",
+    week: "group.week",
+    month: "group.month",
+    older: "group.older",
   };
   const result: { label: string; sessions: SessionInfo[] }[] = [];
   for (const key of order) {
-    const label = labels[key];
+    const labelKey = labels[key];
     const list = buckets.get(key);
-    if (label && list && list.length > 0) {
-      result.push({ label, sessions: list });
+    if (labelKey && list && list.length > 0) {
+      result.push({ label: t(labelKey), sessions: list });
     }
   }
   return result;
@@ -84,18 +85,18 @@ export function relativeSessionTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
   const minutes = Math.floor(diff / 60_000);
   if (minutes < 1) {
-    return "just now";
+    return t("time.justNow");
   }
   if (minutes < 60) {
-    return `${minutes}m ago`;
+    return t("time.minutesAgo", { count: minutes });
   }
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return `${hours}h ago`;
+    return t("time.hoursAgo", { count: hours });
   }
   const days = Math.floor(hours / 24);
   if (days < 30) {
-    return `${days}d ago`;
+    return t("time.daysAgo", { count: days });
   }
   return new Date(timestamp).toLocaleDateString();
 }

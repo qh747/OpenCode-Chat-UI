@@ -1,13 +1,24 @@
 // Test entry point: bundles all test files into one executable with node:test.
 import "./attachments.test";
+import "./attachment-rows.test";
 import "./catalog-params.test";
+import "./chat-render.test";
+import "./chat-reducer.test";
 import "./client-routes.test";
 import "./commands.test";
+import "./dcp-markers.test";
+import "./diff-list.test";
 import "./diffapply.test";
 import "./first-paint.test";
+import "./i18n.test";
+import "./live-segments.test";
 import "./manager.test";
+import "./message-attachments.test";
 import "./messages-order.test";
 import "./model-group.test";
+import "./opencode-config.test";
 import "./pending-selection.test";
 import "./queue.test";
 import "./sessions.test";
+import "./settings-items.test";
+import "./settings-render.test";

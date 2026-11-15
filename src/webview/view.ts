@@ -4,23 +4,31 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ChatController } from "./panel";
 import type { WebToHost } from "./protocol";
+import type { SettingsController } from "./settings-panel";
+import type { SettingsWebToHost } from "./settings-protocol";
+
+/** Which bundle a webview loads. */
+export type WebviewMode = "chat" | "settings";
 
 /** Shared builder for webview HTML (used by both the view and editor tabs). */
 export function buildWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
+  mode: WebviewMode = "chat",
 ): string {
-  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "dist", "webview.js"));
+  const scriptName = mode === "settings" ? "settings.js" : "webview.js";
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "dist", scriptName));
   const cssPath = path.join(extensionUri.fsPath, "dist", "webview.css");
   const css = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, "utf8") : "";
   const nonce = randomBytes(16).toString("hex");
+  const title = mode === "settings" ? "OpenCode Server Configuration" : "OpenCode";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src data: https:;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenCode</title>
+  <title>${title}</title>
   <style>${css}</style>
 </head>
 <body>
@@ -37,6 +45,12 @@ function bridgeWebview(
 ): vscode.Disposable {
   const sink = controller.attachSink(webview);
   const messageSub = webview.onDidReceiveMessage((message: WebToHost) => {
+    // The surface reports whether the user is looking at it, so a completion
+    // notice only appears when nobody is.
+    if (message.kind === "focusChanged") {
+      sink.focused = message.focused;
+      return;
+    }
     void controller.handleMessage(message);
   });
   return new vscode.Disposable(() => {
@@ -80,4 +94,35 @@ export function openChatTab(
   panel.onDidDispose(() => sub.dispose());
   const tabs = context.globalState.get<string[]>("opencode.openTabs", []);
   void context.globalState.update("opencode.openTabs", tabs);
+}
+
+/** One server config panel per window; opening it again focuses the existing one. */
+let settingsPanel: vscode.WebviewPanel | undefined;
+
+/** Standalone editor tab surface for the server config panel. */
+export function openServerConfigTab(
+  controller: SettingsController,
+  extensionUri: vscode.Uri,
+): void {
+  if (settingsPanel) {
+    settingsPanel.reveal(vscode.ViewColumn.Beside);
+    return;
+  }
+  const panel = vscode.window.createWebviewPanel(
+    "opencode.settings",
+    "OpenCode Server Configuration",
+    vscode.ViewColumn.Beside,
+    { enableScripts: true, localResourceRoots: [extensionUri] },
+  );
+  panel.webview.html = buildWebviewHtml(panel.webview, extensionUri, "settings");
+  const sink = controller.attachSink(panel.webview);
+  const messageSub = panel.webview.onDidReceiveMessage((message: SettingsWebToHost) => {
+    void controller.handleMessage(message);
+  });
+  panel.onDidDispose(() => {
+    messageSub.dispose();
+    controller.detachSink(sink);
+    settingsPanel = undefined;
+  });
+  settingsPanel = panel;
 }

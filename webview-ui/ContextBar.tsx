@@ -1,5 +1,6 @@
 import type { GitInfo } from "../src/webview/protocol";
 import type { TokenUsage } from "../src/opencode/types";
+import { t } from "../src/util/i18n";
 
 export interface ContextBarProps {
   git?: GitInfo;
@@ -30,7 +31,7 @@ export function ContextBar({ git, workspacePath, cost, tokens, contextLimit }: C
         </>
       ) : git ? (
         <>
-          <span className="ctx-nogit">no git</span>
+          <span className="ctx-nogit">{t("noGit")}</span>
           <span className="ctx-sep">|</span>
         </>
       ) : null}
@@ -42,13 +43,13 @@ export function ContextBar({ git, workspacePath, cost, tokens, contextLimit }: C
       {hasUsage && (
         <span className="ctx-right">
           {used !== undefined && (
-            <span title="Context tokens used">
+            <span title={t("contextTokensTitle")}>
               {formatTokens(used)}
               {contextLimit ? ` / ${formatTokens(contextLimit)}` : ""}
             </span>
           )}
           {used !== undefined && cost !== undefined && <span className="ctx-sep">|</span>}
-          {cost !== undefined && <span title="Session cost">${cost.toFixed(4)}</span>}
+          {cost !== undefined && <span title={t("sessionCostTitle")}>${cost.toFixed(4)}</span>}
         </span>
       )}
     </div>

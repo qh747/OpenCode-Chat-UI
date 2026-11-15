@@ -52,6 +52,12 @@ code --install-extension dist/opencode-vscode-0.2.0.vsix
 | `opencode.serverPassword` | `""` | 外部 server 的密码（Basic auth 用户固定为 `opencode`）。 |
 | `opencode.context.autoAttachSelection` | `true` | 发送消息时自动附加当前编辑器的选区。 |
 | `opencode.context.maxSelectionLength` | `2000` | 选区附加的最大字符数。 |
+| `opencode.notifications.turnComplete` | `true` | 一轮对话结束时通知。 |
+| `opencode.notifications.permissionRequest` | `true` | agent 请求权限时通知。 |
+| `opencode.notifications.errors` | `false` | agent 或 server 报错时通知。 |
+
+聊天面板标题栏的齿轮按钮会打开设置面板，在同一处编辑上述设置以及 opencode
+服务端自己的配置（`opencode.json`）。
 
 ## 快捷键
 

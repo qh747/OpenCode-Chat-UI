@@ -71,21 +71,21 @@ describe("QueueStrip", () => {
       }),
     );
     assert.match(html, /class="queue-strip"/);
-    assert.match(html, /QUEUE 1/);
+    assert.match(html, /Queue 1/);
     assert.doesNotMatch(html, /class="queue-row"/);
   });
 
   test("collapsed by default: header only, no message rows", () => {
     const html = renderStrip([item("a", "one"), item("b", "two")], false);
-    assert.match(html, /QUEUE 2/);
-    assert.match(html, /turn 结束后自动发送/);
+    assert.match(html, /Queue 2/);
+    assert.match(html, /Sends when the turn ends/);
     assert.doesNotMatch(html, /class="queue-row"/);
   });
 
   test("paused queues offer a resume action", () => {
     const html = renderStrip([item("a", "one")], true);
-    assert.match(html, /已暂停/);
-    assert.match(html, />继续</);
+    assert.match(html, /Paused · resumes when you continue/);
+    assert.match(html, />Resume</);
   });
 
   test("nothing renders for an empty queue", () => {

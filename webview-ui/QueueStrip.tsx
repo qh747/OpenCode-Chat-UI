@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { QueuedMessage } from "../src/webview/protocol";
+import { t } from "../src/util/i18n";
 
 interface QueueStripProps {
   queue: QueuedMessage[];
@@ -33,20 +34,20 @@ export function QueueStrip({ queue, paused, onForce, onRemove, onResume }: Queue
           className="queue-toggle"
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
-          title={open ? "收起队列" : "展开队列"}
+          title={open ? t("queueCollapse") : t("queueExpand")}
         >
           <span className="queue-caret" aria-hidden="true">
             {open ? "▾" : "▸"}
           </span>
-          <span className="queue-count">QUEUE {queue.length}</span>
+          <span className="queue-count">{t("queueCount", { count: queue.length })}</span>
           <span className={`queue-note${paused ? " paused" : ""}`}>
-            {paused ? "已暂停 · 继续后自动发送" : "turn 结束后自动发送"}
+            {paused ? t("queuePausedNote") : t("queueAutoNote")}
           </span>
         </button>
         <span className="spacer" />
         {paused && (
           <button className="queue-head-btn" onClick={onResume}>
-            继续
+            {t("resume")}
           </button>
         )}
       </div>
@@ -60,14 +61,14 @@ export function QueueStrip({ queue, paused, onForce, onRemove, onResume }: Queue
             <button
               className="queue-force"
               onClick={() => onForce(item.id)}
-              title="中断当前 turn 并立即发送"
+              title={t("queueTitleBusy")}
             >
-              立即发送
+              {t("sendNow")}
             </button>
             <button
               className="queue-remove"
               onClick={() => onRemove(item.id)}
-              title="从队列中删除"
+              title={t("removeFromQueue")}
             >
               ×
             </button>

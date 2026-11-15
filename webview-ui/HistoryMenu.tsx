@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "./state";
 import type { HistoryGroup } from "../src/webview/protocol";
 import { relativeSessionTime } from "../src/util/sessions";
+import { t } from "../src/util/i18n";
 
 interface HistoryMenuProps {
   dispatch: Dispatch;
@@ -46,7 +47,7 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
 
   return (
     <div className="dropdown history" ref={rootRef}>
-      <button className="icon-btn" onClick={openMenu} title="Session history">
+      <button className="icon-btn" onClick={openMenu} title={t("historyTitle")}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
           <path d="M12 7v5l3.5 2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -55,7 +56,7 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
       {open && (
         <div className="dropdown-menu history-menu">
           {!hasSessions ? (
-            <div className="mention-empty">No sessions yet</div>
+            <div className="mention-empty">{t("noSessions")}</div>
           ) : (
             groups.map((group) => (
               <div key={group.label}>
@@ -74,13 +75,13 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
                         className={`history-dot status-${session.status}`}
                         aria-hidden="true"
                       />
-                      <span className="history-title">{session.title || "Untitled"}</span>
+                      <span className="history-title">{session.title || t("untitled")}</span>
                       <span className="history-time">{relativeSessionTime(session.updated)}</span>
                     </button>
                     <div className="history-actions">
                       <button
                         className="history-action"
-                        title="Rename"
+                        title={t("renameTitle")}
                         onClick={() => {
                           dispatch({ kind: "renameSession", id: session.id, currentTitle: session.title });
                           setOpen(false);
@@ -90,7 +91,7 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
                       </button>
                       <button
                         className="history-action"
-                        title="Fork"
+                        title={t("forkTitle")}
                         onClick={() => {
                           dispatch({ kind: "forkSession", id: session.id });
                           setOpen(false);
@@ -100,7 +101,7 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
                       </button>
                       <button
                         className="history-action"
-                        title="Export as Markdown"
+                        title={t("exportMdTitle")}
                         onClick={() => {
                           dispatch({ kind: "exportSession", id: session.id });
                           setOpen(false);
@@ -110,7 +111,7 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
                       </button>
                       <button
                         className="history-action danger"
-                        title="Delete"
+                        title={t("deleteTitle")}
                         onClick={() => {
                           dispatch({ kind: "deleteSession", id: session.id });
                           setOpen(false);

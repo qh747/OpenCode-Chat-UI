@@ -7,6 +7,7 @@ import { BUILTIN_COMMANDS, filterCommands, mergeMentions, splitCommandInput } fr
 import type { CommandInfoLike, MentionOption } from "../src/util/commands";
 import type { CommandInfo, SkillInfo } from "../src/opencode/types";
 import type { AttachmentKind, AttachmentPreview, EditorFile } from "../src/webview/protocol";
+import { t, type MessageKey } from "../src/util/i18n";
 
 const MAX_IMAGES = 6;
 
@@ -17,19 +18,19 @@ const KIND_LABEL: Record<AttachmentKind, string> = {
   url: "URL",
 };
 
-const KIND_WORD: Record<AttachmentKind, string> = {
-  image: "图片",
-  file: "文件",
-  selection: "选区",
-  url: "链接",
+const KIND_WORD: Record<AttachmentKind, MessageKey> = {
+  image: "kindWord.image",
+  file: "kindWord.file",
+  selection: "kindWord.selection",
+  url: "kindWord.url",
 };
 
-const BUILTIN_DESCRIPTIONS: Record<string, string> = {
-  new: "新会话",
-  undo: "撤销上一条消息",
-  compact: "总结会话以减少上下文大小",
-  fork: "从之前的消息创建新会话",
-  export: "将完整会话记录导出为 Markdown",
+const BUILTIN_DESCRIPTIONS: Record<string, MessageKey> = {
+  new: "builtin.new",
+  undo: "builtin.undo",
+  compact: "builtin.compact",
+  fork: "builtin.fork",
+  export: "builtin.export",
 };
 
 interface ComposerProps {
@@ -112,7 +113,10 @@ export function Composer({
   const commandMode = text.startsWith("/");
   const commandQuery = commandMode ? text.slice(1) : "";
   const commandList = (() => {
-    const builtin = BUILTIN_COMMANDS.map((c) => ({ ...c, description: BUILTIN_DESCRIPTIONS[c.name] ?? "" }));
+    const builtin = BUILTIN_COMMANDS.map((c) => {
+      const descriptionKey = BUILTIN_DESCRIPTIONS[c.name];
+      return { ...c, description: descriptionKey ? t(descriptionKey) : "" };
+    });
     const merged: CommandInfoLike[] = [...builtin];
     for (const c of commands) {
       if (!merged.some((m) => m.name === c.name)) {
@@ -138,7 +142,9 @@ export function Composer({
         name: editor.name,
         path: editor.path,
         range: editor.selected,
-        description: `L${editor.selected?.start}-${editor.selected?.end} · 选中`,
+        description: t("mentionSelectedHint", {
+          range: `L${editor.selected?.start}-${editor.selected?.end}`,
+        }),
       }));
     // Open but unselected files are suggestions, never citable ranges.
     const open: MentionRow[] = editors
@@ -148,7 +154,7 @@ export function Composer({
         key: `open-${editor.path}`,
         name: editor.name,
         path: editor.path,
-        description: "已打开 · 无选区",
+        description: t("mentionGroupOpen"),
       }));
     const other: MentionRow[] = mergeMentions(
       skills,
@@ -295,7 +301,7 @@ export function Composer({
   const stageImageFile = (file: File) => {
     const imageChips = chips.filter((c) => c.kind === "image").length;
     if (imageChips >= MAX_IMAGES) {
-      setImageNotice(`Maximum ${MAX_IMAGES} images per message.`);
+      setImageNotice(t("maxImages", { count: MAX_IMAGES }));
       return;
     }
     const reader = new FileReader();
@@ -505,18 +511,18 @@ export function Composer({
     for (const chip of chips) {
       counts.set(chip.kind, (counts.get(chip.kind) ?? 0) + 1);
     }
-    return [...counts.entries()].map(([kind, count]) => `${KIND_WORD[kind]} ${count}`).join(" · ");
+    return [...counts.entries()].map(([kind, count]) => `${t(KIND_WORD[kind])} ${count}`).join(" · ");
   };
 
   const chipHint = (chip: Chip): string => {
     const range = chip.range !== undefined ? ` (L${chip.range.start}-L${chip.range.end})` : "";
     if (chip.kind === "image") {
-      return "单击 预览图片 · 发送时以 inline data URI 传递";
+      return t("chipHintImage");
     }
     if (chip.kind === "url") {
-      return "Ctrl+单击 在浏览器中打开 · 单击 预览链接";
+      return t("chipHintUrl");
     }
-    return `Ctrl+单击 在编辑器中打开${range} · 单击 预览`;
+    return t("chipHintFile", { range });
   };
 
   const previewData = preview?.requestId ? previews[preview.requestId] : undefined;
@@ -529,15 +535,15 @@ export function Composer({
       return (
         <div className="preview-url">
           <div className="preview-url-address">{preview.url}</div>
-          <div className="preview-url-note">发送时以文本形式附加这个链接，由服务端取回内容。</div>
+          <div className="preview-url-note">{t("urlPreviewNote")}</div>
         </div>
       );
     }
     if (!previewData) {
-      return <div className="preview-empty">读取中…</div>;
+      return <div className="preview-empty">{t("reading")}</div>;
     }
     if (previewData.error) {
-      return <div className="preview-empty">无法预览：{previewData.error}</div>;
+      return <div className="preview-empty">{t("previewFailed", { error: previewData.error })}</div>;
     }
     if (previewData.dataUrl) {
       return <img className="preview-image" src={previewData.dataUrl} alt={preview.name} />;
@@ -563,7 +569,7 @@ export function Composer({
         </pre>
       );
     }
-    return <div className="preview-empty">这个附件没有可预览的内容。</div>;
+    return <div className="preview-empty">{t("previewEmpty")}</div>;
   };
 
   return (
@@ -597,7 +603,7 @@ export function Composer({
                     event.stopPropagation();
                     removeChip(chip.key);
                   }}
-                  aria-label="Remove attachment"
+                  aria-label={t("removeAttachment")}
                 >
                   ×
                 </button>
@@ -607,11 +613,9 @@ export function Composer({
         )}
         {chips.length > 0 && (
           <div className="token-summary">
-            <span>
-              {chips.length} 个附件 · {attachmentSummary()}
-            </span>
+            <span>{t("attachmentSummaryLine", { count: chips.length, summary: attachmentSummary() })}</span>
             <button className="token-clear" onClick={() => setChips([])}>
-              全部清除
+              {t("clearAll")}
             </button>
           </div>
         )}
@@ -622,11 +626,7 @@ export function Composer({
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onDrop={onDrop}
-          placeholder={
-            busy
-              ? "模型处理中 · Enter 加入队列 · Esc 停止"
-              : "随便问点什么， / 可查看命令， @ 可添加上下文..."
-          }
+          placeholder={busy ? t("composerPlaceholderBusy") : t("composerPlaceholder")}
           rows={1}
           disabled={!canSend}
         />
@@ -635,7 +635,7 @@ export function Composer({
             <button
               className="icon-btn"
               onClick={() => dispatch({ kind: "pickFiles", requestId: `pick-${counter.current++}` })}
-              title="Attach files"
+              title={t("attachFilesTitle")}
             >
               +
             </button>
@@ -646,7 +646,7 @@ export function Composer({
             className="send-btn"
             onClick={doSend}
             disabled={!text.trim() || !canSend}
-            title={busy ? "Add to queue (Enter)" : "Send (Enter)"}
+            title={busy ? t("queueTitleBusy") : t("sendTitle")}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 19V6.4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
@@ -664,7 +664,7 @@ export function Composer({
         {commandMode && (
           <div className="mention-list" ref={listRef}>
             {commandList.length === 0 ? (
-              <div className="mention-empty">No matching commands</div>
+              <div className="mention-empty">{t("noMatchingCommands")}</div>
             ) : (
               commandList.map((command, index) => (
                 <button
@@ -682,17 +682,17 @@ export function Composer({
         {mentionOpen && (
           <div className="mention-list" ref={listRef}>
             {mentionRows.length === 0 ? (
-              <div className="mention-empty">No matching skills or files</div>
+              <div className="mention-empty">{t("noMatchingSkillsFiles")}</div>
             ) : (
               mentionRows.map((row, index) => (
                 <div key={row.key}>
                   {(index === 0 || mentionRows[index - 1]?.group !== row.group) && (
                     <div className="mention-section">
                       {row.group === "selected"
-                        ? "当前编辑器 · 已选中"
+                        ? t("mentionGroupSelected")
                         : row.group === "open"
-                          ? "已打开 · 无选区"
-                          : "文件与技能"}
+                          ? t("mentionGroupOpen")
+                          : t("mentionGroupOther")}
                     </div>
                   )}
                   <button
@@ -721,27 +721,19 @@ export function Composer({
             <div className="preview-head">
               <span className={`type t-${preview.kind}`}>{KIND_LABEL[preview.kind]}</span>
               <span className="preview-name">{preview.name}</span>
-              <span className="preview-sub">
-                {preview.kind === "image"
-                  ? "预览"
-                  : preview.kind === "url"
-                    ? "链接"
-                    : preview.kind === "selection"
-                      ? "选中范围"
-                      : "文件"}
-              </span>
+              <span className="preview-sub">{t(KIND_WORD[preview.kind])}</span>
               <span className="spacer" />
-              <button className="preview-close" onClick={() => setPreview(null)} title="关闭 (Esc)">
+              <button className="preview-close" onClick={() => setPreview(null)} title={t("closePreview")}>
                 ×
               </button>
             </div>
             <div className="preview-body">{renderPreviewBody()}</div>
             <div className="preview-note">
               {preview.kind === "url"
-                ? "Ctrl+单击 在浏览器中打开"
+                ? t("previewNote.url")
                 : preview.kind === "image"
-                  ? "发送时以 inline data URI 传递"
-                  : "Ctrl+单击 在编辑器中打开"}
+                  ? t("previewNote.image")
+                  : t("previewNote.file")}
             </div>
           </div>
         </div>

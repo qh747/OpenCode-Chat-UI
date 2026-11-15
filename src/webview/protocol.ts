@@ -1,6 +1,8 @@
 import type { SessionRunStatus } from "../util/sessions";
+import type { Locale } from "../util/i18n";
 import type {
   AgentInfo,
+  AssistantContent,
   CommandInfo,
   FileDiffInfo,
   MessageInfo,
@@ -52,6 +54,8 @@ export interface Snapshot {
   editors?: EditorFile[];
   queue: QueuedMessage[];
   queuePaused: boolean;
+  /** The display language the panel renders copy in. */
+  locale?: Locale;
 }
 
 export interface HistoryGroup {
@@ -90,7 +94,15 @@ export interface AttachmentPreview {
 }
 
 export type HostToWeb =
-  | { kind: "state"; state: ConnectionState; version?: string; error?: string; compatWarning?: string }
+  | {
+      kind: "state";
+      state: ConnectionState;
+      version?: string;
+      error?: string;
+      compatWarning?: string;
+      /** The display language the panel renders copy in. */
+      locale?: Locale;
+    }
   | { kind: "imageStaged"; requestId: string; path: string; name: string }
   | { kind: "history"; groups: HistoryGroup[] }
   | { kind: "snapshot"; snapshot: Snapshot }
@@ -105,9 +117,14 @@ export type HostToWeb =
       tokens?: TokenUsage;
     }
   | { kind: "git"; git: GitInfo }
-  | { kind: "textStarted"; sessionID: string; messageID: string }
-  | { kind: "textDelta"; sessionID: string; messageID: string; delta: string }
-  | { kind: "reasoningDelta"; sessionID: string; messageID: string; delta: string }
+  | { kind: "textStarted"; sessionID: string; messageID: string; ordinal: number }
+  | { kind: "textDelta"; sessionID: string; messageID: string; ordinal: number; delta: string }
+  | { kind: "textEnded"; sessionID: string; messageID: string; ordinal: number; text: string }
+  | { kind: "reasoningStarted"; sessionID: string; messageID: string; ordinal: number }
+  | { kind: "reasoningDelta"; sessionID: string; messageID: string; ordinal: number; delta: string }
+  | { kind: "reasoningEnded"; sessionID: string; messageID: string; ordinal: number; text: string }
+  /** Authoritative content of a message, pushed as it changes on the server. */
+  | { kind: "messageContent"; sessionID: string; messageID: string; content: AssistantContent[] }
   | { kind: "messages"; sessionID: string; messages: MessageInfo[] }
   | { kind: "busy"; sessionID?: string; busy: boolean }
   | { kind: "queue"; sessionID?: string; queue: QueuedMessage[]; paused: boolean }
@@ -129,6 +146,7 @@ export type WebToHost =
   | { kind: "abort" }
   | { kind: "openFile"; path: string; start?: number; end?: number }
   | { kind: "openUrl"; url: string }
+  | { kind: "copyCode"; text: string }
   | { kind: "previewAttachment"; requestId: string; ref: string; start?: number; end?: number }
   | { kind: "newSession" }
   | { kind: "showHistory" }
@@ -152,4 +170,7 @@ export type WebToHost =
   | { kind: "showLogs" }
   | { kind: "executePlan" }
   | { kind: "cycleAgent"; direction: 1 | -1 }
-  | { kind: "restartServer" };
+  | { kind: "restartServer" }
+  | { kind: "openServerConfig" }
+  /** Whether the user is currently looking at this surface. */
+  | { kind: "focusChanged"; focused: boolean };

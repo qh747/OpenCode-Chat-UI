@@ -1,0 +1,11 @@
+{
+  "configuration.title": "OpenCode",
+  "opencode.path.description": "Override the opencode binary path. Leave empty to auto-detect (PATH, then the bundled CLI from the OpenCode desktop app).",
+  "opencode.serverUrl.description": "Connect to an already running opencode v2 server (e.g. http://127.0.0.1:4096) instead of spawning one per window.",
+  "opencode.serverPassword.description": "Password for the external server configured in opencode.serverUrl (Basic auth user is always \"opencode\").",
+  "opencode.context.autoAttachSelection.description": "Automatically attach the active editor's selection as context when sending a message.",
+  "opencode.context.maxSelectionLength.description": "Maximum number of characters of the active selection to attach.",
+  "opencode.notifications.turnComplete.description": "Show a notification when a turn finishes.",
+  "opencode.notifications.permissionRequest.description": "Show a notification when the agent asks for permission.",
+  "opencode.notifications.errors.description": "Show a notification when the agent or the server reports an error."
+}

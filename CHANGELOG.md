@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.3
+
+- The changed-files list is collapsed by default: one quiet row — `▸ CHANGES 2 · +31 -4` — that expands into the per-file Keep / Revert on click. The counts are the signal; the rows are only for acting on one file. It used to sit above the composer fully expanded after every turn, one row per file, until each was dealt with.
+- Fixed: a file you had kept never came back, even when the agent changed it again in a later turn. What you dismissed was remembered as a file name, with no memory of which round of changes it was; now it is remembered as that round's diff, so a file whose changes have since moved shows up again.
+- The `@14@` that sometimes appeared at the end of a reply is gone. It is not a rendering bug — it is the message id the `@tarquinen/opencode-dcp` plugin tags every conversation message with, which the model sometimes echoes back. The transcript now drops such a tag when it stands alone on the last line, and leaves the ones in the middle alone, where they are a real reference to another message.
+
+- A settings panel. The gear button in the chat header — next to the history button — opens an editor tab that edits two things side by side: the extension's own settings, and the opencode server's configuration (`opencode.json`). The server's own config was reachable only by hand-editing the file; it is now a list of rows, one per key, with the scope switchable between the global file and the project's.
+- The panel writes the server's config file the way the server does, with `jsonc-parser`, so the comments and formatting in a hand-written `opencode.json` survive an edit made from VS Code.
+- New settings: `opencode.notifications.turnComplete` (default on), `opencode.notifications.permissionRequest` (default on) and `opencode.notifications.errors` (default off). A notification is only raised when nobody is looking at the chat — a turn that finishes, a permission request that blocks the turn, or an error.
+
+The transcript was restyled after comparing three shipping agents — opencode desktop, Command Code (Claude Code) and the terminal TUI. A prototype with four variants was built and reviewed; the Command Code style won.
+
+- Your messages are now a filled bubble on the right instead of a right-hand rule. The old rule also right-aligned the contents, so pasted code blocks and lists came out right-aligned too; inside the bubble everything is left-aligned again.
+- Tool calls are one line: a small icon, a verb (`Ran command`, `Read`, `Searched`), the target in monospace, and a chevron that expands the output in place. A failed tool shows the reason the server sent (`ToolState.Error.error.message`), which used to be dropped.
+- Thinking is its own row — "Thought for 4 seconds", taken from the reasoning part's timing — and expands to the reasoning text.
+- Markdown typography was rebuilt: 13.5px body at 1.72 line height, a real heading hierarchy, inline code as a small chip, code blocks without borders but with a language label and a copy button, and tables that scroll inside their own frame instead of widening the panel. The streaming caret now rides the last line of the reply.
+- The per-message cost line is gone; the session cost is already in the context strip below the composer.
+- What a message points at is now legible. Attachments used to be one `📄 name` chip each, so a pasted image, a selected range of lines and a plain file all looked alike, and a selected range lost its line numbers. A sent message now keeps the bubble for its text and shows its attachments underneath, collapsed into one line (`附件 3 · CHANGELOG.md · screenshot.png`), expanding into a row per attachment: images get their own thumbnail, a selection shows its line range, and a file opens in the editor.
+- A link attached to a message used to arrive as a bare `参考链接: https://…` line inside the text. It is now pulled back out of the message and shown as an attachment row of its own that opens in the browser, so an attached link no longer reads like something you typed.
+- Fix: clicking an attachment did nothing for a pasted image, and a selected range opened without its lines. A pasted image now opens a preview of the image itself (it exists only as base64 inside the message, so there is no file to open), a link opens in the browser, and a selection opens the file with those lines selected.
+
+## 0.4.2
+
+- Fixed: streamed replies could duplicate, reorder or lose text. A reply shaped `text → tool → text` was merged into the message's last text part using a length comparison that spanned different paragraphs, so the second paragraph could appear above the tool card, replace the first one, or both. Text and reasoning are now addressed by the ordinal the server sends with each event, and a part is never overwritten from a different part's buffer.
+- The server's `session.message.content.updated` event — the message's full content array — is now used as the authoritative content. Live state is dropped once the server marks a message finished, and it is cleared at turn end instead of living until the session switched.
+- Streaming is coalesced: the host posts at most one delta per 60ms window, and the webview folds deltas into a single dispatch per animation frame. Long replies no longer re-parse the whole message once per token.
+- Markdown links in replies and user messages now open in the browser (they were inert inside the webview). Stored attachment chips open the file when the attachment carries a `file:` URI.
+- The transcript keeps following the bottom while content grows for reasons React state cannot see (an expanded card, a late image, a font reflow).
+- Tool failures now carry the server's error message on the part type, ready for the tool card rework.
+
 ## 0.4.1
 
 - Fix: choosing a model or agent on an empty "New session" panel produced a 404 from `/api/session//model` — no server session existed yet, so the request had an empty id. Choices are now kept locally and sent in the body of the lazily created session. Session-scoped client methods also reject an empty id instead of emitting a malformed URL, and abort/compact no longer fire without a session.
