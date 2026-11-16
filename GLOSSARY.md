@@ -34,6 +34,9 @@ One ordered block inside an assistant reply: a passage of text, a passage of rea
 **Queued message**
 A user message sent while the model is still working. The host holds it in FIFO order and sends it when the turn ends; it can be deleted or force-sent (interrupting the current turn). A failed or stopped turn holds the queue until it is resumed.
 
+**Subagent job**
+A running subagent, reported by the server's job listing for a session and its descendants. Only jobs of kind `subagent` that are still running are shown: one row with the agent, its description and the elapsed time, plus a Stop action that interrupts the child session. The listing has no events, so the host polls it while a turn runs. Distinct from an agent in the catalog, which is a definition, not a running job.
+
 **Rewind point**
 A user message used as the boundary for a revert: everything after it (messages and their file changes) is rolled back via the server's staged revert.
 
@@ -46,7 +49,7 @@ The `opencode serve` HTTP process (v2 API) that the extension talks to. Spawned 
 The server-provided lists of agents, models and the default model ref. Loaded once per connection and after agent/provider update events.
 
 **Snapshot**
-The authoritative UI state the host sends to a webview surface: current session, messages, pending permissions, diffs and catalog.
+The authoritative UI state the host sends to a webview surface: current session, messages, pending permissions, diffs, running subagent jobs and catalog.
 
 **Event stream**
 The server's volatile SSE feed (`/api/event`). Lossy by design; consumers resync authoritative state on reconnect instead of trusting it alone.

@@ -3,6 +3,7 @@ import type {
   AssistantMessage,
   CommandInfo,
   FileDiffInfo,
+  JobInfo,
   ListPage,
   MessageInfo,
   ModelInfo,
@@ -220,6 +221,18 @@ export class OpencodeClient {
       sessionPath(id, "/interrupt"),
       {},
     );
+  }
+
+  /**
+   * Background jobs owned by this session and its child sessions. Subagents
+   * appear here while a `task` tool call runs; the endpoint has no events, so
+   * callers poll it. Verified live on 2.3.0.
+   */
+  async jobs(sessionID: string): Promise<{ data: JobInfo[] }> {
+    // 走 sessionPath 只为复用同一处空 id 校验，避免空 id 静默返回空列表
+    sessionPath(sessionID);
+    const query = new URLSearchParams({ sessionID, descendants: "true" });
+    return this.request<{ data: JobInfo[] }>("GET", `/api/experimental/job?${query.toString()}`);
   }
 
   async setAgent(id: string, agent: string): Promise<void> {

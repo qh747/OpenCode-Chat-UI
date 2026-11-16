@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.11
+
+- The context strip no longer disappears before a session's first turn. The usage segment was keyed on a billed assistant message, and a fresh session has none, so the strip fell back to just the branch and the path until the first reply finished. It now reads `0 / 1.0M | —` from the active model's context window — 0 tokens used, cache hit rate still unknown — and switches to the real figures as the turn ends.
+- Subagents are visible while they run. A turn that hands work to a subagent (the `task` tool) showed nothing but the composer's status line: no sign that a subagent existed, let alone a way to stop one. While a turn is running the host polls the server's job listing for the session's descendants and a strip above the composer lists each running subagent with its agent, its description and how long it has been going. Each row has a Stop button that interrupts only that subagent's child session, so the parent turn keeps working.
+
 ## 0.4.10
 
 - The context strip's git branch and workspace path are actionable now: clicking the branch switches the workbench to the Source Control view, and clicking the path reveals the workspace folder in the Explorer (falling back to a plain view switch when reveal is unavailable). Both hover with a brighten and carry tooltips; without a git branch the notice stays inert.

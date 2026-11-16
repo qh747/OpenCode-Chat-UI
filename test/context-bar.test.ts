@@ -37,6 +37,13 @@ describe("context bar clickable segments", () => {
     assert.doesNotMatch(html, /<span class="ctx-path"/);
   });
 
+  test("a fresh session still shows usage: 0 of the limit and an unknown cache rate", () => {
+    const html = render({ contextTokens: undefined, cacheHitRate: undefined });
+    assert.match(html, /class="ctx-right/);
+    assert.match(html, />0 \/ 1\.0M</);
+    assert.match(html, /—/);
+  });
+
   test("the no-git notice stays plain even with a handler", () => {
     const html = render({ git: { dirty: false } as GitInfo, onOpenSourceControl: () => {} });
     assert.match(html, /<span class="ctx-nogit"/);

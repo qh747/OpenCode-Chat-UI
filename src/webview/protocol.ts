@@ -1,6 +1,7 @@
-import type { SessionRunStatus } from "../util/sessions";
+import type { FoldedHistoryRow } from "../util/sessions";
 import type { Locale } from "../util/i18n";
 import type { SubmitKey } from "../util/composer-keys";
+import type { SubagentJob } from "../util/subagents";
 import type {
   AgentInfo,
   AssistantContent,
@@ -59,13 +60,17 @@ export interface Snapshot {
   editors?: EditorFile[];
   queue: QueuedMessage[];
   queuePaused: boolean;
+  /** Subagents currently running under this session. */
+  subagents?: SubagentJob[];
+  /** True when the open session is a subagent's child session. */
+  isSubagentSession?: boolean;
   /** The display language the panel renders copy in. */
   locale?: Locale;
 }
 
 export interface HistoryGroup {
   label: string;
-  sessions: { id: string; title?: string; updated: number; status: SessionRunStatus }[];
+  sessions: FoldedHistoryRow[];
 }
 
 /** What the user attached to a message. */
@@ -124,6 +129,8 @@ export type HostToWeb =
       busy?: boolean;
       contextTokens?: number;
       cacheHitRate?: number;
+      /** True when the open session is a subagent's child session. */
+      isSubagentSession?: boolean;
       /** Session timestamps, epoch ms (session info panel). */
       created?: number;
       updated?: number;
@@ -142,6 +149,7 @@ export type HostToWeb =
   | { kind: "messages"; sessionID: string; messages: MessageInfo[] }
   | { kind: "busy"; sessionID?: string; busy: boolean }
   | { kind: "queue"; sessionID?: string; queue: QueuedMessage[]; paused: boolean }
+  | { kind: "subagents"; sessionID?: string; jobs: SubagentJob[] }
   | { kind: "permissions"; sessionID?: string; pending: PermissionRequest[] }
   | { kind: "diffs"; sessionID?: string; diffs: FileDiffInfo[] }
   | { kind: "catalog"; catalog: Catalog }
@@ -157,6 +165,7 @@ export type WebToHost =
   | { kind: "removeQueued"; id: string }
   | { kind: "forceQueued"; id: string }
   | { kind: "resumeQueue" }
+  | { kind: "stopSubagent"; childSessionID: string }
   | { kind: "abort" }
   | { kind: "openFile"; path: string; start?: number; end?: number }
   | { kind: "openUrl"; url: string }

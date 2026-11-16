@@ -28,6 +28,9 @@ const en = {
   historyTitle: "Session history",
   noSessions: "No sessions yet",
   untitled: "Untitled",
+  historySubagentCount: "{count} subagents",
+  historySubagentCountOne: "1 subagent",
+  historySubagentRunning: "{count} running",
   renameTitle: "Rename",
   forkTitle: "Fork",
   exportMdTitle: "Export as Markdown",
@@ -153,6 +156,11 @@ const en = {
   sendNow: "Send now",
   removeFromQueue: "Remove from queue",
 
+  // subagent strip
+  subagentCount: "Subagent {count}",
+  subagentStop: "Stop",
+  subagentStopTitle: "Stop this subagent",
+
   // markdown code block
   copy: "copy",
   copied: "copied",
@@ -248,6 +256,9 @@ const zhCn: Record<MessageKey, string> = {
   historyTitle: "会话历史",
   noSessions: "还没有会话",
   untitled: "未命名",
+  historySubagentCount: "{count} 个子代理",
+  historySubagentCountOne: "1 个子代理",
+  historySubagentRunning: "{count} 个运行中",
   renameTitle: "重命名",
   forkTitle: "派生",
   exportMdTitle: "导出为 Markdown",
@@ -371,6 +382,11 @@ const zhCn: Record<MessageKey, string> = {
   resume: "继续",
   sendNow: "立即发送",
   removeFromQueue: "从队列中删除",
+
+  // subagent strip
+  subagentCount: "子代理 {count}",
+  subagentStop: "停止",
+  subagentStopTitle: "停止这个子代理",
 
   // markdown code block
   copy: "复制",

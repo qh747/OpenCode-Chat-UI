@@ -1061,6 +1061,117 @@ body {
   color: var(--danger);
 }
 
+/* running subagents: one row per agent, aligned with the composer box */
+.subagent-strip {
+  flex: none;
+  max-height: 120px;
+  margin: 0 10px 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+}
+/* SubagentStrip 标题行可点切换折叠（spec 分支 5）。 */
+.subagent-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  border: none;
+  background: none;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+}
+.subagent-head:hover .subagent-count {
+  color: var(--accent, #3794ff);
+}
+.subagent-chev {
+  flex: none;
+  font-size: 9px;
+  color: var(--muted);
+}
+/* 折叠时仍提示“有子代理在跑”的脉冲点。 */
+.subagent-pulse {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent, #3794ff);
+  animation: subagent-pulse 1.4s ease-in-out infinite;
+}
+.subagent-count {
+  color: var(--fg);
+  font-weight: 700;
+}
+.subagent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.subagent-row + .subagent-row {
+  border-top: 1px solid var(--border);
+}
+.subagent-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #3794ff);
+  animation: subagent-pulse 1.4s ease-in-out infinite;
+}
+@keyframes subagent-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.subagent-agent {
+  flex: none;
+  color: var(--fg);
+  font-weight: 600;
+}
+.subagent-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.subagent-elapsed {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.subagent-stop {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.subagent-stop:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 /* composer */
 .composer {
   flex: none;
@@ -1842,51 +1953,55 @@ body {
 .history-row:hover {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
-/* Status dot: only live work is coloured — green while the model runs,
-   yellow while the session waits on the user, red when its last turn failed.
-   Idle and never-run sessions keep the slot but stay invisible. */
-.history-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+/* Caret slot: subagent roots get a clickable triangle, roots without children
+   keep the same width so titles stay aligned down the column. */
+.history-caret {
   flex: none;
+  width: 12px;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+  user-select: none;
 }
-.history-dot.status-idle {
-  background: transparent;
+.history-caret.is-empty {
+  cursor: default;
 }
-.history-dot.status-working {
-  background: var(--ok);
-  animation: history-dot-pulse 1.4s ease-in-out infinite;
+/* Child rows indent under their root; the wrap owns the background so the
+   hover actions still line up. */
+.history-child .history-row {
+  padding-left: 34px;
 }
-.history-dot.status-blocked {
-  background: var(--warn);
-  animation: history-dot-ring 1.8s ease-out infinite;
+.history-row.is-current {
+  background: var(--vscode-list-activeSelectionBackground, rgba(128, 128, 128, 0.24));
 }
-.history-dot.status-failed {
-  background: var(--danger);
+.history-subagents {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
 }
-@keyframes history-dot-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
+/* 状态点已移除，运行状态改由标题颜色表达（spec 分支 1）：
+   绿 = 模型运行中，黄 = 等待用户，红 = 上回合失败；
+   空闲/未运行会话标题保持默认前景色。 */
+.history-title.status-working {
+  color: var(--ok);
 }
-@keyframes history-dot-ring {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 55%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--warn) 0%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 0%, transparent);
-  }
+.history-title.status-blocked {
+  color: var(--warn);
+}
+.history-title.status-failed {
+  color: var(--danger);
+}
+/* 折叠行下仍有子代理在跑 → 标题染红警示。声明在 status-* 之前，
+   会话自身状态（如 working 的绿）优先于该警示色（Q4）。 */
+.history-title.has-running-children {
+  color: var(--danger);
 }
 .history-title {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;

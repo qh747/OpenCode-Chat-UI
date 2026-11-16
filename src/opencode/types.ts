@@ -191,6 +191,28 @@ export interface PermissionRequest {
   source?: { type: string; messageID?: string; id?: string };
 }
 
+/** Status of a background job reported by GET /api/experimental/job. */
+export type JobStatus = "running" | "completed" | "error" | "cancelled";
+
+/**
+ * Background job owned by a session. Subagents are the job kind this extension
+ * surfaces: a `task` tool call runs as a child session the user can stop.
+ */
+export interface JobInfo {
+  kind: "subagent" | "shell" | "image";
+  id: string;
+  sessionID: string;
+  status: JobStatus;
+  title?: string;
+  time: { started: number; completed?: number };
+  /** Subagent jobs only: the child session the agent runs in. */
+  childSessionID?: string;
+  /** Subagent jobs only: display name of the agent (e.g. "General"). */
+  agent?: string;
+  /** Subagent jobs only: the task description given to the agent. */
+  description?: string;
+}
+
 /** Envelope for every SSE event delivered on GET /api/event. */
 export interface OEvent {
   id: string;

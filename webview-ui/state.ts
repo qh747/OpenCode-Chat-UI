@@ -19,6 +19,7 @@ import type {
   PermissionRequest,
 } from "../src/opencode/types";
 import type { SegmentKind } from "../src/util/live-segments";
+import type { SubagentJob } from "../src/util/subagents";
 import { locatePart } from "../src/util/live-segments";
 
 export interface ChatState {
@@ -33,6 +34,10 @@ export interface ChatState {
   busy: boolean;
   queue: QueuedMessage[];
   queuePaused: boolean;
+  /** Subagents currently running under this session. */
+  subagents: SubagentJob[];
+  /** True when the open session is a subagent's child session. */
+  isSubagentSession: boolean;
   messages: MessageInfo[];
   pending: PermissionRequest[];
   diffs: FileDiffInfo[];
@@ -69,6 +74,8 @@ export const initialState: ChatState = {
   busy: false,
   queue: [],
   queuePaused: false,
+  subagents: [],
+  isSubagentSession: false,
   messages: [],
   pending: [],
   diffs: [],
@@ -97,6 +104,8 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     busy: snapshot.busy,
     queue: snapshot.queue,
     queuePaused: snapshot.queuePaused,
+    subagents: snapshot.subagents ?? [],
+    isSubagentSession: snapshot.isSubagentSession ?? false,
     messages: snapshot.messages,
     pending: snapshot.pending,
     diffs: snapshot.diffs,
@@ -214,6 +223,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         busy: message.busy ?? state.busy,
         contextTokens: message.contextTokens ?? state.contextTokens,
         cacheHitRate: message.cacheHitRate ?? state.cacheHitRate,
+        isSubagentSession: message.isSubagentSession ?? state.isSubagentSession,
         created: message.created ?? state.created,
         updated: message.updated ?? state.updated,
         cost: message.cost ?? state.cost,
@@ -288,6 +298,12 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         return state;
       }
       return { ...state, queue: message.queue, queuePaused: message.paused };
+    }
+    case "subagents": {
+      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+        return state;
+      }
+      return { ...state, subagents: message.jobs };
     }
     case "permissions": {
       if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {

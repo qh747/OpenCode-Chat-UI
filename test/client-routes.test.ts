@@ -35,4 +35,16 @@ describe("session-scoped client routes", () => {
     await client.setModel("abc", { providerID: "p", id: "m" });
     assert.deepEqual(calls, ["http://127.0.0.1:1/api/session/abc/model"]);
   });
+
+  test("the subagent job list asks for descendants of one session", async () => {
+    const calls: string[] = [];
+    const client = makeClient(calls);
+    await client.jobs("ses_parent");
+    assert.deepEqual(calls, [
+      "http://127.0.0.1:1/api/experimental/job?sessionID=ses_parent&descendants=true",
+    ]);
+    calls.length = 0;
+    await assert.rejects(() => client.jobs(""), /session id is required/);
+    assert.deepEqual(calls, []);
+  });
 });

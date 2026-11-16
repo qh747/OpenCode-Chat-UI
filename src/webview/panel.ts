@@ -17,9 +17,16 @@ import { getLocale, t, type MessageKey } from "../util/i18n";
 import { reverseApply } from "../util/diffapply";
 import { LiveStream, mergeLiveContent, type SegmentKind } from "../util/live-segments";
 import { orderMessages } from "../util/messages";
+import { stripTrailingMarkers } from "../util/dcp-markers";
 import { cacheHitRateOf, contextTokensOf } from "../util/tokens";
+import { toSubagentJobs, type SubagentJob } from "../util/subagents";
 import { resolveCommandAction, findSkillByCommand } from "../util/commands";
-import { deriveSessionStatus, groupSessionsByDate } from "../util/sessions";
+import {
+  deriveSessionStatus,
+  foldSubagentSessions,
+  groupFoldedByDate,
+} from "../util/sessions";
+import type { HistoryRow } from "../util/sessions";
 import { GitStatusProvider } from "../git";
 import type {
   AttachmentRef,
@@ -92,6 +99,11 @@ export class ChatController implements vscode.Disposable {
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private metaRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   private permissionTimer: ReturnType<typeof setInterval> | undefined;
+  /** Subagents running under the current turn (polled; the server has no events). */
+  private subagents: SubagentJob[] = [];
+  /** True when the open session is a subagent's child session. */
+  private isSubagentSession = false;
+  private subagentTimer: ReturnType<typeof setInterval> | undefined;
   private fileCache: { path: string; name: string }[] | undefined;
   /** Images staged by the composer, keyed by the reference sent back to the webview. */
   private readonly stagedImages = new Map<string, StagedImage>();
@@ -203,6 +215,9 @@ export class ChatController implements vscode.Disposable {
         break;
       case "resumeQueue":
         this.resumeQueue();
+        break;
+      case "stopSubagent":
+        await this.stopSubagent(web.childSessionID);
         break;
       case "abort":
         if (this.sessionId) {
@@ -466,6 +481,7 @@ export class ChatController implements vscode.Disposable {
       const created = await client.createSession({ location: { directory: this.host.folderPath } });
       const sessionId = created.data.id;
       this.sessionId = sessionId;
+      this.isSubagentSession = false;
       this.messages = [];
       this.resetStreams();
       this.pending = [];
@@ -475,6 +491,7 @@ export class ChatController implements vscode.Disposable {
       this.cacheHitRate = undefined;
       this.contextTokens = undefined;
       this.revertMessageID = undefined;
+      this.clearSubagents();
       this.resetQueue();
       this.title = created.data.title;
       this.agent = created.data.agent ?? "build";
@@ -502,8 +519,13 @@ export class ChatController implements vscode.Disposable {
 
   async switchSession(id: string): Promise<void> {
     this.sessionId = id;
+    this.isSubagentSession = false;
     this.pendingAgent = undefined;
     this.pendingModel = undefined;
+    // 换会话即离开旧回合的执行窗口：busy 必须先归零（spec 分支 4），
+    // 否则旧会话的 busy 残留会让新会话误显“处理中”并污染 postHistory 戳记；
+    // 若新会话真在跑，fullResync → refreshSessionMeta 会重新置位。
+    this.busy = false;
     await this.context.workspaceState.update(this.storageKey(), id);
     this.messages = [];
     this.resetStreams();
@@ -511,6 +533,7 @@ export class ChatController implements vscode.Disposable {
     this.diffs = [];
     this.dismissed.clear();
     this.resetQueue();
+    this.clearSubagents();
     await this.fullResync();
     await vscode.commands.executeCommand("opencode.chat.focus");
   }
@@ -529,6 +552,9 @@ export class ChatController implements vscode.Disposable {
       }
     }
     if (this.busy) {
+      // 排队仅发生在“主回合执行中”窗口（spec 分支 8）：busy=true 即主回合
+      // 在跑。“等待子代理”窗口（主回合已结束、仅子代理 job 在跑）busy=false，
+      // 消息会直接走 sendNow——服务器接受为 steer 或开启新回合，不本地扣留。
       this.queue.push({ id: randomBytes(6).toString("hex"), text, attachments });
       // A new user message means the queue should move again after this turn.
       this.queuePaused = false;
@@ -572,6 +598,7 @@ export class ChatController implements vscode.Disposable {
     this.turnFailed = false;
     this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
     this.startPermissionPolling();
+    this.startSubagentPolling();
     // Optimistic local bubble: the user sees their message instantly instead
     // of waiting for the server round-trip; the authoritative refresh replaces
     // it with the real user message (with attachment metadata) moments later.
@@ -633,6 +660,9 @@ export class ChatController implements vscode.Disposable {
 
   private async forceQueued(id: string): Promise<void> {
     const item = this.queue.find((entry) => entry.id === id);
+    this.output?.appendLine(
+      `[DEBUG-force1] force id=${id} found=${item ? "yes" : "no"} busy=${this.busy} sid=${this.sessionId}`,
+    );
     if (!item) {
       return;
     }
@@ -960,16 +990,15 @@ export class ChatController implements vscode.Disposable {
         activeIDs.add(this.sessionId);
       }
       const blockedIDs = new Set(permissions.data.map((request) => request.sessionID));
-      const groups = groupSessionsByDate(page.data).map((group) => ({
-        label: group.label,
-        sessions: group.sessions.map((s) => ({
-          id: s.id,
-          title: s.title,
-          updated: s.time.updated,
-          status: deriveSessionStatus(s, activeIDs, blockedIDs),
-        })),
+      const rows: HistoryRow[] = page.data.map((session) => ({
+        id: session.id,
+        title: session.title,
+        parentID: session.parentID,
+        created: session.time.created,
+        updated: session.time.updated,
+        status: deriveSessionStatus(session, activeIDs, blockedIDs),
       }));
-      this.post({ kind: "history", groups });
+      this.post({ kind: "history", groups: groupFoldedByDate(foldSubagentSessions(rows)) });
     });
   }
 
@@ -1042,10 +1071,18 @@ export class ChatController implements vscode.Disposable {
           const assistant = message as AssistantMessage;
           lines.push(`## 🤖 Assistant`, "");
           for (const part of assistant.content) {
+            // 导出内容与界面所见一致：同样剥离 DCP 标记回显（spec 分支 2）。
             if (part.type === "text" && part.text) {
-              lines.push(part.text, "");
+              lines.push(stripTrailingMarkers(part.text), "");
             } else if (part.type === "reasoning" && part.text) {
-              lines.push(`<details><summary>Thinking</summary>`, "", part.text, "", `</details>`, "");
+              lines.push(
+                `<details><summary>Thinking</summary>`,
+                "",
+                stripTrailingMarkers(part.text),
+                "",
+                `</details>`,
+                "",
+              );
             } else if (part.type === "tool") {
               const summary = toolLine(part.name, part.state.input);
               lines.push(`- \`${part.name}\` ${summary}`);
@@ -1144,6 +1181,9 @@ export class ChatController implements vscode.Disposable {
         if (eventSession === this.sessionId) {
           this.busy = true;
           this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
+          // 服务器拉起的回合（steer/continuation）也会启动子代理，
+          // 轮询必须同样跟上（spec 分支 6）；已启动时为幂等 no-op。
+          this.startSubagentPolling();
         }
         break;
       case "session.idle":
@@ -1156,6 +1196,10 @@ export class ChatController implements vscode.Disposable {
           this.flushDeltas();
           this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
           this.stopPermissionPolling();
+          // 回合结束不再盲清 strip（spec 分支 6）：子代理 job 与回合解耦、
+          // 可跨回合存活，先做一次最终刷新——仍有 running job 就保留轮询
+          // 让 strip 跟到它们全部结束，全空才清空并停轮询。
+          void this.settleSubagents();
           if (wasBusy) {
             if (event.type === "session.execution.failed") {
               this.notify("notifications.errors", false, t("turnFailed"));
@@ -1167,6 +1211,9 @@ export class ChatController implements vscode.Disposable {
               );
             }
           }
+          this.output?.appendLine(
+            `[DEBUG-force1] turn-end wasBusy=${wasBusy} pending=${this.pendingForce ? "yes" : "no"} type=${event.type}`,
+          );
           if (wasBusy && this.pendingForce) {
             // The interrupted turn is finally over — start the forced message.
             const forced = this.pendingForce;
@@ -1241,6 +1288,7 @@ export class ChatController implements vscode.Disposable {
           this.pending = [];
           this.diffs = [];
           this.busy = false;
+          this.clearSubagents();
           this.cacheHitRate = undefined;
           this.contextTokens = undefined;
           this.revertMessageID = undefined;
@@ -1452,6 +1500,91 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
+  /**
+   * Subagents run as child sessions, and the server exposes them only through
+   * the experimental job list — no event announces a spawn or a finish. While a
+   * turn is busy the panel polls that list so the strip above the composer
+   * follows it; at turn end one final refresh decides: running jobs keep the
+   * poll going (they outlive the turn), an empty list clears the strip.
+   */
+  private async refreshSubagents(): Promise<void> {
+    if (!this.sessionId) {
+      return;
+    }
+    const client = this.client();
+    if (!client) {
+      return;
+    }
+    await this.safeCall(async () => {
+      const result = await client.jobs(this.sessionId ?? "");
+      this.output?.appendLine(
+        `[DEBUG-sub1] n=${result.data.length} ` +
+          result.data
+            .map((j) => `${j.kind}/${j.status}/${j.sessionID}/child=${j.childSessionID ?? "-"}`)
+            .join(" "),
+      );
+      this.subagents = toSubagentJobs(result.data);
+      this.post({ kind: "subagents", sessionID: this.sessionId, jobs: this.subagents });
+      if (this.subagents.length === 0 && this.subagentTimer && !this.busy) {
+        // 轮询发现已无运行中的子代理：收尾停轮询（strip 由上面的空列表更新关闭）。
+        // 主回合仍在执行（busy）时不因空列表停表——task job 可能尚未 spawn，
+        // 提前停表会错过本回合内稍后才出现的子代理（spec 分支 6）。
+        this.clearSubagents();
+      }
+    });
+  }
+
+  /**
+   * 回合结束时的 strip 收尾：最终刷新一次 jobs 列表（spec 分支 6）。
+   * 仍有运行中的子代理 → 保持轮询，strip 跟到它们全部结束
+   * （refreshSubagents 发现空列表时自行停轮询）；一个都没有 → 立即清空。
+   */
+  private async settleSubagents(): Promise<void> {
+    await this.refreshSubagents();
+    if (this.subagents.length > 0) {
+      this.startSubagentPolling();
+      return;
+    }
+    this.clearSubagents();
+  }
+
+  private startSubagentPolling(): void {
+    if (this.subagentTimer) {
+      return;
+    }
+    void this.refreshSubagents();
+    this.subagentTimer = setInterval(() => void this.refreshSubagents(), 2_000);
+  }
+
+  private stopSubagentPolling(): void {
+    if (this.subagentTimer) {
+      clearInterval(this.subagentTimer);
+      this.subagentTimer = undefined;
+    }
+  }
+
+  /** 停轮询并清空 strip。子代理 job 与回合解耦、可跨回合存活，故本方法
+   *  只在确定无需展示时调用：新会话/切换会话，或 settleSubagents 确认
+   *  已无运行中的 job。 */
+  private clearSubagents(): void {
+    this.stopSubagentPolling();
+    if (this.subagents.length === 0) {
+      return;
+    }
+    this.subagents = [];
+    this.post({ kind: "subagents", sessionID: this.sessionId, jobs: [] });
+  }
+
+  /** Stop one subagent without cancelling the turn: interrupt its child session. */
+  private async stopSubagent(childSessionID: string): Promise<void> {
+    const client = this.client();
+    if (!client) {
+      return;
+    }
+    await this.safeCall(() => client.interrupt(childSessionID));
+    await this.refreshSubagents();
+  }
+
   private async refreshDiffs(): Promise<void> {
     if (!this.sessionId) {
       return;
@@ -1499,10 +1632,11 @@ export class ChatController implements vscode.Disposable {
       this.title = result.data.title;
       this.agent = result.data.agent;
       this.model = result.data.model;
+      this.isSubagentSession = result.data.parentID !== undefined;
       this.revertMessageID = result.data.revert?.messageID;
-      if (result.data.time.busy && !result.data.time.idle) {
-        this.busy = true;
-      }
+      // busy 双向重算（spec 分支 4）：服务器侧的 busy/idle 是唯一事实，
+      // 这里既置位也复位——单向置位会把已完成子会话的 busy 残留带进新会话。
+      this.busy = Boolean(result.data.time.busy) && !result.data.time.idle;
       this.post({
         kind: "sessionMeta",
         sessionID: this.sessionId,
@@ -1512,6 +1646,7 @@ export class ChatController implements vscode.Disposable {
         busy: this.busy,
         contextTokens: this.contextTokens,
         cacheHitRate: this.cacheHitRate,
+        isSubagentSession: this.isSubagentSession,
         created: result.data.time?.created,
         updated: result.data.time?.updated,
         cost: result.data.cost,
@@ -1532,6 +1667,9 @@ export class ChatController implements vscode.Disposable {
       this.refreshPermissions(),
       this.refreshDiffs(),
     ]);
+    if (this.busy) {
+      this.startSubagentPolling();
+    }
     this.postSnapshot();
   }
 
@@ -1546,6 +1684,8 @@ export class ChatController implements vscode.Disposable {
         busy: this.busy,
         queue: this.queue,
         queuePaused: this.queuePaused,
+        subagents: this.subagents,
+        isSubagentSession: this.isSubagentSession,
         messages: this.mergedMessages(),
         pending: this.pending,
         diffs: this.visibleDiffs(),
@@ -1561,6 +1701,8 @@ export class ChatController implements vscode.Disposable {
   }
 
   private clearTimers(): void {
+    this.stopPermissionPolling();
+    this.stopSubagentPolling();
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
@@ -1573,7 +1715,6 @@ export class ChatController implements vscode.Disposable {
       clearTimeout(this.deltaTimer);
       this.deltaTimer = undefined;
     }
-    this.stopPermissionPolling();
   }
 
   // --- permissions --------------------------------------------------------

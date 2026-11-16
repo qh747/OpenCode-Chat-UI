@@ -34,8 +34,12 @@ export function ContextBar({
   onRevealInExplorer,
 }: ContextBarProps) {
   const used = contextTokens;
-  const hasUsage = used !== undefined || cacheHitRate !== undefined;
-  if (!git?.branch && !workspacePath && !hasUsage) {
+  // A fresh session has no billed message yet, so there is no usage to report.
+  // The model's context window is still known, and the readout must not vanish
+  // between session creation and the first token report — show 0 of the limit
+  // and an unknown cache rate until the server bills the first assistant turn.
+  const showUsage = used !== undefined || cacheHitRate !== undefined || contextLimit !== undefined;
+  if (!git?.branch && !workspacePath && !showUsage) {
     return null;
   }
   return (
@@ -76,7 +80,7 @@ export function ContextBar({
             {workspacePath}
           </span>
         ))}
-      {hasUsage &&
+      {showUsage &&
         (onSessionInfo ? (
           <button className="ctx-right ctx-usage-btn" title={t("sessionInfoTitle")} onClick={onSessionInfo}>
             <UsageReadout used={used} contextLimit={contextLimit} cacheHitRate={cacheHitRate} />
@@ -99,18 +103,17 @@ function UsageReadout({
   contextLimit?: number;
   cacheHitRate?: number;
 }) {
+  const tokens = used ?? 0;
   return (
     <>
-      {used !== undefined && (
-        <span title={t("contextTokensTitle")}>
-          {formatTokens(used)}
-          {contextLimit ? ` / ${formatTokens(contextLimit)}` : ""}
-        </span>
-      )}
-      {used !== undefined && cacheHitRate !== undefined && <span className="ctx-sep">|</span>}
-      {cacheHitRate !== undefined && (
-        <span title={t("cacheHitRateTitle")}>{(cacheHitRate * 100).toFixed(0)}%</span>
-      )}
+      <span title={t("contextTokensTitle")}>
+        {formatTokens(tokens)}
+        {contextLimit ? ` / ${formatTokens(contextLimit)}` : ""}
+      </span>
+      <span className="ctx-sep">|</span>
+      <span title={t("cacheHitRateTitle")}>
+        {cacheHitRate !== undefined ? `${(cacheHitRate * 100).toFixed(0)}%` : "—"}
+      </span>
     </>
   );
 }

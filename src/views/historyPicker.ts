@@ -35,7 +35,11 @@ export async function showHistoryPicker(host: OpencodeHost, actions: HistoryActi
 
   type HistoryItem = vscode.QuickPickItem & { sessionId?: string };
   const items: HistoryItem[] = [];
-  for (const [label, list] of groupByDate(page.data)) {
+  // Subagent sessions stay out of the QuickPick: it is a flat, keyboard-first
+  // jump list, and folding structure into it would break arrow-key navigation.
+  // The webview history menu is where the parent/child shape lives (Q20).
+  const roots = page.data.filter((session) => session.parentID === undefined);
+  for (const [label, list] of groupByDate(roots)) {
     items.push({ label, kind: vscode.QuickPickItemKind.Separator });
     for (const session of list) {
       items.push({
