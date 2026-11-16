@@ -17,6 +17,7 @@ import "./manager.test";
 import "./message-attachments.test";
 import "./messages-order.test";
 import "./mention-trigger.test";
+import "./history-menu.test";
 import "./model-group.test";
 import "./opencode-config.test";
 import "./pending-selection.test";

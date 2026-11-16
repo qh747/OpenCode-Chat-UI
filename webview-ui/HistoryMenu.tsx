@@ -12,13 +12,17 @@ interface HistoryMenuProps {
   currentSessionId?: string;
   /** Called once when the menu opens so the host can fetch fresh sessions. */
   onOpen: () => void;
+  /** 测试开口：初始展开的根会话集合（生产代码不传，等同空集合）。 */
+  initialExpanded?: ReadonlySet<string>;
+  /** 测试开口：初始即展开弹层（生产代码不传，等同 false）。 */
+  initialOpen?: boolean;
 }
 
 /** Clock button + in-webview history menu anchored to the header button. */
-export function HistoryMenu({ dispatch, groups, currentSessionId, onOpen }: HistoryMenuProps) {
-  const [open, setOpen] = useState(false);
+export function HistoryMenu({ dispatch, groups, currentSessionId, onOpen, initialExpanded, initialOpen }: HistoryMenuProps) {
+  const [open, setOpen] = useState(initialOpen ?? false);
   /** Roots the user opened by hand; in-memory only, so a reload collapses them again. */
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => initialExpanded ?? new Set());
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -99,10 +103,12 @@ export function HistoryMenu({ dispatch, groups, currentSessionId, onOpen }: Hist
           >
             {canExpand ? (isOpen ? "▾" : "▸") : ""}
           </span>
-          {/* 状态直接用标题颜色表达，不再渲染独立圆点（spec 分支 1）。 */}
+          {/* 状态直接用标题颜色表达，不再渲染独立圆点（spec 分支 1）。
+              has-running-children 警示只给折叠行：展开时子代理行自带
+              状态色，红色警示反而与“失败”撞色（诊断 2026-11-17，用户截图）。 */}
           <span
             className={`history-title${
-              fold !== undefined && fold.runningChildren > 0 ? " has-running-children" : ""
+              fold !== undefined && fold.runningChildren > 0 && !isOpen ? " has-running-children" : ""
             } status-${session.status}`}
           >
             {session.title || t("untitled")}

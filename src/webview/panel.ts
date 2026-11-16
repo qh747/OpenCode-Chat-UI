@@ -1667,9 +1667,11 @@ export class ChatController implements vscode.Disposable {
       this.refreshPermissions(),
       this.refreshDiffs(),
     ]);
-    if (this.busy) {
-      this.startSubagentPolling();
-    }
+    // 子代理 job 与回合解耦，busy 与否都可能存在运行中的 job（spec 分支 6）：
+    // 切回等待子代理的父会话、面板重载、宿主 resync 都要恢复 strip，
+    // 故无条件起轮询。空列表且非 busy 时 refreshSubagents 一次刷新即自停，
+    // 不会造成常驻轮询。
+    this.startSubagentPolling();
     this.postSnapshot();
   }
 
