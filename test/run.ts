@@ -1,4 +1,6 @@
 // Test entry point: bundles all test files into one executable with node:test.
+// 测试入口先注入 jsdom 全局环境（见 dom-setup.ts 的说明）。
+import "./dom-setup";
 import "./attachments.test";
 import "./attachment-rows.test";
 import "./catalog-params.test";
@@ -8,10 +10,16 @@ import "./composer-persistence.test";
 import "./client-routes.test";
 import "./commands.test";
 import "./composer-keys.test";
+import "./composer-drafts.test";
+import "./composer-switch.test";
+import "./queue-strip.test";
+import "./question-form.test";
+import "./queue.test";
 import "./dcp-markers.test";
 import "./diff-list.test";
 import "./diffapply.test";
 import "./first-paint.test";
+import "./git-status.test";
 import "./i18n.test";
 import "./live-segments.test";
 import "./manager.test";

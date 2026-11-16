@@ -6,6 +6,8 @@ import type {
   AssistantContent,
   AssistantMessage,
   FileDiffInfo,
+  FormAnswerValue,
+  FormInfo,
   MessageInfo,
   PermissionRequest,
   PromptFileAttachment,
@@ -67,6 +69,8 @@ export class ChatController implements vscode.Disposable {
   }> = [];
   private deltaTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: PermissionRequest[] = [];
+  /** Pending session forms (the `question` tool); non-empty blocks the turn. */
+  private forms: FormInfo[] = [];
   private diffs: FileDiffInfo[] = [];
   /**
    * Files the user chose not to see, keyed by the diff they dismissed. A file
@@ -316,13 +320,20 @@ export class ChatController implements vscode.Disposable {
         break;
       }
       case "stageImage":
-        this.stageImage(web.requestId, web.name, web.dataBase64, web.mime);
+        // 记录请求发起时的会话：结果回传时带会话戳，webview 据此隔离。
+        this.stageImage(web.requestId, web.name, web.dataBase64, web.mime, this.sessionId);
         break;
       case "rewindTo":
         await this.rewindTo(web.messageID);
         break;
       case "permissionReply":
         await this.replyPermission(web.requestID, web.decision);
+        break;
+      case "formReply":
+        await this.replyForm(web.formID, web.answer);
+        break;
+      case "formCancel":
+        await this.cancelForm(web.formID);
         break;
       case "openDiff":
         await this.openDiff(web.file);
@@ -335,10 +346,10 @@ export class ChatController implements vscode.Disposable {
         await this.revertFile(web.file);
         break;
       case "searchFiles":
-        await this.searchFiles(web.requestId, web.query);
+        await this.searchFiles(web.requestId, web.query, this.sessionId);
         break;
       case "pickFiles":
-        await this.pickFiles(web.requestId);
+        await this.pickFiles(web.requestId, this.sessionId);
         break;
       case "openCLI":
         await this.openCLI();
@@ -716,6 +727,12 @@ export class ChatController implements vscode.Disposable {
     this.queue = [];
     this.queuePaused = false;
     this.pendingForce = undefined;
+    // 表单同样属于旧会话：切换/新建/删除即丢弃，避免旧会话的
+    // question 卡片污染新会话（与 messages/pending 同一套隔离原则）。
+    if (this.forms.length > 0) {
+      this.forms = [];
+      this.post({ kind: "forms", sessionID: this.sessionId, forms: [] });
+    }
   }
 
   /** Map a composer attachment to the prompt body's file shape. */
@@ -927,14 +944,20 @@ export class ChatController implements vscode.Disposable {
    * prompt API rejects temp-file paths, and inline data URIs also work when
    * the server runs on another host.
    */
-  private stageImage(requestId: string, name: string, dataBase64: string, mime: string): void {
+  private stageImage(
+    requestId: string,
+    name: string,
+    dataBase64: string,
+    mime: string,
+    sessionID?: string,
+  ): void {
     const ref = `staged:${requestId}`;
     this.stagedImages.set(ref, {
       name: name || "image.png",
       mime: mime || "image/png",
       data: dataBase64,
     });
-    this.post({ kind: "imageStaged", requestId, path: ref, name });
+    this.post({ kind: "imageStaged", requestId, path: ref, name, sessionID });
   }
 
   /** Rewind the session to just before the given message, reverting its file changes. */
@@ -1184,6 +1207,8 @@ export class ChatController implements vscode.Disposable {
           // 服务器拉起的回合（steer/continuation）也会启动子代理，
           // 轮询必须同样跟上（spec 分支 6）；已启动时为幂等 no-op。
           this.startSubagentPolling();
+          // 服务器拉起的回合同样可能弹权限/提问表单，兜底轮询一并跟上。
+          this.startPermissionPolling();
         }
         break;
       case "session.idle":
@@ -1253,6 +1278,33 @@ export class ChatController implements vscode.Disposable {
       case "session.permissions":
         if (eventSession === undefined || eventSession === this.sessionId) {
           void this.refreshPermissions();
+        }
+        break;
+      case "form.created": {
+        // The `question` tool: the server parked a form and the turn blocks
+        // until we answer or cancel. The event carries the full form.
+        // 实测 v2.3.0：sessionID 只在 data.form.sessionID，data 顶层没有
+        // sessionID —— 必须从表单对象兜底，否则卡片永远等不到实时推送。
+        const form = data.form as FormInfo | undefined;
+        const formSession = formEventSession(data);
+        if (form && formSession === this.sessionId) {
+          this.forms = [...this.forms.filter((f) => f.id !== form.id), form];
+          this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+          this.notify("notifications.permissionRequest", true, t("questionNotice"));
+          // The event stream is lossy; keep polling as the authoritative backstop.
+          this.startPermissionPolling();
+        }
+        break;
+      }
+      case "form.replied":
+      case "form.cancelled":
+        if (eventSession === this.sessionId) {
+          const formID = typeof data.id === "string" ? data.id : undefined;
+          if (formID) {
+            this.forms = this.forms.filter((f) => f.id !== formID);
+            this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+            this.scheduleMessagesRefresh(0);
+          }
         }
         break;
       case "session.agent.selected":
@@ -1480,9 +1532,31 @@ export class ChatController implements vscode.Disposable {
       if (previous === 0 && this.pending.length > 0) {
         this.notify("notifications.permissionRequest", true, t("permissionNotice"));
       }
-      if (this.pending.length === 0) {
+      // 表单与权限共用同一张轮询表：两者都为空才能收表，否则挂起的
+      // question 表单会在权限先清空时失去兜底刷新。
+      if (this.pending.length === 0 && this.forms.length === 0) {
         this.stopPermissionPolling();
       }
+    });
+  }
+
+  /**
+   * Pending forms for the open session. The `form.*` events are the fast path;
+   * this poll is the authoritative backstop, shared with the permission timer
+   * (the event stream is lossy and the turn is blocked until an answer lands).
+   */
+  private async refreshForms(): Promise<void> {
+    if (!this.sessionId) {
+      return;
+    }
+    const client = this.client();
+    if (!client) {
+      return;
+    }
+    await this.safeCall(async () => {
+      const result = await client.sessionForms(this.sessionId ?? "");
+      this.forms = result.data.filter((f) => f.sessionID === this.sessionId);
+      this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
     });
   }
 
@@ -1490,7 +1564,10 @@ export class ChatController implements vscode.Disposable {
     if (this.permissionTimer) {
       return;
     }
-    this.permissionTimer = setInterval(() => void this.refreshPermissions(), 1_500);
+    this.permissionTimer = setInterval(() => {
+      void this.refreshPermissions();
+      void this.refreshForms();
+    }, 1_500);
   }
 
   private stopPermissionPolling(): void {
@@ -1665,6 +1742,7 @@ export class ChatController implements vscode.Disposable {
       this.refreshSessionMeta(),
       this.refreshMessages(),
       this.refreshPermissions(),
+      this.refreshForms(),
       this.refreshDiffs(),
     ]);
     // 子代理 job 与回合解耦，busy 与否都可能存在运行中的 job（spec 分支 6）：
@@ -1686,6 +1764,7 @@ export class ChatController implements vscode.Disposable {
         busy: this.busy,
         queue: this.queue,
         queuePaused: this.queuePaused,
+        forms: this.forms,
         subagents: this.subagents,
         isSubagentSession: this.isSubagentSession,
         messages: this.mergedMessages(),
@@ -1728,6 +1807,49 @@ export class ChatController implements vscode.Disposable {
     }
     await this.safeCall(() => client.replyPermission(this.sessionId ?? "", requestID, decision));
     await this.refreshPermissions();
+  }
+
+  // --- forms (the `question` tool) ----------------------------------------
+
+  /** Submit the user's answers; the blocked tool completes and the turn resumes. */
+  private async replyForm(formID: string, answer: Record<string, FormAnswerValue>): Promise<void> {
+    const client = this.client();
+    if (!client || !this.sessionId) {
+      return;
+    }
+    try {
+      await client.replyForm(this.sessionId ?? "", formID, answer);
+    } catch (error) {
+      // The server rejected the answer (e.g. required field empty) — surface it
+      // and resync so the still-pending form does not vanish silently.
+      this.post({ kind: "error", message: errorMessage(error) });
+      await this.refreshForms();
+      return;
+    }
+    // Optimistic removal; the authoritative refresh confirms it.
+    this.forms = this.forms.filter((f) => f.id !== formID);
+    this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+    this.scheduleMessagesRefresh(0);
+  }
+
+  /** Dismiss the questions; the server tells the model to continue without answers. */
+  private async cancelForm(formID: string): Promise<void> {
+    const client = this.client();
+    if (!client || !this.sessionId) {
+      return;
+    }
+    try {
+      // A cancel with feedback becomes a ToolFailure the model reads and
+      // continues from; a bare cancel ends the step outright, so always explain.
+      await client.cancelForm(this.sessionId ?? "", formID, "User dismissed the questions without answering.");
+    } catch (error) {
+      this.post({ kind: "error", message: errorMessage(error) });
+      await this.refreshForms();
+      return;
+    }
+    this.forms = this.forms.filter((f) => f.id !== formID);
+    this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+    this.scheduleMessagesRefresh(0);
   }
 
   // --- diffs ------------------------------------------------------------
@@ -1821,7 +1943,7 @@ export class ChatController implements vscode.Disposable {
     return this.fileCache;
   }
 
-  async searchFiles(requestId: string, query: string): Promise<void> {
+  async searchFiles(requestId: string, query: string, sessionID?: string): Promise<void> {
     const files = await this.ensureFileCache();
     const q = query.toLowerCase();
     const scored = files
@@ -1830,10 +1952,10 @@ export class ChatController implements vscode.Disposable {
       .sort((a, b) => b.score - a.score)
       .slice(0, 15)
       .map((entry) => ({ path: entry.file.path, name: entry.file.name }));
-    this.post({ kind: "fileResults", requestId, results: scored });
+    this.post({ kind: "fileResults", requestId, results: scored, sessionID });
   }
 
-  async pickFiles(requestId: string): Promise<void> {
+  async pickFiles(requestId: string, sessionID?: string): Promise<void> {
     const files = await this.ensureFileCache();
     const items = files.map((file) => ({
       label: file.name,
@@ -1850,6 +1972,7 @@ export class ChatController implements vscode.Disposable {
       kind: "pickedPaths",
       requestId,
       paths: (picked ?? []).map((item) => item.path),
+      sessionID,
     });
   }
 
@@ -1899,6 +2022,20 @@ function diffKey(diff: FileDiffInfo): string {
 /** Stream ordinals are 0-based positions among a message's same-kind parts. */
 function ordinalOf(data: Record<string, unknown>): number {
   return typeof data.ordinal === "number" && data.ordinal >= 0 ? data.ordinal : 0;
+}
+
+/**
+ * A form event's owning session. Most events carry a top-level `data.sessionID`,
+ * but v2.3.0's `form.created` nests it inside `data.form.sessionID` only —
+ * without the fallback the question card never appears live.
+ */
+export function formEventSession(data: Record<string, unknown>): string | undefined {
+  const top = typeof data.sessionID === "string" ? data.sessionID : undefined;
+  if (top) {
+    return top;
+  }
+  const form = data.form as FormInfo | undefined;
+  return typeof form?.sessionID === "string" ? form.sessionID : undefined;
 }
 
 function pathBasename(p: string): string {

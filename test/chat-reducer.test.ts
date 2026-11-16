@@ -137,3 +137,92 @@ describe("chat reducer streaming", () => {
     assert.deepEqual(contentOf(state), []);
   });
 });
+
+describe("chat reducer session isolation", () => {
+  function fullSnapshot(sessionID: string): HostToWeb {
+    return {
+      kind: "snapshot",
+      snapshot: {
+        sessionID,
+        busy: false,
+        messages: [],
+        pending: [],
+        diffs: [],
+        catalog,
+        queue: [],
+        queuePaused: false,
+      },
+    };
+  }
+
+  test("snapshot clears errors and session-info fields of the previous session", () => {
+    const before = apply([
+      fullSnapshot("s1"),
+      { kind: "error", message: "旧会话的错误" },
+      { kind: "sessionMeta", sessionID: "s1", created: 111, updated: 222, cost: 0.5 },
+    ]);
+    assert.deepEqual(before.errors, ["旧会话的错误"]);
+    assert.equal(before.cost, 0.5);
+
+    const after = apply([fullSnapshot("s1"), fullSnapshot("s2")]);
+    assert.deepEqual(after.errors, []);
+    assert.equal(after.created, undefined);
+    assert.equal(after.updated, undefined);
+    assert.equal(after.cost, undefined);
+  });
+
+  test("fileResults from another session are dropped", () => {
+    const base = [fullSnapshot("s1"), fullSnapshot("s2")];
+    const dropped = apply([
+      ...base,
+      { kind: "fileResults", requestId: "r1", results: [{ path: "a.ts", name: "a.ts" }], sessionID: "s1" },
+    ]);
+    assert.deepEqual(Object.keys(dropped.fileResults), []);
+
+    const stamped = apply([
+      ...base,
+      { kind: "fileResults", requestId: "r2", results: [{ path: "b.ts", name: "b.ts" }], sessionID: "s2" },
+    ]);
+    assert.ok(stamped.fileResults["r2"]);
+  });
+
+  test("pickedPaths and imageStaged from another session are dropped", () => {
+    const base = [fullSnapshot("s1"), fullSnapshot("s2")];
+
+    const picks = apply([
+      ...base,
+      { kind: "pickedPaths", requestId: "p1", paths: ["a.ts"], sessionID: "s1" },
+    ]);
+    assert.deepEqual(Object.keys(picks.pickedPaths), []);
+
+    const picksOk = apply([
+      ...base,
+      { kind: "pickedPaths", requestId: "p2", paths: ["b.ts"], sessionID: "s2" },
+    ]);
+    assert.deepEqual(picksOk.pickedPaths["p2"], ["b.ts"]);
+
+    const images = apply([
+      ...base,
+      { kind: "imageStaged", requestId: "i1", path: "staged:i1", name: "x.png", sessionID: "s1" },
+    ]);
+    assert.deepEqual(Object.keys(images.stagedImages), []);
+
+    const imagesOk = apply([
+      ...base,
+      { kind: "imageStaged", requestId: "i2", path: "staged:i2", name: "x.png", sessionID: "s2" },
+    ]);
+    assert.ok(imagesOk.stagedImages["i2"]);
+  });
+
+  test("responses without a session stamp stay compatible with an old host", () => {
+    const state = apply([
+      fullSnapshot("s1"),
+      { kind: "fileResults", requestId: "r1", results: [] },
+      { kind: "pickedPaths", requestId: "p1", paths: [] },
+      { kind: "imageStaged", requestId: "i1", path: "staged:i1", name: "x.png" },
+    ]);
+    assert.ok(state.fileResults["r1"]);
+    assert.ok(state.pickedPaths["p1"]);
+    assert.ok(state.stagedImages["i1"]);
+  });
+});

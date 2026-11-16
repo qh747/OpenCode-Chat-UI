@@ -9,6 +9,7 @@ import { Dropdown } from "./Dropdown";
 import { ModelPicker } from "./ModelPicker";
 import { HistoryMenu } from "./HistoryMenu";
 import { QueueStrip } from "./QueueStrip";
+import { QuestionForm } from "./QuestionForm";
 import { SubagentStrip } from "./SubagentStrip";
 import { SessionInfo } from "./SessionInfo";
 import type { ComposerHandle } from "./composerTypes";
@@ -292,6 +293,15 @@ export function App({ state, send, composerHandleRef }: Props) {
         />
       ))}
 
+      {hasMessages && state.forms.map((form) => (
+        <QuestionForm
+          key={form.id}
+          form={form}
+          onReply={(formID, answer) => send({ kind: "formReply", formID, answer })}
+          onCancel={(formID) => send({ kind: "formCancel", formID })}
+        />
+      ))}
+
       {hasMessages && (
         <DiffList
           diffs={state.diffs}
@@ -317,6 +327,7 @@ export function App({ state, send, composerHandleRef }: Props) {
         <QueueStrip
           queue={state.queue}
           paused={state.queuePaused}
+          sessionID={state.sessionID}
           onForce={(id) => send({ kind: "forceQueued", id })}
           onRemove={(id) => send({ kind: "removeQueued", id })}
           onResume={() => send({ kind: "resumeQueue" })}
@@ -331,6 +342,7 @@ export function App({ state, send, composerHandleRef }: Props) {
         busy={state.busy}
         canSend={state.connection === "connected"}
         submitKey={state.submitKey}
+        sessionID={state.sessionID}
         context={
           state.showContextBar
             ? {
@@ -350,6 +362,7 @@ export function App({ state, send, composerHandleRef }: Props) {
             : undefined
         }
         pickers={pickers}
+        queuedCount={state.queue.length}
         fileResults={state.fileResults}
         commands={state.catalog.commands}
         skills={state.catalog.skills}

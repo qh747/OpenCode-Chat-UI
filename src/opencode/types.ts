@@ -213,6 +213,64 @@ export interface JobInfo {
   description?: string;
 }
 
+// --- session forms (the `question` tool) -----------------------------------
+//
+// The server's `question` tool creates a pending form (form.created event,
+// metadata.kind === "question") and blocks the turn until the client answers
+// via POST /api/session/{id}/form/{formID}/reply or cancels via DELETE.
+// Verified live against v2.3.0: string fields answer with a plain string,
+// multiselect fields with an array of strings.
+
+export interface FormOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+interface FormFieldBase {
+  key: string;
+  title?: string;
+  description?: string;
+  required?: boolean;
+  hidden?: boolean;
+  /** Accepts a free-form answer in addition to the listed options. */
+  custom?: boolean;
+  placeholder?: string;
+}
+
+export interface StringFormField extends FormFieldBase {
+  type: "string";
+  options?: FormOption[];
+  default?: string;
+  placeholder?: string;
+}
+
+export interface MultiselectFormField extends FormFieldBase {
+  type: "multiselect";
+  options: FormOption[];
+  default?: string[];
+  minItems?: number;
+  maxItems?: number;
+}
+
+/**
+ * Fields the question tool produces. The server schema also allows
+ * number/integer/boolean/external fields; they never come from `question`,
+ * so unknown kinds are tolerated at runtime but not modelled here.
+ */
+export type FormField = StringFormField | MultiselectFormField;
+
+export interface FormInfo {
+  id: string;
+  sessionID: string;
+  title: string;
+  metadata?: Record<string, unknown>;
+  fields: FormField[];
+}
+
+/** What a form field answers with: plain string for `string`, array for `multiselect`. */
+export type FormAnswerValue = string | string[];
+
 /** Envelope for every SSE event delivered on GET /api/event. */
 export interface OEvent {
   id: string;

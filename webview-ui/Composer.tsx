@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch } from "./state";
 import type { ChipInput, ComposerHandle } from "./composerTypes";
+import { ComposerDraftStore } from "./composerDrafts";
 import { ContextBar } from "./ContextBar";
 import type { ContextBarProps } from "./ContextBar";
 import { BUILTIN_COMMANDS, filterCommands, filterSkills, mergeMentions, splitCommandInput } from "../src/util/commands";
@@ -41,8 +42,12 @@ interface ComposerProps {
   canSend: boolean;
   /** Which keystroke sends the message (Shift+Enter always a newline). */
   submitKey: SubmitKey;
+  /** The open session; drafts and attachments are bucketed per session. */
+  sessionID?: string;
   /** Mode/model/effort pickers rendered into the composer action bar. */
   pickers?: React.ReactNode;
+  /** Number of messages waiting in this session's queue (drives the busy hint). */
+  queuedCount?: number;
   /** fileResults from the store, keyed by requestId. */
   fileResults: Record<string, { path: string; name: string }[]>;
   /** Slash commands from the server catalog. */
@@ -93,7 +98,9 @@ export function Composer({
   busy,
   canSend,
   submitKey,
+  sessionID,
   pickers,
+  queuedCount,
   fileResults,
   commands,
   skills,
@@ -123,6 +130,34 @@ export function Composer({
   /** chips 的实时镜像：document 级 paste 监听用，规避闭包过期。 */
   const chipsRef = useRef(chips);
   chipsRef.current = chips;
+  /** 草稿的实时镜像：会话切换时存入旧会话的桶（规避闭包过期）。 */
+  const textRef = useRef(text);
+  textRef.current = text;
+  /** 按会话分桶的草稿仓：切走存旧、切回取新，互不串桶。 */
+  const draftsRef = useRef(new ComposerDraftStore<Chip>());
+  const sessionRef = useRef(sessionID);
+
+  // 会话切换：把当前草稿存回旧会话，恢复新会话自己的草稿（默认为空）。
+  // 补全弹层、预览等瞬态一律清空，与"内容只在所属会话呈现"一致。
+  useEffect(() => {
+    if (sessionRef.current === sessionID) {
+      return;
+    }
+    const from = sessionRef.current;
+    sessionRef.current = sessionID;
+    const restored = draftsRef.current.switch(from, sessionID, {
+      text: textRef.current,
+      chips: chipsRef.current,
+    });
+    setText(restored.text);
+    setChips(restored.chips);
+    setCaret(restored.text.length);
+    setSuppressedAt(null);
+    setActive(undefined);
+    setPreview(null);
+    setImageNotice(undefined);
+    // text/chips 读自 ref，故意不进依赖：切换时取"当时的"草稿而非跟随重渲。
+  }, [sessionID]);
 
   const commandMode = text.startsWith("/");
   const commandQuery = commandMode ? text.slice(1) : "";
@@ -730,25 +765,36 @@ export function Composer({
               +
             </button>
             {pickers}
+            {busy && (queuedCount ?? 0) > 0 && (
+              <span className="queued-hint">{t("queuedHint", { count: queuedCount ?? 0 })}</span>
+            )}
           </div>
           <span className="spacer" />
-          <button
-            className="send-btn"
-            onClick={doSend}
-            disabled={!text.trim() || !canSend}
-            title={busy ? t("queueTitleBusy") : t("sendTitle")}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 19V6.4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-              <path
-                d="M5.8 12.6 12 6.4l6.2 6.2"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
+          {busy ? (
+            // 任务执行中：同一位置变为停止按钮（点击中断，Esc 同效）；
+            // 输入框保持可输入，Enter 按设置的发送键排队。
+            <button className="send-btn stop" onClick={onAbort} title={t("stopTitle")}>
+              <span className="stop-square" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              className="send-btn"
+              onClick={doSend}
+              disabled={!text.trim() || !canSend}
+              title={t("sendTitle")}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 19V6.4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                <path
+                  d="M5.8 12.6 12 6.4l6.2 6.2"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
         </div>
         {imageNotice && <div className="image-notice">{imageNotice}</div>}
         {commandMode && (commandList.length > 0 || skillRows.length > 0) && (

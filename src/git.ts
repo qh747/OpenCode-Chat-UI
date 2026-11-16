@@ -50,7 +50,12 @@ export class GitStatusProvider implements vscode.Disposable {
     // Read .git/HEAD synchronously so the branch is known before the first
     // webview render; the git extension may only report it a tick later.
     this.status = this.fallback();
-    void this.connect();
+    // connect 全程兜底：git API 形态变化等意外失败不能以未捕获错误的形式
+    // 冒泡到扩展宿主（扩展运行时状态会记录为 uncaught error）。
+    void this.connect().catch((error: unknown) => {
+      this.log?.(`git: connection failed — ${error instanceof Error ? error.message : String(error)}`);
+      this.publish(this.fallback());
+    });
   }
 
   get current(): GitStatus {
@@ -82,7 +87,7 @@ export class GitStatusProvider implements vscode.Disposable {
     }
     // Listen before scanning so a repository opened in between is not missed.
     api.onDidOpenRepository?.((repo) => {
-      if (this.covers(repo.rootUri.fsPath)) {
+      if (this.covers(repo?.rootUri?.fsPath ?? "")) {
         this.log?.(`git: repository opened at ${repo.rootUri.fsPath}`);
         this.bind(repo);
       }
@@ -118,7 +123,13 @@ export class GitStatusProvider implements vscode.Disposable {
     this.repoListener = undefined;
     this.repo = repo;
     if (repo) {
-      this.repoListener = repo.onDidChange(() => this.publish(this.read(repo)));
+      if (typeof repo.onDidChange === "function") {
+        this.repoListener = repo.onDidChange(() => this.publish(this.read(repo)));
+      } else {
+        // 部分环境下内置 git 扩展返回的仓库对象缺少 onDidChange 事件属性；
+        // 降级为不监听，仅保留下方一次性状态读取。
+        this.log?.("git: repository does not expose onDidChange; change listening disabled");
+      }
     }
     this.publish(this.read(repo));
   }
@@ -127,8 +138,13 @@ export class GitStatusProvider implements vscode.Disposable {
     if (!repo) {
       return this.fallback();
     }
-    const changes = repo.state.indexChanges.length + repo.state.workingTreeChanges.length;
-    return { branch: repo.state.HEAD?.name, dirty: changes > 0 };
+    const state = repo.state;
+    // state 形状异常（未就绪或 API 变化）时退回 .git/HEAD 直读，而不是抛错。
+    if (!state || !Array.isArray(state.indexChanges) || !Array.isArray(state.workingTreeChanges)) {
+      return this.fallback();
+    }
+    const changes = state.indexChanges.length + state.workingTreeChanges.length;
+    return { branch: state.HEAD?.name, dirty: changes > 0 };
   }
 
   /** Branch read straight from `.git/HEAD`; no dirty state available. */

@@ -3,6 +3,7 @@ import type {
   Catalog,
   ConnectionState,
   EditorFile,
+  FormInfo,
   GitInfo,
   HistoryGroup,
   HostToWeb,
@@ -34,6 +35,8 @@ export interface ChatState {
   busy: boolean;
   queue: QueuedMessage[];
   queuePaused: boolean;
+  /** Pending session forms (the `question` tool) awaiting an answer. */
+  forms: FormInfo[];
   /** Subagents currently running under this session. */
   subagents: SubagentJob[];
   /** True when the open session is a subagent's child session. */
@@ -74,6 +77,7 @@ export const initialState: ChatState = {
   busy: false,
   queue: [],
   queuePaused: false,
+  forms: [],
   subagents: [],
   isSubagentSession: false,
   messages: [],
@@ -104,6 +108,7 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     busy: snapshot.busy,
     queue: snapshot.queue,
     queuePaused: snapshot.queuePaused,
+    forms: snapshot.forms ?? state.forms,
     subagents: snapshot.subagents ?? [],
     isSubagentSession: snapshot.isSubagentSession ?? false,
     messages: snapshot.messages,
@@ -117,6 +122,12 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     workspacePath: snapshot.workspacePath,
     git: snapshot.git,
     editors: snapshot.editors ?? state.editors,
+    // 会话隔离（问题 1 扩展面）：错误横幅、会话信息面板的时间/费用都
+    // 属于旧会话，快照到达即清空，等新会话自己的 sessionMeta 补上。
+    errors: [] as string[],
+    created: undefined,
+    updated: undefined,
+    cost: undefined,
   };
 }
 
@@ -299,6 +310,12 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       }
       return { ...state, queue: message.queue, queuePaused: message.paused };
     }
+    case "forms": {
+      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+        return state;
+      }
+      return { ...state, forms: message.forms };
+    }
     case "subagents": {
       if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
         return state;
@@ -320,10 +337,21 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
     case "error":
       return { ...state, errors: [...state.errors.slice(-2), message.message] };
     case "fileResults":
+      // 附件检索结果归属发起请求时的会话（宿主在收到请求时盖章）：
+      // 会话已切换的结果一律丢弃，避免 A 发起的补全/拾取串到 B。
+      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+        return state;
+      }
       return { ...state, fileResults: { ...state.fileResults, [message.requestId]: message.results } };
     case "pickedPaths":
+      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+        return state;
+      }
       return { ...state, pickedPaths: { ...state.pickedPaths, [message.requestId]: message.paths } };
     case "imageStaged":
+      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+        return state;
+      }
       return {
         ...state,
         stagedImages: {

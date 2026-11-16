@@ -2,7 +2,7 @@
   "name": "opencode-vscode",
   "displayName": "OpenCode for VS Code",
   "description": "A chat panel for your local opencode CLI: streaming replies, sessions tree, native diffs and permission prompts. Reuses your existing opencode login (including OpenCode Go subscriptions).",
-  "version": "0.4.11",
+  "version": "0.4.18",
   "publisher": "qh747",
   "license": "MIT",
   "icon": "icons/marketplace.png",
@@ -149,7 +149,10 @@
         },
         "opencode.composer.submitKey": {
           "type": "string",
-          "enum": ["enter", "ctrlEnter"],
+          "enum": [
+            "enter",
+            "ctrlEnter"
+          ],
           "enumDescriptions": [
             "%opencode.composer.submitKey.enter%",
             "%opencode.composer.submitKey.ctrlEnter%"
@@ -170,7 +173,10 @@
         },
         "opencode.ui.preferredLocation": {
           "type": "string",
-          "enum": ["sidebar", "editor"],
+          "enum": [
+            "sidebar",
+            "editor"
+          ],
           "enumDescriptions": [
             "%opencode.ui.preferredLocation.sidebar%",
             "%opencode.ui.preferredLocation.editor%"
@@ -197,11 +203,13 @@
     "prototype:render": "node prototype/chat-render/build.mjs",
     "prototype:attach": "node prototype/attach-render/build.mjs",
     "prototype:diffs": "node prototype/diff-visibility/build.mjs",
+    "prototype:send-stop": "node prototype/send-stop/build.mjs",
     "vscode:prepublish": "npm run typecheck && npm run lint && npm run compile",
     "package": "node scripts/release.mjs",
     "release": "node scripts/release.mjs"
   },
   "devDependencies": {
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -210,6 +218,7 @@
     "dompurify": "^3.2.0",
     "esbuild": "^0.25.0",
     "eslint": "^9.0.0",
+    "jsdom": "^31.0.1",
     "marked": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -30,6 +30,7 @@ const TOOL_VERBS: Record<string, MessageKey> = {
   task: "toolVerb.task",
   todowrite: "toolVerb.todos",
   todoread: "toolVerb.todos",
+  question: "toolVerb.question",
 };
 
 function toolVerb(name: string): string {

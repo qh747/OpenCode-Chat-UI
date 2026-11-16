@@ -49,6 +49,14 @@ const en = {
   alwaysAllow: "Always allow",
   deny: "Deny",
 
+  // question card (the `question` tool)
+  questionTitle: "Questions",
+  questionSubmit: "Submit",
+  questionSkip: "Dismiss",
+  questionSkipTitle: "Dismiss and let the model continue without answers",
+  questionCustomPlaceholder: "Or type your own answer…",
+  questionMultiHint: "Multiple choices allowed",
+
   // diff card
   diffExpand: "Show changed files",
   diffCollapse: "Hide changed files",
@@ -75,6 +83,7 @@ const en = {
   "toolVerb.webfetch": "Fetched",
   "toolVerb.task": "Task",
   "toolVerb.todos": "Todos",
+  "toolVerb.question": "Asked",
   thinking: "Thinking",
   thoughtFor: "Thought for {count}s",
 
@@ -97,6 +106,8 @@ const en = {
   attachFilesTitle: "Attach files",
   queueTitleBusy: "Add to queue (Enter)",
   sendTitle: "Send (Enter)",
+  stopTitle: "Stop (Esc)",
+  queuedHint: "{count} queued",
   maxImages: "Maximum {count} images per message.",
   chipHintImage: "Click to preview · sent as inline data URI",
   chipHintUrl: "Ctrl+click to open in browser · click to preview link",
@@ -178,6 +189,7 @@ const en = {
   turnCompleteNamed: "OpenCode: {title} finished.",
   turnComplete: "OpenCode: turn finished.",
   permissionNotice: "OpenCode: a permission request needs your approval.",
+  questionNotice: "OpenCode: the model is asking you a question.",
   errorNotice: "OpenCode: {message}",
   selectionTooLong: "(selection too long to auto-attach)",
   rewindConfirm:
@@ -277,6 +289,14 @@ const zhCn: Record<MessageKey, string> = {
   alwaysAllow: "总是允许",
   deny: "拒绝",
 
+  // question card（`question` 工具）
+  questionTitle: "提问",
+  questionSubmit: "提交",
+  questionSkip: "跳过",
+  questionSkipTitle: "跳过提问，让模型在没有回答的情况下继续",
+  questionCustomPlaceholder: "或输入自定义回答…",
+  questionMultiHint: "可多选",
+
   // diff card
   diffExpand: "展开已修改文件",
   diffCollapse: "收起已修改文件",
@@ -303,6 +323,7 @@ const zhCn: Record<MessageKey, string> = {
   "toolVerb.webfetch": "抓取",
   "toolVerb.task": "任务",
   "toolVerb.todos": "待办",
+  "toolVerb.question": "提问",
   thinking: "思考中",
   thoughtFor: "思考 {count} 秒",
 
@@ -324,6 +345,8 @@ const zhCn: Record<MessageKey, string> = {
   attachFilesTitle: "附加文件",
   queueTitleBusy: "加入队列 (Enter)",
   sendTitle: "发送 (Enter)",
+  stopTitle: "停止执行 (Esc)",
+  queuedHint: "已排队 {count}",
   maxImages: "每条消息最多 {count} 张图片。",
   chipHintImage: "单击 预览图片 · 发送时以 inline data URI 传递",
   chipHintUrl: "Ctrl+单击 在浏览器中打开 · 单击 预览链接",
@@ -405,6 +428,7 @@ const zhCn: Record<MessageKey, string> = {
   turnCompleteNamed: "OpenCode：{title} 已完成。",
   turnComplete: "OpenCode：本轮已完成。",
   permissionNotice: "OpenCode：有权限请求等待你的批准。",
+  questionNotice: "OpenCode：模型正在向你提问。",
   errorNotice: "OpenCode：{message}",
   selectionTooLong: "（选区过长，未自动附加）",
   rewindConfirm: "回退到此消息之前？其后的消息将被移除，相应文件改动会被还原。",

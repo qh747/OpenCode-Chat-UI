@@ -47,4 +47,34 @@ describe("session-scoped client routes", () => {
     await assert.rejects(() => client.jobs(""), /session id is required/);
     assert.deepEqual(calls, []);
   });
+
+  test("form routes: list, reply, cancel", async () => {
+    const calls: string[] = [];
+    const bodies: string[] = [];
+    const client = new OpencodeClient({
+      baseUrl: "http://127.0.0.1:1",
+      password: "x",
+      fetchImpl: (async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push(String(url));
+        if (init?.body) {
+          bodies.push(String(init.body));
+        }
+        return new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+    await client.sessionForms("ses_1");
+    assert.deepEqual(calls, ["http://127.0.0.1:1/api/session/ses_1/form"]);
+    // string 字段 → 纯字符串；multiselect → 字符串数组（v2.3.0 实测）。
+    await client.replyForm("ses_1", "frm_1", { q0: "a", q1: ["x", "y"] });
+    assert.deepEqual(calls[1], "http://127.0.0.1:1/api/session/ses_1/form/frm_1/reply");
+    assert.deepEqual(JSON.parse(bodies[0] ?? ""), { answer: { q0: "a", q1: ["x", "y"] } });
+    await client.cancelForm("ses_1", "frm_2", "User dismissed the questions without answering.");
+    assert.equal(
+      calls[2],
+      "http://127.0.0.1:1/api/session/ses_1/form/frm_2?message=User%20dismissed%20the%20questions%20without%20answering.",
+    );
+  });
 });

@@ -3,6 +3,8 @@ import type {
   AssistantMessage,
   CommandInfo,
   FileDiffInfo,
+  FormAnswerValue,
+  FormInfo,
   JobInfo,
   ListPage,
   MessageInfo,
@@ -364,6 +366,37 @@ export class OpencodeClient {
       "POST",
       sessionPath(sessionID, `/permission/${encodeURIComponent(requestID)}/reply`),
       { decision },
+    );
+  }
+
+  /** Pending forms for a session (the `question` tool blocks on one). */
+  async sessionForms(sessionID: string): Promise<{ data: FormInfo[] }> {
+    return this.request<{ data: FormInfo[] }>("GET", sessionPath(sessionID, "/form"));
+  }
+
+  /**
+   * Answer a pending form. A string field answers with a plain string,
+   * a multiselect field with an array of strings (verified live on v2.3.0 —
+   * an array for a string field is rejected with FormInvalidAnswerError).
+   */
+  async replyForm(
+    sessionID: string,
+    formID: string,
+    answer: Record<string, FormAnswerValue>,
+  ): Promise<void> {
+    await this.request<unknown>(
+      "POST",
+      sessionPath(sessionID, `/form/${encodeURIComponent(formID)}/reply`),
+      { answer },
+    );
+  }
+
+  /** Cancel a pending form, optionally telling the asker why it went unanswered. */
+  async cancelForm(sessionID: string, formID: string, message?: string): Promise<void> {
+    const suffix = message !== undefined ? `?message=${encodeURIComponent(message)}` : "";
+    await this.request<unknown>(
+      "DELETE",
+      sessionPath(sessionID, `/form/${encodeURIComponent(formID)}${suffix}`),
     );
   }
 

@@ -7,6 +7,8 @@ import type {
   AssistantContent,
   CommandInfo,
   FileDiffInfo,
+  FormAnswerValue,
+  FormInfo,
   MessageInfo,
   ModelInfo,
   ModelRef,
@@ -16,6 +18,7 @@ import type {
 
 /** Re-exported for the webview components that render messages. */
 export type { MessageInfo };
+export type { FormInfo, FormAnswerValue };
 
 export type ConnectionState = "stopped" | "starting" | "connected" | "error";
 
@@ -60,6 +63,8 @@ export interface Snapshot {
   editors?: EditorFile[];
   queue: QueuedMessage[];
   queuePaused: boolean;
+  /** Pending session forms (the `question` tool) awaiting an answer. */
+  forms?: FormInfo[];
   /** Subagents currently running under this session. */
   subagents?: SubagentJob[];
   /** True when the open session is a subagent's child session. */
@@ -117,7 +122,7 @@ export type HostToWeb =
       /** Diff-list display settings; absent keeps what the panel already has. */
       diffList?: { maxVisibleRows: number };
     }
-  | { kind: "imageStaged"; requestId: string; path: string; name: string }
+  | { kind: "imageStaged"; requestId: string; path: string; name: string; sessionID?: string }
   | { kind: "history"; groups: HistoryGroup[] }
   | { kind: "snapshot"; snapshot: Snapshot }
   | {
@@ -149,6 +154,7 @@ export type HostToWeb =
   | { kind: "messages"; sessionID: string; messages: MessageInfo[] }
   | { kind: "busy"; sessionID?: string; busy: boolean }
   | { kind: "queue"; sessionID?: string; queue: QueuedMessage[]; paused: boolean }
+  | { kind: "forms"; sessionID?: string; forms: FormInfo[] }
   | { kind: "subagents"; sessionID?: string; jobs: SubagentJob[] }
   | { kind: "permissions"; sessionID?: string; pending: PermissionRequest[] }
   | { kind: "diffs"; sessionID?: string; diffs: FileDiffInfo[] }
@@ -156,8 +162,8 @@ export type HostToWeb =
   | { kind: "editors"; editors: EditorFile[] }
   | { kind: "attachmentPreview"; preview: AttachmentPreview }
   | { kind: "error"; message: string }
-  | { kind: "fileResults"; requestId: string; results: { path: string; name: string }[] }
-  | { kind: "pickedPaths"; requestId: string; paths: string[] };
+  | { kind: "fileResults"; requestId: string; results: { path: string; name: string }[]; sessionID?: string }
+  | { kind: "pickedPaths"; requestId: string; paths: string[]; sessionID?: string };
 
 export type WebToHost =
   | { kind: "ready" }
@@ -186,6 +192,8 @@ export type WebToHost =
   | { kind: "stageImage"; requestId: string; name: string; dataBase64: string; mime: string }
   | { kind: "rewindTo"; messageID: string }
   | { kind: "permissionReply"; requestID: string; decision: "once" | "always" | "reject" }
+  | { kind: "formReply"; formID: string; answer: Record<string, FormAnswerValue> }
+  | { kind: "formCancel"; formID: string }
   | { kind: "openDiff"; file: string }
   | { kind: "keepFile"; file: string }
   | { kind: "revertFile"; file: string }

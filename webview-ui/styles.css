@@ -283,7 +283,7 @@ body {
   align-items: center;
   gap: 7px;
   max-width: 100%;
-  padding: 3px 8px;
+  padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
@@ -606,7 +606,7 @@ body {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 1px 0;
+  padding: 3px 0;
   list-style: none;
   cursor: pointer;
   color: var(--muted);
@@ -753,6 +753,104 @@ body {
   margin-top: 8px;
 }
 
+/* question card（`question` 工具的表单卡，与权限卡同一插槽） */
+.question-card {
+  flex: none;
+  margin: 0 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--ok) 5%, transparent);
+}
+.question-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.q-field {
+  margin-bottom: 8px;
+}
+.q-label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.q-desc {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.q-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.q-options.multi {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.q-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--input-bg);
+  color: var(--fg);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.q-option:hover {
+  border-color: color-mix(in srgb, var(--fg) 40%, transparent);
+}
+.q-option.selected {
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.q-option-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.q-option-key {
+  color: var(--muted);
+  font-weight: 600;
+}
+.q-option-label {
+  font-weight: 600;
+}
+.q-option-desc {
+  color: var(--muted);
+  font-size: 11px;
+}
+.q-hint {
+  color: var(--muted);
+  font-size: 10.5px;
+  align-self: center;
+}
+.q-custom {
+  margin-top: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--fg);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.q-custom:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--fg) 40%, transparent);
+}
+.question-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 /* diff list */
 .diff-list {
   flex: none;
@@ -882,6 +980,26 @@ body {
   display: flex;
   gap: 4px;
   flex: none;
+}
+/* 保留/还原弱化为次级样式：无底色、细描边、弱化文字，避免与行内文件名争夺注意力 */
+.diff-buttons .btn {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+  padding: 3px 8px;
+}
+.diff-buttons .btn:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+.diff-buttons .btn.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.diff-buttons .btn.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  filter: none;
 }
 
 /* buttons */
@@ -1159,6 +1277,7 @@ body {
 .subagent-stop {
   flex: none;
   background: none;
+  border: none;
   color: var(--muted);
   font-family: inherit;
   font-size: 9.5px;
@@ -1807,6 +1926,28 @@ body {
 .send-btn:hover:not(:disabled) {
   background: #1f8fe6;
 }
+/* 任务执行中：同位置变为停止按钮（红色圆形 + 中心方块），点击中断当前轮 */
+.send-btn.stop {
+  background: var(--danger);
+}
+.send-btn.stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 85%, #ffffff);
+  filter: none;
+}
+.stop-square {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+/* 忙时左侧的排队微提示（如「已排队 2」） */
+.queued-hint {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--warn);
+  white-space: nowrap;
+}
 .send-btn:disabled {
   opacity: 0.45;
   cursor: default;
@@ -1959,10 +2100,17 @@ body {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
 /* Caret slot: subagent roots get a clickable triangle, roots without children
-   keep the same width so titles stay aligned down the column. */
+   keep the same width so titles stay aligned down the column. The slot is
+   wider and taller than the glyph itself — the click target must reach the
+   whole row height, not just the 10px glyph (用户反馈热区太小). */
 .history-caret {
   flex: none;
-  width: 12px;
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  margin: -6px 0;
   color: var(--muted);
   font-size: 10px;
   cursor: pointer;

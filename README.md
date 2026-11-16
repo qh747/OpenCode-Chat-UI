@@ -6,6 +6,10 @@ A [VS Code](https://code.visualstudio.com) extension that puts a full [opencode]
 
 > Community integration, not an official opencode product.
 
+![OpenCode panel open in a VS Code editor tab, next to the welcome screen](images/panel-locations.png)
+
+**One panel, anywhere.** The chat opens in the secondary sidebar (assistant view) or as an editor tab — drag it wherever you work.
+
 ## Features
 
 - **Chat panel** (secondary sidebar, movable anywhere) with streaming replies, markdown, collapsible thinking and tool cards.

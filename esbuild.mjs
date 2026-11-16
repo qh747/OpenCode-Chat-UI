@@ -59,7 +59,9 @@ const testBuild = {
   format: "cjs",
   platform: "node",
   target: "node20",
-  external: ["vscode"],
+  external: ["vscode", "jsdom"],
+  // git.ts 单测需要运行时 vscode API：alias 到测试替身模块（类型检查仍用 @types/vscode）。
+  alias: { vscode: path.join(root, "test", "vscode-stub.ts") },
   mainFields: ["module", "main"],
   sourcemap: false,
   minify: true,
