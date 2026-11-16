@@ -1,6 +1,6 @@
 # Glossary
 
-Canonical terms for the OpenCode for VS Code extension. Terms are domain concepts, not implementation details.
+Canonical terms for the OpenCode Side Panel extension. Terms are domain concepts, not implementation details.
 
 ## Chat domain
 
