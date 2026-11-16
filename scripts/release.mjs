@@ -4,7 +4,7 @@
  *
  * Usage:  npm run release            (verify + package)
  *         node scripts/release.mjs   (same thing)
- * Output: dist/opencode-vscode-<version>.vsix
+ * Output: dist/<extension-name>-<version>.vsix
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -17,7 +17,7 @@ process.chdir(root);
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const version = pkg.version;
 const outDir = path.join(root, "dist");
-const outFile = path.join(outDir, `opencode-vscode-${version}.vsix`);
+const outFile = path.join(outDir, `${pkg.name}-${version}.vsix`);
 
 function step(name, command, args) {
   console.log(`\n▶ ${name}`);
