@@ -1,29 +1,19 @@
 # Changelog
 
-## 0.4.17
+## 0.4.18
 
 - The README's screenshot is now actually shipped. The image reference (`images/panel-locations.png`) existed in both READMEs since 0.4.15, but the file itself was never committed, so the link was broken everywhere. The real screenshot (panel open in an editor tab beside the welcome screen) is now in the repository and packaged — `.vscodeignore` does not exclude `images/`, so the Marketplace listing renders it on the next publish.
 
-## 0.4.16
-
 - The question card now appears live. The server's `form.created` event (captured verbatim from a v2.3.0 server) carries the owning session only inside `data.form.sessionID` — the top-level `data.sessionID` the panel keyed on does not exist, so the live event was silently discarded and the card surfaced only after a session switch forced a resync. Session ownership now falls back to the nested form object; `form.replied`/`form.cancelled` (which do carry the top-level id + sessionID) are unchanged. Covered by a unit test against the exact captured payload shape.
 - Question options are letter-prefixed (`A.` `B.` `C.` …) so answers can be referred to by letter.
-
-## 0.4.15
 
 - While a turn is running, the composer's send button becomes a red stop button with a centered square (same spot, same size) — one click interrupts the turn, `Esc` still works. Typing stays open the whole time: queued follow-ups are entered as usual and sent with the configured send key (`Enter` by default); the send button itself no longer queues. A small "n queued" hint shows next to the pickers while messages are waiting. (Validated in `prototype/send-stop`, variant A.)
 - The diff list's keep/revert buttons are demoted to secondary style — no fill, hairline border, muted text (revert in red) — so they stop competing with the file names.
 - README gained a screenshot showing the panel open in an editor tab beside the welcome screen.
 
-## 0.4.14
-
 - Fixed an uncaught error in the extension's runtime state (`repo.onDidChange is not a function`). Some environments hand the built-in git extension's repository object over without its `onDidChange` event; the provider now degrades to a one-shot status read instead of throwing, guards against a repository `state` shape it does not recognize, and wraps the whole connection attempt so no git-API surprise can ever surface as an uncaught error again. Covered by a new unit test that drives the real provider against a stubbed git API reproducing the exact failure.
 
-## 0.4.13
-
-- Session isolation extended to every surface that survived a switch: error banners, the session-info panel's timestamps/cost, and async attachment responses (`@` file search results, the file-picker's picks, pasted/dropped images) all belonged to the previous session's state. Async responses are now stamped with the session that was open when the request was made — a file picker or image paste answered after a switch is dropped instead of dropping its chips into the new session's composer, and each snapshot clears the previous session's transient state. The composer's own draft/attachment scoping (0.4.12) was verified against a real-DOM test and is included.
-
-## 0.4.12
+- Session isolation extended to every surface that survived a switch: error banners, the session-info panel's timestamps/cost, and async attachment responses (`@` file search results, the file-picker's picks, pasted/dropped images) all belonged to the previous session's state. Async responses are now stamped with the session that was open when the request was made — a file picker or image paste answered after a switch is dropped instead of dropping its chips into the new session's composer, and each snapshot clears the previous session's transient state. The composer's own draft/attachment scoping above was verified against a real-DOM test and is included.
 
 - The model's `question` tool no longer deadlocks the turn. The tool parks a pending form on the server (`form.created` event) and waits for the client to answer — the panel had no form support at all, so the turn sat on a bare "question" tool row forever. Pending forms now surface as an interactive question card above the composer (choice buttons, multi-select, free-text answers, submit/dismiss), the answer is sent via `POST /api/session/{id}/form/{formID}/reply` (string fields answer with a plain string, multi-select with an array — verified live on v2.3.0), and dismissing tells the model to continue without answers. Forms ride the same authoritative polling backstop as permissions, since the event stream is lossy.
 - The composer's draft and attachments are scoped to their session. Both were component-local state in a component that stays mounted across session switches, so session A's text and file chips appeared in session B. Switching now files the outgoing draft under its own session and restores the incoming session's; the pre-session draft survives session creation.
