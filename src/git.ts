@@ -144,7 +144,11 @@ export class GitStatusProvider implements vscode.Disposable {
       return this.fallback();
     }
     const changes = state.indexChanges.length + state.workingTreeChanges.length;
-    return { branch: state.HEAD?.name, dirty: changes > 0 };
+    // HEAD 尚未解析（绑定时 state.HEAD 可能还是 undefined，detached HEAD 无 name）
+    // 不能当作"无分支"发布——那会覆盖同步回退已读到的分支，且在没有
+    // onDidChange 事件的环境里永远无法恢复。此时退回 .git/HEAD 直读。
+    const branch = state.HEAD?.name ?? readGitHead(this.folder.uri.fsPath);
+    return { branch, dirty: changes > 0 };
   }
 
   /** Branch read straight from `.git/HEAD`; no dirty state available. */

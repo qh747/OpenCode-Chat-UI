@@ -95,3 +95,29 @@ test("git provider falls back to .git/HEAD when the git extension is unavailable
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("git provider keeps the .git/HEAD branch when the repository state has no HEAD yet", async () => {
+  // 现场：真实仓库（.git/HEAD 可读），但 git 扩展返回的仓库对象在绑定时
+  // state 已就绪而 HEAD 尚未解析（undefined），且对象缺少 onDidChange 事件
+  // ——没有后续事件能把分支救回来，用户看到的是永久的"无 git"。
+  const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "git-stub-"));
+  fs.mkdirSync(nodePath.join(dir, ".git"));
+  fs.writeFileSync(nodePath.join(dir, ".git", "HEAD"), "ref: refs/heads/master\n");
+  const repo = {
+    rootUri: { fsPath: dir },
+    state: { HEAD: undefined, indexChanges: [], workingTreeChanges: [] },
+  };
+  slots.__vscodeGitExtensionForTest = { isActive: true, exports: { getAPI: () => ({ repositories: [repo] }) } };
+  const logs: string[] = [];
+  try {
+    const provider = new GitStatusProvider(folderOf(dir), (line) => logs.push(line));
+    await settle();
+    // 修复前：read() 用 state.HEAD?.name（undefined）覆盖了同步回退已读到的 master。
+    assert.deepEqual(provider.current, { branch: "master", dirty: false });
+    // 降级路径的日志仍应保留。
+    assert.ok(logs.some((line) => line.includes("onDidChange")), logs.join("\n"));
+  } finally {
+    slots.__vscodeGitExtensionForTest = undefined;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
