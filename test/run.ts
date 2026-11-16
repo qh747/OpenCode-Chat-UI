@@ -4,6 +4,7 @@ import "./attachment-rows.test";
 import "./catalog-params.test";
 import "./chat-render.test";
 import "./chat-reducer.test";
+import "./composer-persistence.test";
 import "./client-routes.test";
 import "./commands.test";
 import "./composer-keys.test";

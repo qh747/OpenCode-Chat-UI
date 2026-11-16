@@ -1159,8 +1159,6 @@ body {
 .subagent-stop {
   flex: none;
   background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
   color: var(--muted);
   font-family: inherit;
   font-size: 9.5px;
@@ -1169,10 +1167,17 @@ body {
 }
 .subagent-stop:hover {
   color: var(--danger);
-  border-color: var(--danger);
 }
 
 /* composer */
+/* Composer 的挂载槽位：查看子代理会话时组件仅隐藏不卸载，
+   保住主会话的草稿与已上传附件（issue 12）。 */
+.composer-slot {
+  flex: none;
+}
+.composer-slot.is-hidden {
+  display: none;
+}
 .composer {
   flex: none;
   padding: 0 10px 10px;

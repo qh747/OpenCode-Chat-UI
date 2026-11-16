@@ -323,7 +323,9 @@ export function App({ state, send, composerHandleRef }: Props) {
         />
       )}
 
-      {!state.isSubagentSession && (
+      {/* Composer 始终挂载、仅隐藏（issue 12）：查看子代理会话时若卸载组件，
+          主会话的草稿/已上传图片等局部状态会全部丢失。 */}
+      <div className={`composer-slot${state.isSubagentSession ? " is-hidden" : ""}`}>
       <Composer
         dispatch={send}
         busy={state.busy}
@@ -359,7 +361,7 @@ export function App({ state, send, composerHandleRef }: Props) {
           composerHandleRef.current = handle;
         }}
       />
-      )}
+      </div>
       <SessionInfo
         open={sessionInfoOpen}
         onClose={() => setSessionInfoOpen(false)}
