@@ -9,6 +9,7 @@ import { Dropdown } from "./Dropdown";
 import { ModelPicker } from "./ModelPicker";
 import { HistoryMenu } from "./HistoryMenu";
 import { QueueStrip } from "./QueueStrip";
+import { SubagentStrip } from "./SubagentStrip";
 import { SessionInfo } from "./SessionInfo";
 import type { ComposerHandle } from "./composerTypes";
 
@@ -23,6 +24,8 @@ export function App({ state, send, composerHandleRef }: Props) {
   const stickToBottom = useRef(true);
   const consumedPicks = useRef(new Set<string>());
   const consumedImages = useRef(new Set<string>());
+  /** 未消费 staged 图的首次出现时间，用于 30s 超时放弃。 */
+  const imageSeenAt = useRef(new Map<string, number>());
 
   // Feed file-picker results into composer chips.
   useEffect(() => {
@@ -35,13 +38,51 @@ export function App({ state, send, composerHandleRef }: Props) {
   }, [state.pickedPaths, composerHandleRef]);
 
   // Feed staged paste/drop images into composer chips.
+  // 未消费不丢弃（spec 分支 9）：composer 尚未挂载时先不标记，由重试间隔
+  // 每秒再投，直到被消费或超过 30s 放弃（宿主内存仍会在发送/丢弃时清理）。
   useEffect(() => {
-    for (const [requestId, image] of Object.entries(state.stagedImages)) {
-      if (!consumedImages.current.has(requestId)) {
-        consumedImages.current.add(requestId);
-        composerHandleRef.current?.setChips([{ path: image.path, name: image.name, kind: "image" }]);
+    const pending = Object.entries(state.stagedImages).filter(
+      ([requestId]) => !consumedImages.current.has(requestId),
+    );
+    if (pending.length === 0) {
+      return;
+    }
+    const deliver = (requestId: string, image: { path: string; name: string }) => {
+      if (!composerHandleRef.current || consumedImages.current.has(requestId)) {
+        return false;
+      }
+      composerHandleRef.current.setChips([{ path: image.path, name: image.name, kind: "image" }]);
+      consumedImages.current.add(requestId);
+      imageSeenAt.current.delete(requestId);
+      return true;
+    };
+    for (const requestId of pending.map(([requestId]) => requestId)) {
+      if (!imageSeenAt.current.has(requestId)) {
+        imageSeenAt.current.set(requestId, Date.now());
       }
     }
+    for (const [requestId, image] of pending) {
+      deliver(requestId, image);
+    }
+    if (pending.every(([requestId]) => consumedImages.current.has(requestId))) {
+      return;
+    }
+    const timer = setInterval(() => {
+      for (const [requestId, image] of Object.entries(state.stagedImages)) {
+        if (consumedImages.current.has(requestId)) {
+          continue;
+        }
+        const seen = imageSeenAt.current.get(requestId) ?? Date.now();
+        if (Date.now() - seen > 30_000) {
+          // 超时放弃：不再重试，避免陈旧条目无限重投。
+          consumedImages.current.add(requestId);
+          imageSeenAt.current.delete(requestId);
+          continue;
+        }
+        deliver(requestId, image);
+      }
+    }, 1_000);
+    return () => clearInterval(timer);
   }, [state.stagedImages, composerHandleRef]);
 
   // Auto-scroll while streaming (only if the user is near the bottom).
@@ -187,7 +228,12 @@ export function App({ state, send, composerHandleRef }: Props) {
             <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
           </svg>
         </button>
-        <HistoryMenu dispatch={send} groups={state.historyGroups} onOpen={() => send({ kind: "showHistory" })} />
+        <HistoryMenu
+          dispatch={send}
+          groups={state.historyGroups}
+          currentSessionId={state.sessionID}
+          onOpen={() => send({ kind: "showHistory" })}
+        />
         <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title={t("newSession")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -262,14 +308,22 @@ export function App({ state, send, composerHandleRef }: Props) {
         </button>
       )}
 
-      <QueueStrip
-        queue={state.queue}
-        paused={state.queuePaused}
-        onForce={(id) => send({ kind: "forceQueued", id })}
-        onRemove={(id) => send({ kind: "removeQueued", id })}
-        onResume={() => send({ kind: "resumeQueue" })}
+      <SubagentStrip
+        jobs={state.subagents}
+        onStop={(childSessionID) => send({ kind: "stopSubagent", childSessionID })}
       />
 
+      {!state.isSubagentSession && (
+        <QueueStrip
+          queue={state.queue}
+          paused={state.queuePaused}
+          onForce={(id) => send({ kind: "forceQueued", id })}
+          onRemove={(id) => send({ kind: "removeQueued", id })}
+          onResume={() => send({ kind: "resumeQueue" })}
+        />
+      )}
+
+      {!state.isSubagentSession && (
       <Composer
         dispatch={send}
         busy={state.busy}
@@ -305,6 +359,7 @@ export function App({ state, send, composerHandleRef }: Props) {
           composerHandleRef.current = handle;
         }}
       />
+      )}
       <SessionInfo
         open={sessionInfoOpen}
         onClose={() => setSessionInfoOpen(false)}

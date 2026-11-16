@@ -11,11 +11,14 @@
  */
 
 /**
- * A tag that stands alone on the last line: a compact id, optionally with a
- * priority label, or the XML form.
+ * A tag in trailing position: a compact id (optionally with a priority
+ * label) or the XML form, followed only by whitespace to the end of the
+ * text. Since 2026-11 the tag may sit right after the last sentence —
+ * models echo it glued to the final period, not always on its own line.
+ * Mid-text tags still stay: there they read as a real reference.
  */
 const TRAILING_TAG =
-  /(?:^|\n)[ \t]*(?:@(?:b\d+|\d+)@(?:\s*\[[^\]\n]*\])?|<dcp-message-id[^>]*>[^<]*<\/dcp-message-id>)[ \t]*\s*$/;
+  /(?:@(?:b\d+|\d+)@(?:\s*\[[^\]\n]*\])?|<dcp-message-id[^>]*>[^<]*<\/dcp-message-id>)[ \t]*\s*$/;
 
 export function stripTrailingMarkers(text: string): string {
   let current = text;

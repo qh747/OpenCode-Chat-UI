@@ -8,6 +8,7 @@ import type { CommandInfoLike, MentionOption, SkillOption } from "../src/util/co
 import type { CommandInfo, SkillInfo } from "../src/opencode/types";
 import type { AttachmentKind, AttachmentPreview, EditorFile } from "../src/webview/protocol";
 import { shouldSend, type SubmitKey } from "../src/util/composer-keys";
+import { mentionTail } from "../src/util/mention-trigger";
 import { t, type MessageKey } from "../src/util/i18n";
 
 const MAX_IMAGES = 6;
@@ -106,13 +107,22 @@ export function Composer({
   const [text, setText] = useState("");
   const [chips, setChips] = useState<Chip[]>([]);
   const [imageNotice, setImageNotice] = useState<string | undefined>();
-  const [mentionSuppressed, setMentionSuppressed] = useState(false);
+  /** Esc 抑制的那个 `@` 的下标；null = 未抑制。同一 `@` 保持抑制，
+   *  新 `@`（下标不同）自动重新武装（spec 分支 3，Q11）。 */
+  const [suppressedAt, setSuppressedAt] = useState<number | null>(null);
+  /** 最近一次输入/选择事件的光标位置；触发检测按光标前缀计算。 */
+  const [caret, setCaret] = useState<number | undefined>(undefined);
+  /** 中文输入法组合期间不触发/不重置补全（Q10b）。 */
+  const [composing, setComposing] = useState(false);
   const [active, setActive] = useState<ActiveList>(undefined);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const counter = useRef(0);
   const mentionRequestId = useRef("");
+  /** chips 的实时镜像：document 级 paste 监听用，规避闭包过期。 */
+  const chipsRef = useRef(chips);
+  chipsRef.current = chips;
 
   const commandMode = text.startsWith("/");
   const commandQuery = commandMode ? text.slice(1) : "";
@@ -132,8 +142,13 @@ export function Composer({
   const skillRows = commandMode
     ? filterSkills(skills, commandQuery.replace(/\s+.*$/, ""))
     : [];
-  const mentionQuery = /@([^\s@]*)$/.exec(text)?.[1];
-  const mentionOpen = !commandMode && !mentionSuppressed && mentionQuery !== undefined;
+  /** 光标前缀内的尾部 `@` 触发；渲染期随 text/caret 重算，永不会与文本脱节。 */
+  const mentionTailInfo = composing ? undefined : mentionTail(text, caret);
+  const mentionQuery = mentionTailInfo?.query;
+  const mentionOpen =
+    mentionTailInfo !== undefined &&
+    !commandMode &&
+    suppressedAt !== mentionTailInfo.atIndex;
 
   const mentionRows = useMemo<MentionRow[]>(() => {
     if (!mentionOpen) {
@@ -252,13 +267,21 @@ export function Composer({
     dispatch({ kind: "searchFiles", requestId, query });
   };
 
-  const handleChange = (value: string) => {
+  const handleChange = (value: string, selectionStart: number | undefined) => {
     setText(value);
-    const mentionMatch = /@([^\s@]*)$/.exec(value);
-    const query = mentionMatch?.[1];
-    if (!value.startsWith("/") && query !== undefined) {
-      setMentionSuppressed(false);
-      requestMention(query);
+    setCaret(selectionStart ?? value.length);
+    // 被抑制的那个 `@` 已不在原下标（被删除/清空），或 `@` 后出现了空格
+    // （spec 分支 3：空格后解除抑制）→ 解除抑制，重新武装。
+    if (suppressedAt !== null && (value[suppressedAt] !== "@" || value[suppressedAt + 1] === " ")) {
+      setSuppressedAt(null);
+    }
+    if (composing) {
+      // IME 组合期间不打搜索请求、不重置抑制；compositionend 后统一评估。
+      return;
+    }
+    const next = mentionTail(value, selectionStart ?? value.length);
+    if (next && !value.startsWith("/") && suppressedAt !== next.atIndex) {
+      requestMention(next.query);
     }
   };
 
@@ -288,12 +311,18 @@ export function Composer({
    *  the fresh `@` tail would otherwise open. */
   const acceptSkill = (skill: SkillOption) => {
     setText(`@${skill.id} `);
-    setMentionSuppressed(true);
+    // 刚插入的 `@` 在下标 0；抑制它，避免新尾部再次弹开文件补全。
+    setSuppressedAt(0);
     textareaRef.current?.focus();
   };
 
   const acceptMention = (row: MentionRow) => {
-    setText((current) => current.replace(/@([^\s@]*)$/, ""));
+    // 按触发信息精确移除 `@query`（光标不在文末时也不能多删）。
+    if (mentionTailInfo) {
+      const { atIndex, caret: tailCaret } = mentionTailInfo;
+      setText((current) => current.slice(0, atIndex) + current.slice(tailCaret));
+      setCaret(atIndex);
+    }
     if (row.group === "selected" && row.path) {
       addChip({ path: row.path, name: row.name, kind: "selection", range: row.range });
       return;
@@ -310,7 +339,7 @@ export function Composer({
   };
 
   const stageImageFile = (file: File) => {
-    const imageChips = chips.filter((c) => c.kind === "image").length;
+    const imageChips = chipsRef.current.filter((c) => c.kind === "image").length;
     if (imageChips >= MAX_IMAGES) {
       setImageNotice(t("maxImages", { count: MAX_IMAGES }));
       return;
@@ -332,22 +361,37 @@ export function Composer({
   };
 
   const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    for (const item of event.clipboardData.items) {
-      if (item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) {
-          event.preventDefault();
-          stageImageFile(file);
-        }
-      }
-    }
-    // A pasted bare URL becomes a link token instead of raw text.
+    // 图片粘贴已在 document 级监听统一处理（焦点不在输入框也能粘贴）；
+    // 这里只负责文本类粘贴：裸 URL 变成链接 token 而非原文。
     const pasted = event.clipboardData.getData("text/plain").trim();
     if (/^https?:\/\/\S+$/.test(pasted)) {
       event.preventDefault();
       addChip({ path: pasted, name: pasted, kind: "url" });
     }
   };
+
+  // 图片粘贴监听挂在 webview document 级（spec 分支 9）：外部复制图片后
+  // 焦点常不在输入框，textarea 的 paste 事件根本不会触发。命中图片即
+  // preventDefault 并进暂存流程；纯文本粘贴不受影响。
+  useEffect(() => {
+    const onWindowPaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
+      if (!items) {
+        return;
+      }
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            stageImageFile(file);
+          }
+        }
+      }
+    };
+    document.addEventListener("paste", onWindowPaste);
+    return () => document.removeEventListener("paste", onWindowPaste);
+  }, []);
 
   const onDrop = (event: React.DragEvent<HTMLTextAreaElement>) => {
     for (const file of event.dataTransfer.files) {
@@ -399,21 +443,25 @@ export function Composer({
         const command = commandList[active.index];
         if (command) {
           acceptCommand(command.name);
+          return true;
         }
       } else {
         const skill = skillRows[active.index - commandList.length];
         if (skill) {
           acceptSkill(skill);
+          return true;
         }
       }
-      return true;
+      // 列表为空/无高亮项：不吞 Enter（spec 分支 3，Q9）。
+      return false;
     }
     if (active?.kind === "mentions") {
       const row = mentionRows[active.index];
       if (row) {
         acceptMention(row);
+        return true;
       }
-      return true;
+      return false;
     }
     return false;
   };
@@ -514,8 +562,9 @@ export function Composer({
       dispatch({ kind: "cycleAgent", direction: 1 });
     }
     if (event.key === "Escape") {
-      if (mentionOpen) {
-        setMentionSuppressed(true);
+      if (mentionOpen && mentionTailInfo) {
+        // 抑制当前这个 `@`：补全关闭且不会因继续打字重新弹出（Q11）。
+        setSuppressedAt(mentionTailInfo.atIndex);
         return;
       }
       if (busy) {
@@ -648,7 +697,22 @@ export function Composer({
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(event) => handleChange(event.target.value)}
+          onChange={(event) => handleChange(event.target.value, event.target.selectionStart ?? undefined)}
+          onSelect={(event) => {
+            // 光标移动也要重新评估触发（光标离开 `@` 尾部时弹层应关闭）。
+            if (!composing) {
+              setCaret(event.currentTarget.selectionStart ?? undefined);
+            }
+          }}
+          onCompositionStart={() => setComposing(true)}
+          onCompositionEnd={(event) => {
+            setComposing(false);
+            const el = event.currentTarget;
+            const next = mentionTail(el.value, el.selectionStart ?? undefined);
+            if (next && !el.value.startsWith("/") && suppressedAt !== next.atIndex) {
+              requestMention(next.query);
+            }
+          }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onDrop={onDrop}
@@ -687,11 +751,9 @@ export function Composer({
           </button>
         </div>
         {imageNotice && <div className="image-notice">{imageNotice}</div>}
-        {commandMode && (
+        {commandMode && (commandList.length > 0 || skillRows.length > 0) && (
           <div className="mention-list" ref={listRef}>
-            {commandList.length === 0 && skillRows.length === 0 ? (
-              <div className="mention-empty">{t("noMatchingCommands")}</div>
-            ) : (
+            {
               <>
                 {commandList.map((command, index) => (
                   <button
@@ -719,14 +781,13 @@ export function Composer({
                   </button>
                 ))}
               </>
-            )}
+            }
           </div>
         )}
-        {mentionOpen && (
+        {/* 无匹配即关闭弹层：不再渲染“没有匹配的文件”空态（spec 分支 3，Q9）。 */}
+        {mentionOpen && mentionRows.length > 0 && (
           <div className="mention-list" ref={listRef}>
-            {mentionRows.length === 0 ? (
-              <div className="mention-empty">{t("noMatchingFiles")}</div>
-            ) : (
+            {
               mentionRows.map((row, index) => (
                 <div key={row.key}>
                   {(index === 0 || mentionRows[index - 1]?.group !== row.group) && (
@@ -752,7 +813,7 @@ export function Composer({
                   </button>
                 </div>
               ))
-            )}
+            }
           </div>
         )}
       </div>

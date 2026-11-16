@@ -158,7 +158,7 @@ function ThinkingRow({ part }: { part: Extract<AssistantContent, { type: "reason
         <span className="tool-row-chev">›</span>
       </summary>
       <div className="tool-row-body">
-        <Markdown text={part.text} className="thinking-body" />
+        <Markdown text={stripTrailingMarkers(part.text)} className="thinking-body" />
       </div>
     </details>
   );

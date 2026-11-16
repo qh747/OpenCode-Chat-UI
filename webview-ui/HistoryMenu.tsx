@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "./state";
 import type { HistoryGroup } from "../src/webview/protocol";
-import { relativeSessionTime } from "../src/util/sessions";
+import { relativeSessionTime, rootToExpand } from "../src/util/sessions";
+import type { FoldedHistoryRow, HistoryRow } from "../src/util/sessions";
 import { t } from "../src/util/i18n";
 
 interface HistoryMenuProps {
   dispatch: Dispatch;
   groups: HistoryGroup[];
+  /** The session on screen; its root opens itself so the menu never hides it (Q23). */
+  currentSessionId?: string;
   /** Called once when the menu opens so the host can fetch fresh sessions. */
   onOpen: () => void;
 }
 
 /** Clock button + in-webview history menu anchored to the header button. */
-export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
+export function HistoryMenu({ dispatch, groups, currentSessionId, onOpen }: HistoryMenuProps) {
   const [open, setOpen] = useState(false);
+  /** Roots the user opened by hand; in-memory only, so a reload collapses them again. */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -43,7 +48,121 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
     onOpen();
   };
 
-  const hasSessions = groups.some((g) => g.sessions.length > 0);
+  const toggle = (rootID: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(rootID)) {
+        next.delete(rootID);
+      } else {
+        next.add(rootID);
+      }
+      return next;
+    });
+  };
+
+  const switchTo = (id: string) => {
+    dispatch({ kind: "switchSession", id });
+    setOpen(false);
+  };
+
+  const hasSessions = groups.some((group) => group.sessions.length > 0);
+  const forcedRoot = rootToExpand(
+    groups.flatMap((group) => group.sessions),
+    currentSessionId,
+  );
+
+  const renderRow = (session: HistoryRow, fold?: FoldedHistoryRow, indent = false) => {
+    const isChild = indent;
+    const canExpand = fold !== undefined && fold.children.length > 0;
+    const isOpen = canExpand && (expanded.has(session.id) || session.id === forcedRoot);
+    return (
+      <div
+        key={session.id}
+        className={`history-row-wrap${isChild ? " history-child" : ""}`}
+      >
+        <button
+          className={`history-row${session.id === currentSessionId ? " is-current" : ""}`}
+          onClick={() => switchTo(session.id)}
+          title={session.title}
+        >
+          <span
+            className={`history-caret${canExpand ? "" : " is-empty"}`}
+            aria-hidden="true"
+            onClick={
+              canExpand
+                ? (event) => {
+                    event.stopPropagation();
+                    toggle(session.id);
+                  }
+                : undefined
+            }
+          >
+            {canExpand ? (isOpen ? "▾" : "▸") : ""}
+          </span>
+          {/* 状态直接用标题颜色表达，不再渲染独立圆点（spec 分支 1）。 */}
+          <span
+            className={`history-title${
+              fold !== undefined && fold.runningChildren > 0 ? " has-running-children" : ""
+            } status-${session.status}`}
+          >
+            {session.title || t("untitled")}
+          </span>
+          {fold !== undefined && fold.children.length > 0 && (
+            <span className="history-subagents">
+              {fold.children.length === 1
+                ? t("historySubagentCountOne")
+                : t("historySubagentCount", { count: fold.children.length })}
+              {fold.runningChildren > 0 &&
+                ` · ${t("historySubagentRunning", { count: fold.runningChildren })}`}
+            </span>
+          )}
+          <span className="history-time">{relativeSessionTime(session.updated)}</span>
+        </button>
+        <div className="history-actions">
+          <button
+            className="history-action"
+            title={t("renameTitle")}
+            onClick={() => {
+              dispatch({ kind: "renameSession", id: session.id, currentTitle: session.title });
+              setOpen(false);
+            }}
+          >
+            ✎
+          </button>
+          <button
+            className="history-action"
+            title={t("forkTitle")}
+            onClick={() => {
+              dispatch({ kind: "forkSession", id: session.id });
+              setOpen(false);
+            }}
+          >
+            ⧉
+          </button>
+          <button
+            className="history-action"
+            title={t("exportMdTitle")}
+            onClick={() => {
+              dispatch({ kind: "exportSession", id: session.id });
+              setOpen(false);
+            }}
+          >
+            ↧
+          </button>
+          <button
+            className="history-action danger"
+            title={t("deleteTitle")}
+            onClick={() => {
+              dispatch({ kind: "deleteSession", id: session.id });
+              setOpen(false);
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="dropdown history" ref={rootRef}>
@@ -61,65 +180,11 @@ export function HistoryMenu({ dispatch, groups, onOpen }: HistoryMenuProps) {
             groups.map((group) => (
               <div key={group.label}>
                 <div className="dropdown-group">{group.label}</div>
-                {group.sessions.map((session) => (
-                  <div key={session.id} className="history-row-wrap">
-                    <button
-                      className="history-row"
-                      onClick={() => {
-                        dispatch({ kind: "switchSession", id: session.id });
-                        setOpen(false);
-                      }}
-                      title={session.title}
-                    >
-                      <span
-                        className={`history-dot status-${session.status}`}
-                        aria-hidden="true"
-                      />
-                      <span className="history-title">{session.title || t("untitled")}</span>
-                      <span className="history-time">{relativeSessionTime(session.updated)}</span>
-                    </button>
-                    <div className="history-actions">
-                      <button
-                        className="history-action"
-                        title={t("renameTitle")}
-                        onClick={() => {
-                          dispatch({ kind: "renameSession", id: session.id, currentTitle: session.title });
-                          setOpen(false);
-                        }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        className="history-action"
-                        title={t("forkTitle")}
-                        onClick={() => {
-                          dispatch({ kind: "forkSession", id: session.id });
-                          setOpen(false);
-                        }}
-                      >
-                        ⧉
-                      </button>
-                      <button
-                        className="history-action"
-                        title={t("exportMdTitle")}
-                        onClick={() => {
-                          dispatch({ kind: "exportSession", id: session.id });
-                          setOpen(false);
-                        }}
-                      >
-                        ↧
-                      </button>
-                      <button
-                        className="history-action danger"
-                        title={t("deleteTitle")}
-                        onClick={() => {
-                          dispatch({ kind: "deleteSession", id: session.id });
-                          setOpen(false);
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
+                {group.sessions.map((fold) => (
+                  <div key={fold.root.id}>
+                    {renderRow(fold.root, fold)}
+                    {(expanded.has(fold.root.id) || fold.root.id === forcedRoot) &&
+                      fold.children.map((child) => renderRow(child, undefined, true))}
                   </div>
                 ))}
               </div>

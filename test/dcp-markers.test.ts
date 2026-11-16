@@ -35,12 +35,24 @@ describe("trailing DCP markers", () => {
 
   test("something that only looks like a tag stays", () => {
     assert.equal(stripTrailingMarkers("写到的地址是 a@14@b.com"), "写到的地址是 a@14@b.com");
-    assert.equal(stripTrailingMarkers("列表项 @14@"), "列表项 @14@");
-    assert.equal(stripTrailingMarkers("工作区恢复原状。 @14@"), "工作区恢复原状。 @14@");
+    assert.equal(stripTrailingMarkers("列表项 @14@"), "列表项");
+    assert.equal(stripTrailingMarkers("工作区恢复原状。 @14@"), "工作区恢复原状。");
   });
 
   test("plain text is untouched apart from its trailing whitespace", () => {
     assert.equal(stripTrailingMarkers("没有标记。"), "没有标记。");
     assert.equal(stripTrailingMarkers("尾部空白  \n"), "尾部空白");
   });
+  test("a tag glued right after the last sentence goes", () => {
+    assert.equal(stripTrailingMarkers("工作区恢复原状。@14@"), "工作区恢复原状。");
+    assert.equal(stripTrailingMarkers("完成。@7@ [high]"), "完成。");
+    assert.equal(
+      stripTrailingMarkers("完成。<dcp-message-id>m0014</dcp-message-id>"),
+      "完成。",
+    );
+  });
+  test("a tag glued to the end of a word goes too (Q15: no prefix check)", () => {
+    assert.equal(stripTrailingMarkers("处理完成user@14@"), "处理完成user");
+  });
+
 });
