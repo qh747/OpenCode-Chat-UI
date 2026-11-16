@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.19
+
+- The context strip no longer loses the git branch before the first repository event. When the panel bound the built-in git extension's repository, `state.HEAD` could still be unresolved (`undefined`), and the provider published that verbatim — overwriting the branch it had already read synchronously from `.git/HEAD` in the constructor. In environments whose repository objects lack the `onDidChange` event (the 0.4.14 environment) no later event ever restored it, so the strip showed "no git" permanently in a managed repository. The live read now falls back to the `.git/HEAD` read whenever the repository state carries no branch name, which also fixes detached HEAD display. Locked down by a regression test that drives the real provider against a stubbed git API with a real `.git/HEAD`.
+
 ## 0.4.18
 
 - The README's screenshot is now actually shipped. The image reference (`images/panel-locations.png`) existed in both READMEs since 0.4.15, but the file itself was never committed, so the link was broken everywhere. The real screenshot (panel open in an editor tab beside the welcome screen) is now in the repository and packaged — `.vscodeignore` does not exclude `images/`, so the Marketplace listing renders it on the next publish.
