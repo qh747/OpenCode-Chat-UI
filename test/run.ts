@@ -35,6 +35,7 @@ import "./sessions.test";
 import "./session-info.test";
 import "./context-bar.test";
 import "./subagents.test";
+import "./settings-command.test";
 import "./settings-items.test";
 import "./settings-render.test";
 import "./tokens.test";

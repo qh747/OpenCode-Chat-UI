@@ -105,9 +105,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await host.restart();
     }),
     vscode.commands.registerCommand("opencode.openCLI", () => void chat.openCLI()),
-    vscode.commands.registerCommand("opencode.openSettings", () => {
-      void vscode.commands.executeCommand("workbench.action.openSettings", "@ext:qh747.opencode-vscode");
-    }),
+    vscode.commands.registerCommand("opencode.openSettings", () => openNativeSettings(context)),
     vscode.commands.registerCommand("opencode.openServerConfig", () =>
       openServerConfigTab(settings, context.extensionUri),
     ),
@@ -136,6 +134,16 @@ export function activate(context: vscode.ExtensionContext): void {
   if (vscode.workspace.getConfiguration("opencode").get<boolean>("startup.autoOpen", false)) {
     void vscode.commands.executeCommand("opencode.openChat");
   }
+}
+
+/**
+ * Opens VS Code's native settings page filtered to this extension. The id must
+ * come from the running extension (publisher + name in package.json); a
+ * hardcoded one goes stale whenever either is renamed and VS Code then shows
+ * "No settings found".
+ */
+function openNativeSettings(context: vscode.ExtensionContext): void {
+  void vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
 }
 
 function preferredLocation(): "sidebar" | "editor" {
@@ -182,10 +190,8 @@ function registerUiOnlyCommands(context: vscode.ExtensionContext, output: vscode
     }),
     vscode.commands.registerCommand("opencode.restartServer", () => undefined),
     vscode.commands.registerCommand("opencode.openCLI", () => undefined),
-    vscode.commands.registerCommand("opencode.openSettings", () => {
-      // The native settings page needs no workspace folder, unlike the rest.
-      void vscode.commands.executeCommand("workbench.action.openSettings", "@ext:qh747.opencode-vscode");
-    }),
+    // The native settings page needs no workspace folder, unlike the rest.
+    vscode.commands.registerCommand("opencode.openSettings", () => openNativeSettings(context)),
     vscode.commands.registerCommand("opencode.openServerConfig", () => {
       void vscode.window.showInformationMessage(t("noWorkspace"));
     }),

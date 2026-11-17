@@ -43,4 +43,54 @@ export const extensions = {
 };
 
 /** 占位：git.ts 运行时未使用 workspace 下的 API。 */
-export const workspace = { name: "stub" };
+export const workspace = { name: "stub", workspaceFolders: undefined };
+
+/** 与 vscode.env 行为一致的最小实现。 */
+export const env = { language: "en" };
+
+/** 与 vscode.window 行为一致的最小实现（只覆盖测试用到的 API）。 */
+export const window = {
+  createOutputChannel(_name: string) {
+    return {
+      appendLine(_line: string): void {},
+      show(_preserveFocus?: boolean): void {},
+      dispose(): void {},
+    };
+  },
+};
+
+/** 一次被记录下来的 executeCommand 调用，供断言使用。 */
+export interface RecordedCommandCall {
+  command: string;
+  args: unknown[];
+}
+
+const registeredCommands = new Map<string, (...args: unknown[]) => unknown>();
+
+/** 测试可读取的 executeCommand 调用记录。 */
+export const executedCommands: RecordedCommandCall[] = [];
+
+/** 每个测试自行清空命令注册表和调用记录。 */
+export function resetCommands(): void {
+  registeredCommands.clear();
+  executedCommands.length = 0;
+}
+
+/** 与 vscode.commands 行为一致的最小实现：注册、执行、记录原生设置页调用。 */
+export const commands = {
+  registerCommand(id: string, callback: (...args: unknown[]) => unknown): Disposable {
+    registeredCommands.set(id, callback);
+    return new Disposable(() => {
+      if (registeredCommands.get(id) === callback) {
+        registeredCommands.delete(id);
+      }
+    });
+  },
+  async executeCommand(command: string, ...args: unknown[]): Promise<unknown> {
+    if (command === "workbench.action.openSettings") {
+      executedCommands.push({ command, args });
+      return undefined;
+    }
+    return registeredCommands.get(command)?.(...args);
+  },
+};
