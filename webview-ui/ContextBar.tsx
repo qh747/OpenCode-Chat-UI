@@ -19,8 +19,9 @@ export interface ContextBarProps {
 }
 
 /**
- * One-line context strip under the composer: git branch and workspace path on
- * the left, context usage and cache hit rate on the right. The usage segment
+ * One-line context strip under the composer: git branch and workspace folder on
+ * the left, context usage and cache hit rate on the right. The folder shows its
+ * last segment only — the full path stays in the tooltip. The usage segment
  * doubles as the session-info opener when a handler is passed.
  */
 export function ContextBar({
@@ -37,11 +38,12 @@ export function ContextBar({
   // A fresh session has no billed message yet, so there is no usage to report.
   // The model's context window is still known, and the readout must not vanish
   // between session creation and the first token report — show 0 of the limit
-  // and an unknown cache rate until the server bills the first assistant turn.
+  // and a 100% cache rate (nothing billed, nothing missed) until the server
+  // bills the first assistant turn.
   const showUsage = used !== undefined || cacheHitRate !== undefined || contextLimit !== undefined;
-  if (!git?.branch && !workspacePath && !showUsage) {
-    return null;
-  }
+  // The strip never disappears now: the workspace segment always has a value,
+  // either the folder name or the no-dir marker, so an empty workspace still
+  // explains itself instead of leaving the composer without context.
   return (
     <div className="ctx-bar">
       {git?.branch ? (
@@ -52,10 +54,10 @@ export function ContextBar({
               title={t("openSourceControlTitle")}
               onClick={onOpenSourceControl}
             >
-              ⎇ {git.branch}
+              {git.branch}
             </button>
           ) : (
-            <span className="ctx-branch">⎇ {git.branch}</span>
+            <span className="ctx-branch">{git.branch}</span>
           )}
           {git.dirty && <span className="ctx-dirty">*</span>}
           <span className="ctx-sep">|</span>
@@ -66,20 +68,25 @@ export function ContextBar({
           <span className="ctx-sep">|</span>
         </>
       ) : null}
-      {workspacePath &&
-        (onRevealInExplorer ? (
+      {workspacePath ? (
+        onRevealInExplorer ? (
           <button
             className="ctx-path ctx-link"
             title={`${t("revealInExplorerTitle")} · ${workspacePath}`}
             onClick={onRevealInExplorer}
           >
-            {workspacePath}
+            {folderName(workspacePath)}
           </button>
         ) : (
           <span className="ctx-path" title={workspacePath}>
-            {workspacePath}
+            {folderName(workspacePath)}
           </span>
-        ))}
+        )
+      ) : (
+        <span className="ctx-path ctx-nodir" title={t("noWorkspace")}>
+          {t("noDir")}
+        </span>
+      )}
       {showUsage &&
         (onSessionInfo ? (
           <button className="ctx-right ctx-usage-btn" title={t("sessionInfoTitle")} onClick={onSessionInfo}>
@@ -112,7 +119,7 @@ function UsageReadout({
       </span>
       <span className="ctx-sep">|</span>
       <span title={t("cacheHitRateTitle")}>
-        {cacheHitRate !== undefined ? `${(cacheHitRate * 100).toFixed(0)}%` : "—"}
+        {cacheHitRate !== undefined ? `${(cacheHitRate * 100).toFixed(0)}%` : "100%"}
       </span>
     </>
   );
@@ -126,4 +133,12 @@ function formatTokens(value: number): string {
     return `${(value / 1000).toFixed(1)}k`;
   }
   return String(value);
+}
+
+/** Last segment of a Unix or Windows path; trailing separators are ignored. */
+export function folderName(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const parts = trimmed.split(/[\\/]/);
+  const name = parts[parts.length - 1];
+  return name || trimmed || path;
 }

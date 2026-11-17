@@ -1692,6 +1692,10 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* No workspace folder: the segment still says so instead of vanishing. */
+.ctx-nodir {
+  opacity: 0.6;
+}
 .ctx-right {
   margin-left: auto;
   display: flex;
@@ -1926,14 +1930,8 @@ body {
 .send-btn:hover:not(:disabled) {
   background: #1f8fe6;
 }
-/* 任务执行中：同位置变为停止按钮（红色圆形 + 中心方块），点击中断当前轮 */
-.send-btn.stop {
-  background: var(--danger);
-}
-.send-btn.stop:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 85%, #ffffff);
-  filter: none;
-}
+/* 任务执行中：同位置变为停止按钮（圆形不变，只把箭头换成中心方块），
+   点击中断当前轮；外围保持发送按钮的配色，不做红色告警。 */
 .stop-square {
   display: inline-block;
   width: 10px;

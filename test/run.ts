@@ -28,6 +28,7 @@ import "./messages-order.test";
 import "./mention-trigger.test";
 import "./history-menu.test";
 import "./model-group.test";
+import "./model-picker.test";
 import "./opencode-config.test";
 import "./pending-selection.test";
 import "./queue.test";

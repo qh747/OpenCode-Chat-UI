@@ -67,12 +67,10 @@ export function ModelPicker({
     <div className={`dropdown dropdown-wide model-picker${open ? " open" : ""}`} ref={rootRef}>
       <button className="dropdown-button" onClick={() => setOpen((c) => !c)} title={displayName}>
         {/* Two faces of the same picker. CSS shows exactly one, by container
-            width, so the label degrades as the panel narrows. */}
-        <span className="label-full">
-          <span className="picker-provider">{activeModel ? providerDisplayName(activeModel.providerID) : ""}</span>
-          {activeModel && <span className="picker-sep">/</span>}
-          <span className="picker-model-name">{displayName}</span>
-        </span>
+            width, so the label degrades as the panel narrows. The subscription
+            plan stays inside the menu (group headers + row badges); the closed
+            label names only the model the user picked. */}
+        <span className="label-full">{displayName}</span>
         <span className="label-short">{modelShortName(displayName)}</span>
         <span className="dropdown-caret">▾</span>
       </button>

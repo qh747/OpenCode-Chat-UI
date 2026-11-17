@@ -203,6 +203,7 @@
     "prototype:render": "node prototype/chat-render/build.mjs",
     "prototype:attach": "node prototype/attach-render/build.mjs",
     "prototype:diffs": "node prototype/diff-visibility/build.mjs",
+    "prototype:labels": "node prototype/labels/build.mjs",
     "prototype:send-stop": "node prototype/send-stop/build.mjs",
     "vscode:prepublish": "npm run typecheck && npm run lint && npm run compile",
     "package": "node scripts/release.mjs",
