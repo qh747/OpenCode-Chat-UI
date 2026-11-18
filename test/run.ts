@@ -19,6 +19,7 @@ import "./dcp-markers.test";
 import "./diff-list.test";
 import "./diff-refresh.test";
 import "./diff-disk-truth.test";
+import "./diff-send-memory.test";
 import "./revert-file.test";
 import "./session-meta.test";
 import "./session-switch.test";
