@@ -643,14 +643,22 @@ export class ChatController implements vscode.Disposable {
     const promptAttachments: PromptFileAttachment[] = staged.map((attachment) =>
       this.toPromptAttachment(attachment),
     );
-    const autoAttach = vscode.workspace
-      .getConfiguration("opencode")
-      .get<boolean>("context.autoAttachSelection", true);
-    if (autoAttach) {
-      const selection = this.activeSelection();
-      const alreadyAttached = staged.some((a) => a.ref === selection?.path);
-      if (selection && !alreadyAttached) {
-        promptAttachments.push(this.selectionAttachment(selection));
+    // 显示态边界(spec Q17-A):目标会话就是当前显示的会话,才允许触碰显示
+    // 态。后台排水(B 显示、A 的队列在后台启动回合)若无条件置位宿主 busy,
+    // B 的下一条消息会被 send() 扣进队列——而 B 没有回合在跑、永远等不到
+    // 排水;A 的气泡也会混进 B 的转录。队列/回合机制本身(prompt、在跑
+    // latch、排水簿记)对任意会话生效。
+    const displayed = sessionID === this.sessionId;
+    if (displayed) {
+      const autoAttach = vscode.workspace
+        .getConfiguration("opencode")
+        .get<boolean>("context.autoAttachSelection", true);
+      if (autoAttach) {
+        const selection = this.activeSelection();
+        const alreadyAttached = staged.some((a) => a.ref === selection?.path);
+        if (selection && !alreadyAttached) {
+          promptAttachments.push(this.selectionAttachment(selection));
+        }
       }
     }
     for (const attachment of staged) {
@@ -660,29 +668,33 @@ export class ChatController implements vscode.Disposable {
       text,
       links.map((link) => link.ref),
     );
-    // The rows the user reverted stay dismissed across turns: the signature
-    // memory is self-sufficient, only a changed signature revives a row
-    // (spec 决策 Q6/Q9).
-    this.busy = true;
-    this.turnFailed = false;
-    this.post({ kind: "busy", sessionID, busy: true });
-    this.startPermissionPolling();
-    this.startSubagentPolling();
-    // Optimistic local bubble: the user sees their message instantly instead
-    // of waiting for the server round-trip; the authoritative refresh replaces
-    // it with the real user message (with attachment metadata) moments later.
-    const localMessage: MessageInfo = {
-      type: "user",
-      id: `local-${Date.now()}`,
-      time: { created: Date.now() },
-      text,
-    };
-    this.messages.push(localMessage);
-    this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
-    // Remember the model actually in use for the picker's Recent section.
-    const usedModel = this.model ?? this.host.catalog.defaultModel;
-    if (usedModel) {
-      this.host.recordModelUsed(usedModel);
+    if (displayed) {
+      // The rows the user reverted stay dismissed across turns: the signature
+      // memory is self-sufficient, only a changed signature revives a row
+      // (spec 决策 Q6/Q9).
+      this.busy = true;
+      this.turnFailed = false;
+      this.post({ kind: "busy", sessionID, busy: true });
+      this.startPermissionPolling();
+      this.startSubagentPolling();
+      // Optimistic local bubble: the user sees their message instantly instead
+      // of waiting for the server round-trip; the authoritative refresh replaces
+      // it with the real user message (with attachment metadata) moments later.
+      const localMessage: MessageInfo = {
+        type: "user",
+        id: `local-${Date.now()}`,
+        time: { created: Date.now() },
+        text,
+      };
+      this.messages.push(localMessage);
+      this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
+      // Remember the model actually in use for the picker's Recent section.
+      // 只在显示会话的发送里记录:后台回合动不了显示会话 picker 的状态,
+      // 记下 this.model 会把 B 的 picker 选择记到 A 的回合头上。
+      const usedModel = this.model ?? this.host.catalog.defaultModel;
+      if (usedModel) {
+        this.host.recordModelUsed(usedModel);
+      }
     }
     try {
       // prompt 以显式所属会话为目标:不再使用裸 this.sessionId(spec Q19)。
