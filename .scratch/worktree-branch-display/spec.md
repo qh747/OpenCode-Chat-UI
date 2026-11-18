@@ -29,10 +29,10 @@
 | 复现链路(Q1/Q1b/Q1c) | agent 以 MCP 工具建 worktree 并在其中工作,会话未搬家;worktree 仓库对 VS Code 可见而面板不可见;手动切分支面板不更新 |
 | 主仓分支以谁为准(Q5) | **opencode 事件流为准**(不依赖可能缺失的 git 扩展事件),git 扩展降级为 dirty 来源 + 服务器离线时的兜底;事件与扩展不一致时事件更新者赢 |
 | worktree 模式显示形态(Q6) | 只显示分支名,tooltip 带 worktree 完整路径;目录段保持工作区文件夹不变 |
-| 切回时机(Q7) | 粘性:跟随最近一次属于(会话目录 / 本仓 worktree / 主仓)的分支信号;仅在切换/新建会话、或出现更新的主仓分支信号时切回 |
+| 切回时机(Q7) | 粘性:跟随最近一次属于(会话目录 / 本仓 worktree / 主仓)的分支信号;仅在切换/新建会话、或出现更新的主仓分支信号时切回。**裁决(spec 评审补)**:"更新的主仓信号切回"只作用于 worktree 启发层——会话目录层是会话的权威属性而非启发信号,只在会话身份变更时让位,否则 agent 搬移后的会话会被主仓噪声错误拉回工作区 |
 | dirty 星标(Q8) | worktree/会话目录模式下不显示(git 扩展对工作区外无仓库对象,不值得引 `git status` 子进程) |
 | 会话搬移冻住(潜在 bug) | 同批独立工票修复(过滤放宽) |
-| 文档(Q4) | GLOSSARY 3 词条 + ADR-0013 + 本 spec 与工票 |
+| 文档(Q4) | GLOSSARY 3 词条 + ADR-0014 + 本 spec 与工票 |
 
 ## 设计
 
@@ -50,7 +50,7 @@
   3. 否则工作区真值:`{branch: 事件分支 ?? GitStatusProvider 分支, dirty: provider}` —— 事件分支覆盖扩展分支,扩展追平(相等)后撤销覆盖,治疗降级环境的冻结。
 - 面板状态:
   - `sessionDirectory`:`refreshSessionMeta` 已经拿到、此前被忽略的 `result.data.location?.directory`;切换/新建/删除会话时同步清空(与 busy/messages 等 UI 态清理同点);
-  - `worktree`:`vcs.branch.updated` 且目录经 `isWorkspaceWorktree` 判为本仓 worktree 时记录 `{directory, branch}`(分支缺失时以 `readBranch(directory)` 兜一次);
+  - `worktree`:`vcs.branch.updated` 且目录经 `isWorkspaceWorktree` 判为本仓 worktree 时记录 `{directory, branch}`(事件缺分支时以 `readGitHead(directory)` 兜一次,盘上读不到才放弃);
   - `eventBranch`:目录=工作区的 `vcs.branch.updated` 采纳;`fullResync`(服务器重连/权威重读)时清空,退回扩展真值。
 - 发布:私有 `publishGit()` 计算生效值并与上次发布的值逐字段比较,变化才 `{kind:"git"}`;快照 `git` 字段同走生效值。git 扩展变化、worktree/主仓分支事件、会话目录变化、会话切换均触发。
 - 协议:`GitInfo` 增加 `directory?: string`(分支所属目录,工作区时缺省);`ContextBar` 分支段 tooltip 用它(worktree/会话目录模式显示 `branchDirTitle · 目录`),点击行为不变。
@@ -58,7 +58,7 @@
 
 ## 已知局限(接受并记录)
 
-- "最近一次信号优先"是启发式:用户手动在无关旧 worktree 切分支会把条带过去。本工作流中 agent 的 worktree 信号远多于人工操作;备选方案(按"会话开启后首次出现"限定)因面板重载后早建 worktree 失联而否决(ADR-0013)。
+- "最近一次信号优先"是启发式:用户手动在无关旧 worktree 切分支会把条带过去。本工作流中 agent 的 worktree 信号远多于人工操作;备选方案(按"会话开启后首次出现"限定)因面板重载后早建 worktree 失联而否决(ADR-0014)。
 - 多根窗口下面板仍绑 `workspaceFolders[0]`(超出本批;agent 上下文语义已让条上显示"该看的真相")。
 - 降级环境下 dirty 星标与 git 扩展一样可能滞后(仅主仓模式,影响面小)。
 - 会话中途被搬移(`session_move`)要等下一次 meta 刷新(回合结束)才更新 `sessionDirectory`;期间 worktree 的分支信号已先行接管显示,实践中无缝。

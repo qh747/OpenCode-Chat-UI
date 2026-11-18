@@ -10,7 +10,7 @@ import type { GitInfo } from "../src/webview/protocol";
 import type { QueuedMessage } from "../src/webview/protocol";
 
 /**
- * 分支条跟随 agent 工作上下文(spec 工票 01,ADR-0013):
+ * 分支条跟随 agent 工作上下文(spec 工票 01,ADR-0014):
  * - `vcs.branch.updated` 的目录是本仓 worktree → 条翻到该 worktree 分支;
  * - 目录是工作区 → 覆盖清除、采纳事件分支(治疗 git 扩展降级环境的冻结);
  * - `refreshSessionMeta` 捕获被搬移会话的 `location.directory`;
@@ -21,6 +21,7 @@ const proto = ChatController.prototype as unknown as Record<string, unknown>;
 const handleEvent = proto.handleEvent as (event: unknown) => void;
 const refreshSessionMeta = proto.refreshSessionMeta as () => Promise<void>;
 const switchSession = proto.switchSession as (id: string) => Promise<void>;
+const adoptGitStatus = proto.adoptGitStatus as (status: GitInfo) => void;
 
 const WS = "/repo";
 
@@ -126,13 +127,47 @@ describe("worktree branch events", () => {
     assert.deepEqual(lastGit(controller.posted), { branch: "feature/y", dirty: false });
   });
 
-  test("an event without a branch or directory is ignored", () => {
+  test("an event without a directory is ignored", () => {
     const controller = branchController();
     handleEvent.call(controller as unknown as ChatController, {
       type: "vcs.branch.updated",
-      data: {},
-      location: { directory: "/wt/x" },
+      data: { branch: "other" },
     });
+    assert.equal(lastGit(controller.posted), undefined);
+  });
+
+  test("a worktree event without a branch falls back to reading the checkout", () => {
+    const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "branch-evt-"));
+    try {
+      const wt = fakeWorktree(root, "review-fix", "ticket/fix-review");
+      const controller = branchController({
+        host: { isWorkspaceWorktree: (directory) => directory === wt },
+      });
+      handleEvent.call(controller as unknown as ChatController, {
+        type: "vcs.branch.updated",
+        data: {},
+        location: { directory: wt },
+      });
+      assert.deepEqual(controller.worktree, { directory: wt, branch: "ticket/fix-review" });
+      assert.deepEqual(lastGit(controller.posted), {
+        branch: "ticket/fix-review",
+        directory: wt,
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a worktree event without a branch and an unreadable checkout is ignored", () => {
+    const controller = branchController({
+      host: { isWorkspaceWorktree: (directory) => directory === "/wt/empty" },
+    });
+    handleEvent.call(controller as unknown as ChatController, {
+      type: "vcs.branch.updated",
+      data: {},
+      location: { directory: "/wt/empty" },
+    });
+    assert.equal(controller.worktree, undefined);
     assert.equal(lastGit(controller.posted), undefined);
   });
 
@@ -149,6 +184,28 @@ describe("worktree branch events", () => {
     const count = controller.posted.filter((m) => m.kind === "git").length;
     handleEvent.call(controller as unknown as ChatController, event);
     assert.equal(controller.posted.filter((m) => m.kind === "git").length, count);
+  });
+
+  test("the git extension catching up retires the event branch (ADR-0014 决策 2)", () => {
+    const controller = branchController();
+    handleEvent.call(controller as unknown as ChatController, {
+      type: "vcs.branch.updated",
+      data: { branch: "feature/x" },
+      location: { directory: WS },
+    });
+    assert.equal(controller.eventBranch, "feature/x");
+    // 扩展追平:同一分支到达 → 覆盖撤销。
+    adoptGitStatus.call(controller as unknown as ChatController, {
+      branch: "feature/x",
+      dirty: false,
+    });
+    assert.equal(controller.eventBranch, undefined);
+    // 扩展恢复活性:其后它自己的分支变化直接呈现,不再被旧事件压住。
+    adoptGitStatus.call(controller as unknown as ChatController, {
+      branch: "feature/y",
+      dirty: false,
+    });
+    assert.deepEqual(lastGit(controller.posted), { branch: "feature/y", dirty: false });
   });
 });
 

@@ -1,4 +1,5 @@
 import type { OEvent } from "./types";
+import { samePath } from "../util/same-path";
 
 export type EventStreamState = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -13,7 +14,7 @@ export interface EventStreamOptions {
   directory?: string;
   /**
    * Extra admission for events from other directories — the host passes its
-   * "is this one of the workspace's worktrees" rule here (ADR-0013), so
+   * "is this one of the workspace's worktrees" rule here (ADR-0014), so
    * branch updates and moved sessions working inside a worktree still reach
    * the panel. Only consulted for events that failed the `directory` match.
    */
@@ -146,7 +147,7 @@ export class OpencodeEventStream {
     if (
       directory &&
       eventDirectory &&
-      !pathsEqual(eventDirectory, directory) &&
+      !samePath(eventDirectory, directory) &&
       !this.options.acceptsDirectory?.(eventDirectory)
     ) {
       return;
@@ -156,11 +157,3 @@ export class OpencodeEventStream {
 }
 
 type AbortListener = () => void;
-
-function normalizePath(p: string): string {
-  return p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
-function pathsEqual(a: string, b: string): boolean {
-  return normalizePath(a) === normalizePath(b);
-}

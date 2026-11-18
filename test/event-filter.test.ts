@@ -4,7 +4,7 @@ import { OpencodeEventStream } from "../src/opencode/events";
 import type { OEvent } from "../src/opencode/types";
 
 /**
- * 目录过滤的放宽规则(spec 工票 02,ADR-0013):事件信封的
+ * 目录过滤的放宽规则(spec 工票 02,ADR-0014):事件信封的
  * `location.directory` 等于工作区才放行,宿主谓词可额外放行本仓的
  * worktree——worktree 的 `vcs.branch.updated` 信号与被搬移会话的
  * `session.*` 事件都靠这条缝进入面板。无 location 的事件维持放行。

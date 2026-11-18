@@ -79,3 +79,10 @@ describe("module locale", () => {
     assert.equal(t("retry"), "Retry");
   });
 });
+
+describe("branch context keys", () => {
+  test("branchDirTitle exists in both locales (spec 工票 01)", () => {
+    assert.match(messages.en.branchDirTitle ?? "", /working directory/);
+    assert.match(messages["zh-cn"].branchDirTitle ?? "", /工作目录/);
+  });
+});

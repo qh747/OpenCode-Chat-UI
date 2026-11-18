@@ -199,13 +199,29 @@ function readHead(gitDir: string): string | undefined {
       return parseHead(fs.readFileSync(nodePath.join(gitDir, "HEAD"), "utf8"));
     }
     // Worktree or submodule: ".git" is a file pointing at the real git dir.
-    const pointer = fs.readFileSync(gitDir, "utf8").trim();
+    const resolved = resolveGitPointer(gitDir);
+    if (resolved === undefined) {
+      return undefined;
+    }
+    return parseHead(fs.readFileSync(nodePath.join(resolved, "HEAD"), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Absolute git directory behind a `.git` pointer file, or undefined when
+ *  the path is not a `gitdir:` pointer. */
+function resolveGitPointer(gitPath: string): string | undefined {
+  try {
+    if (fs.statSync(gitPath).isDirectory()) {
+      return undefined; // a plain repository, not a pointer checkout
+    }
+    const pointer = fs.readFileSync(gitPath, "utf8").trim();
     const target = /^gitdir:\s*(.+)$/.exec(pointer)?.[1];
     if (!target) {
       return undefined;
     }
-    const resolved = nodePath.resolve(nodePath.dirname(gitDir), target.trim());
-    return parseHead(fs.readFileSync(nodePath.join(resolved, "HEAD"), "utf8"));
+    return nodePath.resolve(nodePath.dirname(gitPath), target.trim());
   } catch {
     return undefined;
   }
@@ -222,7 +238,7 @@ function parseHead(content: string): string | undefined {
 
 /**
  * "Is this directory a worktree of the workspace repository?" — the local
- * half of the event-filter rule (ADR-0013): opencode tags branch-change
+ * half of the event-filter rule (ADR-0014): opencode tags branch-change
  * events with the directory they happened in, and the workspace's own
  * worktrees must reach the panel. Resolution never consults the server: a
  * worktree checkout's `.git` is a file whose `gitdir:` target lives under
@@ -231,7 +247,7 @@ function parseHead(content: string): string | undefined {
  * re-checked every time, because the agent creates worktrees mid-session.
  */
 export class WorkspaceWorktrees {
-  private readonly hits = new Map<string, string>();
+  private readonly hits = new Set<string>();
 
   constructor(private readonly workspaceRoot: string) {}
 
@@ -247,7 +263,7 @@ export class WorkspaceWorktrees {
     const root = normalizePath(this.workspaceRoot);
     const marker = normalizePath(nodePath.join(root, ".git", "worktrees")) + "/";
     if (normalizePath(gitDir).startsWith(marker)) {
-      this.hits.set(key, gitDir);
+      this.hits.add(key);
       return true;
     }
     return false;
@@ -255,23 +271,23 @@ export class WorkspaceWorktrees {
 }
 
 /** The resolved git directory behind a worktree `.git` pointer file, or
- *  undefined when `directory` is not a worktree checkout. */
+ *  undefined when `directory` is not a worktree checkout. The nearest `.git`
+ *  decides: a plain repository (directory form) or a non-pointer file stops
+ *  the walk — a nested checkout must not adopt an ancestor's worktree. */
 function resolveWorktreeGitDir(directory: string): string | undefined {
   let dir = directory;
   for (;;) {
+    const gitPath = nodePath.join(dir, ".git");
+    let exists = false;
     try {
-      const gitPath = nodePath.join(dir, ".git");
-      if (fs.statSync(gitPath).isDirectory()) {
-        return undefined; // a plain repository, not a worktree checkout
-      }
-      const pointer = fs.readFileSync(gitPath, "utf8").trim();
-      const target = /^gitdir:\s*(.+)$/.exec(pointer)?.[1];
-      if (target) {
-        return nodePath.resolve(nodePath.dirname(gitPath), target.trim());
-      }
-      return undefined;
+      exists = fs.statSync(gitPath).isDirectory() || fs.statSync(gitPath).isFile();
     } catch {
-      // `.git` absent here: keep walking up (nested checkout layouts).
+      exists = false; // `.git` absent here: keep walking up
+    }
+    if (exists) {
+      // resolveGitPointer answers undefined for directories and
+      // non-pointer files alike — either way this is not a worktree.
+      return resolveGitPointer(gitPath);
     }
     const parent = nodePath.dirname(dir);
     if (parent === dir) {

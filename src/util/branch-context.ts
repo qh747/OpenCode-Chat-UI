@@ -1,4 +1,5 @@
 import type { GitInfo } from "../webview/protocol";
+import { samePath } from "./same-path";
 
 export interface WorkspaceStatus {
   branch?: string;
@@ -17,7 +18,7 @@ export interface BranchContextInput {
   workspace: WorkspaceStatus;
   /** Workspace branch reported by the event stream — fresher than the
    *  extension in environments where its repository objects lack
-   *  `onDidChange` and the branch would otherwise stay frozen (ADR-0013). */
+   *  `onDidChange` and the branch would otherwise stay frozen (ADR-0014). */
   eventBranch?: string;
   /** The session's server-side directory, when it left the workspace folder. */
   sessionDirectory?: string;
@@ -27,14 +28,8 @@ export interface BranchContextInput {
   worktree?: WorktreeSignal;
 }
 
-/** Path comparison ignores separators, trailing slashes and letter case. */
-export function samePath(a: string, b: string): boolean {
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-  return norm(a) === norm(b);
-}
-
 /**
- * The branch the context strip displays (ADR-0013): the agent's working
+ * The branch the context strip displays (ADR-0014): the agent's working
  * context first — the session's directory, then the active worktree of this
  * repository — and the workspace folder as the fallback. The override layers
  * carry no dirty state (only the workspace knows it) and expose the directory

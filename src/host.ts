@@ -23,7 +23,7 @@ export class OpencodeHost {
   private eventStream: OpencodeEventStream | undefined;
   private clientInstance: OpencodeClient | undefined;
   /** Worktrees of the workspace repository, for the event-filter rule and
-   *  the chat panel's branch context (ADR-0013). */
+   *  the chat panel's branch context (ADR-0014). */
   private readonly worktrees: WorkspaceWorktrees;
   private catalogCache: Catalog = {
     agents: [],
@@ -161,7 +161,7 @@ export class OpencodeHost {
         password: server.password,
         directory: this.folderPath,
         // Worktrees of this repository emit events under their own
-        // directories; the panel consumes their branch updates (ADR-0013).
+        // directories; the panel consumes their branch updates (ADR-0014).
         acceptsDirectory: (directory) => this.worktrees.isWorkspaceWorktree(directory),
         onEvent: (event) => {
           this.eventEmitter.fire(event);

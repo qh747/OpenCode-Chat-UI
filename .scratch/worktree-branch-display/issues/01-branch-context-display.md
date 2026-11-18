@@ -28,6 +28,7 @@ Blocked by: 02
 
 ## Comments
 
+- 2026-11-19 code-review 双轴修复(提交随评审批次):① ADR 编号 0013→0014——并行 agent 的 0013-export-full-transcript-lazy 已占号,全仓引用(spec/工票/代码注释)同步改;② worktree 事件缺分支时按 spec 以 `readGitHead(directory)` 兜一次落地(原实现直接丢弃,评审指出偏差),无分支+盘上不可读才忽略;③ 扩展追平即撤销 eventBranch 覆盖(ADR-0014 决策 2 原文),抽 `adoptGitStatus` 原型方法获得测试缝;④ Q7 张力裁决记录进 spec/ADR:"更新的主仓信号切回"只作用于 worktree 启发层,会话目录层只在会话身份变更时让位;⑤ 气味清理:samePath 收敛到 `src/util/same-path.ts`(events.ts 与 branch-context 共用,git.ts 的 normalizePath 保留——盘符特判语义不同),git.ts 指针解析抽 `resolveGitPointer` 共用,`WorkspaceWorktrees.hits` Map→Set。既有差异说明:身份变更点的覆盖清空保持内联(工票上文),评审建议的一行方法会重新引入 stub 委托面,两字段集合已稳定,不采纳。
 - 2026-11-19 实施完成,红绿顺序按计划走完。实施差异:会话身份变更点的覆盖清空改为**内联字段赋值**(与 busy 等显示态清理同风格),不新增方法依赖——既有 stub 测试零改动;`postSnapshot` 成为目标 git 的发布点并登记 `postedGit`,等值跳过防抖在快照与 {kind:"git"} 两种发布间保持一致。eventBranch 仅在 fullResync(服务器重连)清空,会话切换不清(它是工作区自己的最新真值,不属于会话)。span 形态仅在覆盖模式(directory 存在)才带 tooltip,默认形态与既有断言兼容。测试:branch-context(9 例)、branch-events(worktree 翻转/外部不达条/工作区切回+采纳事件分支/无分支或无目录忽略/等值去重/meta 捕获会话目录/switch 清空)、context-bar tooltip 三例。提交 e1b64f2、5c60e45、ff476f0。
 
 ## 红绿顺序

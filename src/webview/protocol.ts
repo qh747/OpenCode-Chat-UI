@@ -27,7 +27,7 @@ export interface GitInfo {
   branch?: string;
   dirty?: boolean;
   /** The directory the branch was read from when it is not the workspace
-   *  folder — a worktree or a moved session's directory (ADR-0013). */
+   *  folder — a worktree or a moved session's directory (ADR-0014). */
   directory?: string;
 }
 
