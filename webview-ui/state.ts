@@ -41,6 +41,8 @@ export interface ChatState {
   subagents: SubagentJob[];
   /** True when the open session is a subagent's child session. */
   isSubagentSession: boolean;
+  /** The parent of the open session; the back button's target. */
+  parentSessionID?: string;
   messages: MessageInfo[];
   /** True when the server may still have older messages beyond the loaded pages. */
   hasEarlier: boolean;
@@ -84,6 +86,7 @@ export const initialState: ChatState = {
   forms: [],
   subagents: [],
   isSubagentSession: false,
+  parentSessionID: undefined,
   messages: [],
   pending: [],
   diffs: [],
@@ -117,6 +120,8 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     forms: snapshot.forms ?? state.forms,
     subagents: snapshot.subagents ?? [],
     isSubagentSession: snapshot.isSubagentSession ?? false,
+    // 快照缺席即清除：父 id 是会话的属性，不是上一会话的遗留。
+    parentSessionID: snapshot.parentSessionID,
     messages: snapshot.messages,
     hasEarlier: snapshot.hasEarlier ?? false,
     loadingEarlier: snapshot.loadingEarlier ?? false,
@@ -254,6 +259,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         contextTokens: message.contextTokens ?? state.contextTokens,
         cacheHitRate: message.cacheHitRate ?? state.cacheHitRate,
         isSubagentSession: message.isSubagentSession ?? state.isSubagentSession,
+        parentSessionID: message.parentSessionID ?? state.parentSessionID,
         created: message.created ?? state.created,
         updated: message.updated ?? state.updated,
         cost: message.cost ?? state.cost,

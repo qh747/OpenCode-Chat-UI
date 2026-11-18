@@ -72,19 +72,20 @@ export function DiffList({ diffs, maxVisibleRows, initialOpen = false, onOpen, o
   }
   return (
     <div className="diff-list">
-      <div className="diff-head">
-        <button
-          className="diff-toggle"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          title={open ? t("diffCollapse") : t("diffExpand")}
-        >
-          <span className="diff-caret" aria-hidden="true">
-            {open ? "▾" : "▸"}
-          </span>
-          <span className="diff-count">{t("changesCount", { count: diffs.length })}</span>
-        </button>
-      </div>
+      {/* 整行即按钮（subagent-nav）：对齐 .subagent-head 的整行热区，
+          caret 和计数只是行内的展示，不再单独构成一个小按钮。 */}
+      <button
+        type="button"
+        className="diff-head"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        title={open ? t("diffCollapse") : t("diffExpand")}
+      >
+        <span className="diff-caret" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="diff-count">{t("changesCount", { count: diffs.length })}</span>
+      </button>
       <div
         className="diff-rows"
         style={{ "--diff-max-rows": String(maxVisibleRows) } as CSSProperties}

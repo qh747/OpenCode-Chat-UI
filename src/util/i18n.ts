@@ -165,6 +165,8 @@ const en = {
   // subagent strip
   subagentCount: "Subagent {count}",
   subagentStopTitle: "Stop this subagent",
+  subagentOpenTitle: "Open subagent session",
+  backToParent: "Back to parent session",
 
   // markdown code block
   copy: "copy",
@@ -400,6 +402,8 @@ const zhCn: Record<MessageKey, string> = {
   // subagent strip
   subagentCount: "子代理 {count}",
   subagentStopTitle: "停止这个子代理",
+  subagentOpenTitle: "查看子代理会话",
+  backToParent: "返回上一级会话",
 
   // markdown code block
   copy: "复制",

@@ -73,10 +73,13 @@ export function QueueStrip({ queue, paused, sessionID, onForce, onRemove, onResu
 
   return (
     <div className={`queue-strip${open ? " open" : ""}`}>
-      <div className="queue-head">
+      {/* 整行即热区（subagent-nav）：toggle 只挂在行容器上，行内的
+          queue-toggle 按钮保留 aria-expanded 供键盘/读屏触发（click 冒泡到
+          行，恰好 toggle 一次）；Resume 必须独占自己的点击，不能连带折叠。 */}
+      <div className="queue-head" onClick={() => dispatch({ type: "toggle" })}>
         <button
+          type="button"
           className="queue-toggle"
-          onClick={() => dispatch({ type: "toggle" })}
           aria-expanded={open}
           title={open ? t("queueCollapse") : t("queueExpand")}
         >
@@ -88,7 +91,13 @@ export function QueueStrip({ queue, paused, sessionID, onForce, onRemove, onResu
         </button>
         <span className="spacer" />
         {paused && (
-          <button className="queue-head-btn" onClick={onResume}>
+          <button
+            className="queue-head-btn"
+            onClick={(event) => {
+              event.stopPropagation();
+              onResume();
+            }}
+          >
             {t("resume")}
           </button>
         )}

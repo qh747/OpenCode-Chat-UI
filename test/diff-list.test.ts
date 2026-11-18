@@ -30,6 +30,9 @@ describe("diff list", () => {
     assert.doesNotMatch(html, /TEST\.md/);
     assert.doesNotMatch(html, /diff-status-badge/);
     assert.match(html, /aria-expanded="false"/);
+    // 整行热区（subagent-nav）：头部本身是按钮，不再有内嵌小 toggle。
+    assert.match(html, /<button[^>]*class="diff-head"/);
+    assert.doesNotMatch(html, /diff-toggle/);
   });
 
   test("expanded rows carry the change type as a class, no status text", () => {

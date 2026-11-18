@@ -205,6 +205,10 @@ export function App({ state, send, composerHandleRef }: Props) {
   // model and effort — in a single commit.
   const catalogReady = state.connection === "connected" && state.catalogLoaded;
 
+  // 返回按钮的目标（subagent-nav）：只在子代理会话里提供；本地 const
+  // 让 JSX 闭包里的窄化成立，也避免在渲染中途读到漂移的 state。
+  const parentSessionID = state.isSubagentSession ? state.parentSessionID : undefined;
+
   const pickers = catalogReady ? (
     <>
       <Dropdown
@@ -244,22 +248,44 @@ export function App({ state, send, composerHandleRef }: Props) {
   return (
     <div className="app">
       <div className="header">
-        <svg
-          className="header-mark"
-          width="17"
-          height="17"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          aria-hidden="true"
-        >
-          <rect x="1.75" y="1.75" width="20.5" height="20.5" rx="6" />
-          <g transform="translate(4.5 4.5) scale(0.625)" strokeWidth="2.72">
-            <rect x="3.2" y="3.2" width="17.6" height="17.6" />
-            <rect x="8" y="8" width="8" height="8" />
-          </g>
-        </svg>
+        {/* 子代理视图：装饰 logo 让位给返回按钮（Q7）——左上角、icon-btn
+            同规格，不加行高；点击走与历史菜单相同的 switchSession（Q1）。 */}
+        {parentSessionID ? (
+          <button
+            type="button"
+            className="icon-btn header-back"
+            onClick={() => send({ kind: "switchSession", id: parentSessionID })}
+            title={t("backToParent")}
+            aria-label={t("backToParent")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="m15 18-6-6 6-6"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        ) : (
+          <svg
+            className="header-mark"
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            aria-hidden="true"
+          >
+            <rect x="1.75" y="1.75" width="20.5" height="20.5" rx="6" />
+            <g transform="translate(4.5 4.5) scale(0.625)" strokeWidth="2.72">
+              <rect x="3.2" y="3.2" width="17.6" height="17.6" />
+              <rect x="8" y="8" width="8" height="8" />
+            </g>
+          </svg>
+        )}
         <span className="header-title" title={state.title}>
           {state.title ?? t("newSession")}
         </span>
@@ -377,6 +403,8 @@ export function App({ state, send, composerHandleRef }: Props) {
 
       <SubagentStrip
         jobs={state.subagents}
+        currentSessionId={state.sessionID}
+        onOpen={(childSessionID) => send({ kind: "switchSession", id: childSessionID })}
         onStop={(childSessionID) => send({ kind: "stopSubagent", childSessionID })}
       />
 

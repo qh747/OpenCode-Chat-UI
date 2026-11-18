@@ -80,6 +80,7 @@ describe("SubagentStrip", () => {
       createElement(SubagentStrip, {
         jobs: toSubagentJobs([running]),
         now: 13_000,
+        onOpen: () => {},
         onStop: () => {},
         initialExpanded: true,
       }),
@@ -88,6 +89,7 @@ describe("SubagentStrip", () => {
     assert.match(html, /class="subagent-agent">General</);
     assert.match(html, /class="subagent-desc"[^>]*>Run sleep 45</);
     assert.match(html, /class="subagent-elapsed">12s</);
+    assert.match(html, /class="subagent-open"/);
     assert.match(html, /class="subagent-stop"[^>]*>×<\/button>/);
   });
 
@@ -96,6 +98,7 @@ describe("SubagentStrip", () => {
       createElement(SubagentStrip, {
         jobs: toSubagentJobs([running]),
         now: 13_000,
+        onOpen: () => {},
         onStop: () => {},
       }),
     );
@@ -108,7 +111,7 @@ describe("SubagentStrip", () => {
 
   test("renders nothing without running subagents", () => {
     const html = renderToStaticMarkup(
-      createElement(SubagentStrip, { jobs: [], now: 13_000, onStop: () => {} }),
+      createElement(SubagentStrip, { jobs: [], now: 13_000, onOpen: () => {}, onStop: () => {} }),
     );
     assert.equal(html, "");
   });

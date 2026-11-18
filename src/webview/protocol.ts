@@ -73,6 +73,8 @@ export interface Snapshot {
   subagents?: SubagentJob[];
   /** True when the open session is a subagent's child session. */
   isSubagentSession?: boolean;
+  /** The parent of the open session; present only for a subagent's child session. */
+  parentSessionID?: string;
   /** The display language the panel renders copy in. */
   locale?: Locale;
 }
@@ -140,6 +142,8 @@ export type HostToWeb =
       cacheHitRate?: number;
       /** True when the open session is a subagent's child session. */
       isSubagentSession?: boolean;
+      /** The parent of the open session; the back button's target. */
+      parentSessionID?: string;
       /** Session timestamps, epoch ms (session info panel). */
       created?: number;
       updated?: number;

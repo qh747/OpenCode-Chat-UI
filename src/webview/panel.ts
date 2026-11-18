@@ -155,6 +155,8 @@ export class ChatController implements vscode.Disposable {
   private subagents: SubagentJob[] = [];
   /** True when the open session is a subagent's child session. */
   private isSubagentSession = false;
+  /** The open session's parent; the back button's switch target (subagent-nav). */
+  private parentSessionID?: string;
   private subagentTimer: ReturnType<typeof setInterval> | undefined;
   /** Token of the latest subagent poll; a stale response must not cross sessions. */
   private subagentRequest = 0;
@@ -547,6 +549,7 @@ export class ChatController implements vscode.Disposable {
       const sessionId = created.data.id;
       this.sessionId = sessionId;
       this.isSubagentSession = false;
+      this.parentSessionID = undefined;
       this.messages = [];
       this.resetStreams();
       this.pending = [];
@@ -588,6 +591,7 @@ export class ChatController implements vscode.Disposable {
     this.stashDismissed();
     this.sessionId = id;
     this.isSubagentSession = false;
+    this.parentSessionID = undefined;
     this.pendingAgent = undefined;
     this.pendingModel = undefined;
     // 换会话即离开旧回合的执行窗口：busy 必须先归零（spec 分支 4），
@@ -2090,6 +2094,7 @@ export class ChatController implements vscode.Disposable {
       this.agent = result.data.agent;
       this.model = result.data.model;
       this.isSubagentSession = result.data.parentID !== undefined;
+      this.parentSessionID = result.data.parentID;
       const previousRevert = this.revertMessageID;
       this.revertMessageID = result.data.revert?.messageID;
       if (this.revertMessageID !== previousRevert && this.earlierMessages.length > 0) {
@@ -2114,6 +2119,7 @@ export class ChatController implements vscode.Disposable {
         contextTokens: this.contextTokens,
         cacheHitRate: this.cacheHitRate,
         isSubagentSession: this.isSubagentSession,
+        parentSessionID: this.parentSessionID,
         created: result.data.time?.created,
         updated: result.data.time?.updated,
         cost: result.data.cost,
@@ -2159,6 +2165,7 @@ export class ChatController implements vscode.Disposable {
         forms: this.forms,
         subagents: this.subagents,
         isSubagentSession: this.isSubagentSession,
+        parentSessionID: this.parentSessionID,
         messages: this.renderableTranscript(),
         hasEarlier: this.hasEarlier,
         loadingEarlier: this.loadingEarlier,

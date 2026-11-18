@@ -68,6 +68,14 @@ body {
   color: var(--fg);
   opacity: 0.85;
 }
+/* 子代理视图的返回按钮（subagent-nav）：占据 logo 的位置，安静的
+   muted 色，hover 才回到前景——不突兀，但占满 26px 命中框。 */
+.header-back {
+  color: var(--muted);
+}
+.header-back:hover {
+  color: var(--fg);
+}
 .header .icon-btn {
   width: 26px;
   height: 26px;
@@ -879,12 +887,15 @@ body {
   background: color-mix(in srgb, var(--input-bg) 55%, transparent);
   overflow: hidden;
 }
+/* Three heads are one family of full-row buttons (subagent-nav): the whole
+   row toggles the strip, the caret and count inside are display only. */
 .diff-head,
 .queue-head,
 .subagent-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 4px 10px;
   border: none;
   background: none;
@@ -893,6 +904,8 @@ body {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
+  text-align: left;
+  cursor: pointer;
 }
 .diff-caret,
 .queue-caret,
@@ -918,10 +931,14 @@ body {
   font-family: var(--mono);
   font-size: 11px;
 }
-/* Row separation comes from spacing alone; hover marks the row being acted on. */
+/* Row separation comes from spacing alone; hover marks the row being acted on.
+   Heads get the same tint as their rows: the whole strip reads clickable. */
 .diff-card:hover,
 .queue-row:hover,
-.subagent-row:hover {
+.subagent-row:hover,
+.diff-head:hover,
+.queue-head:hover,
+.subagent-head:hover {
   background: color-mix(in srgb, var(--fg) 7%, transparent);
 }
 /* Icon actions in every strip share one hit box; only colour differs. */
@@ -946,24 +963,6 @@ body {
 }
 
 /* diff list */
-.diff-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 0;
-  background: none;
-  border: none;
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  cursor: pointer;
-}
-.diff-toggle:hover {
-  color: var(--fg);
-}
 /* Expanded rows: cap at N rows (--diff-max-rows, from opencode.diffList.maxVisibleRows)
    and scroll the rest instead of stretching the panel. 20px ≈ one unified row
    (rows have no separators); rows beyond the cap peek a few px as a scroll
@@ -1174,14 +1173,26 @@ body {
   max-height: 120px;
   overflow-y: auto;
 }
-/* SubagentStrip 标题行可点切换折叠（spec 分支 5）。 */
-.subagent-head {
-  width: 100%;
-  cursor: pointer;
-  text-align: left;
-}
+/* SubagentStrip 标题行整行热区（spec 分支 5，subagent-nav 统一进共享块）。 */
 .subagent-head:hover {
   color: var(--fg);
+}
+/* 行主体（agent+描述+耗时）是一个按钮：点击跳到子代理会话（subagent-nav）。
+   布局从行上原样搬进来：flex:1 接住原本由 desc 撑开的弹性。 */
+.subagent-open {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .subagent-dot {
   flex: none;

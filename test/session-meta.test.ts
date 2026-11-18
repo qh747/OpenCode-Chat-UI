@@ -29,6 +29,7 @@ interface SessionData {
 interface PostedMeta {
   kind: string;
   busy?: boolean;
+  parentSessionID?: string;
 }
 
 function metaController(sessionID: string, data: SessionData) {
@@ -39,6 +40,7 @@ function metaController(sessionID: string, data: SessionData) {
     agent: undefined as string | undefined,
     model: undefined,
     isSubagentSession: false,
+    parentSessionID: undefined as string | undefined,
     revertMessageID: undefined,
     busy: undefined as unknown as boolean,
     contextTokens: undefined,
@@ -95,5 +97,25 @@ describe("session meta busy predicate", () => {
     await run(controller);
 
     assert.equal(controller.busy, false);
+  });
+});
+
+describe("session meta ships the parent id (subagent-nav)", () => {
+  test("a child session posts its parent id for the back button", async () => {
+    const controller = metaController("ses_c", { title: "C", parentID: "ses_p", time: {} });
+
+    await run(controller);
+
+    const meta = controller.posted.find((message) => message.kind === "sessionMeta");
+    assert.equal(meta?.parentSessionID, "ses_p");
+  });
+
+  test("a root session posts no parent id", async () => {
+    const controller = metaController("ses_r", { title: "R", time: {} });
+
+    await run(controller);
+
+    const meta = controller.posted.find((message) => message.kind === "sessionMeta");
+    assert.equal(meta?.parentSessionID, undefined);
   });
 });
