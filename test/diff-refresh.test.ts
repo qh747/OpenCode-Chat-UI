@@ -2,7 +2,6 @@ import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import { ChatController } from "../src/webview/panel";
 import type { FileDiffInfo, MessageInfo } from "../src/opencode/types";
-import type { DiffRange } from "../src/util/session-diff";
 
 /**
  * `refreshDiffs` is fired by many events and by every session switch. Its

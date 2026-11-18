@@ -1,6 +1,6 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
-import { diffFileKey, diffRange, attributionSet, type DiffRange } from "../src/util/session-diff";
+import { diffFileKey, diffRange, attributionSet } from "../src/util/session-diff";
 import type { MessageInfo } from "../src/opencode/types";
 
 function assistant(files: string[]): MessageInfo {
