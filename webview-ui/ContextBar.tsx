@@ -51,13 +51,15 @@ export function ContextBar({
           {onOpenSourceControl ? (
             <button
               className="ctx-branch ctx-link"
-              title={t("openSourceControlTitle")}
+              title={branchTitle(git)}
               onClick={onOpenSourceControl}
             >
               {git.branch}
             </button>
           ) : (
-            <span className="ctx-branch">{git.branch}</span>
+            <span className="ctx-branch" title={git.directory ? branchTitle(git) : undefined}>
+              {git.branch}
+            </span>
           )}
           {git.dirty && <span className="ctx-dirty">*</span>}
           <span className="ctx-sep">|</span>
@@ -99,6 +101,16 @@ export function ContextBar({
         ))}
     </div>
   );
+}
+
+/** Tooltip for the branch segment: the default names the SCM view; when the
+ *  branch belongs to a worktree or a moved session's directory (ADR-0013),
+ *  the tooltip explains where it came from — the click still opens SCM. */
+function branchTitle(git: GitInfo): string {
+  if (!git.directory) {
+    return t("openSourceControlTitle");
+  }
+  return `${t("branchDirTitle")} · ${git.directory}`;
 }
 
 function UsageReadout({

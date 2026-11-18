@@ -175,6 +175,7 @@ const en = {
   // context bar
   noGit: "no git",
   noDir: "no dir",
+  branchDirTitle: "Branch of the agent's working directory",
   contextTokensTitle: "Context tokens used",
   cacheHitRateTitle: "Cache hit rate",
 
@@ -412,6 +413,7 @@ const zhCn: Record<MessageKey, string> = {
   // context bar
   noGit: "无 git",
   noDir: "无工作区",
+  branchDirTitle: "agent 工作目录的分支",
   contextTokensTitle: "已用上下文 token",
   cacheHitRateTitle: "缓存命中率",
 

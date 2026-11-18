@@ -101,3 +101,29 @@ describe("folderName", () => {
     assert.equal(folderName("h:\\"), "h:");
   });
 });
+
+describe("worktree branch tooltip", () => {
+  test("a branch from another directory explains where it came from", () => {
+    const html = render({
+      git: { branch: "ticket/x", directory: "/wt/review-fix" } as GitInfo,
+    });
+    assert.match(
+      html,
+      /title="Branch of the agent&#x27;s working directory · \/wt\/review-fix"/,
+    );
+  });
+
+  test("the plain branch keeps the SCM tooltip on the button", () => {
+    const html = render({ onOpenSourceControl: () => {} });
+    assert.match(html, /title="Open Source Control"/);
+    assert.doesNotMatch(html, /working directory/);
+  });
+
+  test("the plain span carries no tooltip; the override span explains itself", () => {
+    assert.doesNotMatch(render(), /<span class="ctx-branch" title/);
+    const override = render({
+      git: { branch: "ticket/x", directory: "/wt/review-fix" } as GitInfo,
+    });
+    assert.match(override, /<span class="ctx-branch" title=/);
+  });
+});
