@@ -55,3 +55,32 @@ manual edits were never revertable from it anyway (they have no
   information", not "wrong information".
 - The panel's own reverts still mutate the shared tree; other sessions'
   lists stay honest only because the filter now keeps foreign rows out.
+
+## Revision (2026-11-19): per-message credibility
+
+The core decision stands: an empty attribution set yields an empty diff
+list. But the investigation ticket `server-snapshot-attribution/01`
+(controlled experiments against a self-hosted v2.3.0 server — see its
+`## Answer`) disproved this document's premise that `snapshot.files` names
+the files the turn's agent touched. It is the shared working tree's content
+delta inside one assistant message's own `[snapshot.start, snapshot.end]`
+window: another session's turn, the panel's own revert, or a manual edit
+that lands inside that window is recorded in that message's `files` even
+when the message made no tool calls at all (`"tools": []`). Both observed
+leak shapes — a foreign write inside a chat-only turn's window
+(`modified a.md +1 -1`) and an external delete inside it
+(`deleted a.md +0 -4`) — passed the strict filter, because the window noise
+was itself the message's claimed attribution.
+
+The "filter by tool calls" alternative rejected below is therefore revived
+in its narrowest form: not a per-file tool-input cross-check, but
+**per-message credibility**. `attributionSet` skips the snapshot files of
+any assistant message that made no tool calls (`tools: []`): a message that
+called no tool cannot have written anything itself, so every file its
+window framed came from outside the turn. Messages that did call tools keep
+full attribution — a real write goes through a tool, so no true row is
+dropped, and the rejected alternative's shell-redirect false negative does
+not apply at this width. Known second-order limitation: a tool-using
+message whose window happens to frame a foreign write still serializes; if
+that is ever observed, the next step is the per-file tool-input
+cross-check.

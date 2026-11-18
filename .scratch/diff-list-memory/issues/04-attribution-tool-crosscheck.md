@@ -1,6 +1,6 @@
 # 04 归因 credibility 校验:tools 为空的消息不认领文件
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 
 按 spec「增补(2026-11-19)」节实施(TDD:先红后绿)。研究依据:`.scratch/server-snapshot-attribution/issues/01-investigate-attribution-boundary.md` 的 `## Answer`(实证:`tools:[]` 的 B 消息认领了外来文件 `a.md`,导致 `deleted a.md +0 -4` 幽灵行穿透严格归因过滤)。
@@ -27,3 +27,12 @@ Type: task
 ## 并行约束
 
 与 `session-switch-leaks` issue 05 并行实施:勿触碰队列路径(`session-queues.ts`、panel 的 sendNow/switchSession/turn-end 块);本票范围 = `session-diff.ts` + `types.ts` 注释 + 两份文档 + 测试。
+
+## Comments
+
+- 2026-11-19(agent):resolved。先红后绿(两红 → 一实现 → 一防误伤),与 issue 05 并行,未触碰队列路径。
+  - **字段偏差(实证优先)**:工票假设的 `tools` 字段**成立**——研究者实录里它就是 assistant 消息**顶层**的 `"tools":[]`(非 `content` tool part);但扩展的 `AssistantMessage` 此前**未建模**该字段,故在 `types.ts` 新增 `tools?: AssistantToolCall[]`(shape 按 v2.3.0 消息原文:`{name,status,input}`),契约注释按研究结论改写(`files` = 该消息自身 `[start,end]` 窗口内共享工作树内容差,`tools:[]` 即外来变化)。这是对「只改注释」范围的最小超出,为实现所必需。
+  - **代码**:`src/util/session-diff.ts` `attributionSet` — `tools` 存在且为空数组 → 跳过该消息的 `snapshot.files`(per-message credibility);二阶局限(tools 非空消息窗口框住外来写)写入 JSDoc,注明观测到再升级 tool-input 逐文件交叉。**缺失 ≠ 空**:老 server 不发 `tools` 时保持旧行为(零漏报);v2.3.0 实测每条 assistant 消息都带 `tools`。
+  - **测试**(3 条,均按工票命名):`test/session-diff.test.ts` — `a message with no tool calls cannot attribute its snapshot files`(红)、`a message with tool calls still attributes its files`(防误伤,write 工具消息全量归因);`test/diff-refresh.test.ts` — `a foreign deleted row attributed via a tool-less message is dropped`(端到端贴研究者复现 exp3:`tools:[]` 消息 + `deleted a.md +0 -4` → 列表空,deleted 行不触发盘上检查)。既有归因用例未改 fixture 全保持绿(缺失 `tools` 按旧语义)。
+  - **文档**:`docs/adr/0008-empty-attribution-empty-diff-list.md` 追加「Revision (2026-11-19): per-message credibility」(引用研究工票,核心决策不变);`GLOSSARY.md`「Attribution set」词条补 credibility 规则。
+  - **计数**:红阶段 340 tests / 337 pass / **2 fail**(仅本票新用例,理由正确:现行全收);最终全量 `npm test` = **341 tests / 340 pass / 0 fail / 1 skipped**(既有 Windows 路径 skip),`npm run typecheck` / `npm run lint` 过。已合并 `batch/0.4.22-session-bound-state`(尖端 84f45ad,本票由其切出,合并为 no-op)后复测通过。

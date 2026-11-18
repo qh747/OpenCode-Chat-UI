@@ -190,4 +190,50 @@ describe("diff refresh scoping", () => {
       [[]],
     );
   });
+
+  test("a foreign deleted row attributed via a tool-less message is dropped", async () => {
+    // Researcher reproduction (server-snapshot-attribution/01 exp3): a.md was
+    // written earlier, then deleted outside any session while B's chat-only
+    // turn ran. B's assistant message claims a.md in snapshot.files with
+    // `tools: []` — the window framed the external delete, the message never
+    // called a tool — and the range diff answers `deleted a.md +0 -4`. The
+    // strict filter alone passes it (the claim IS the attribution); only the
+    // per-message credibility check drops it.
+    const messages: MessageInfo[] = [
+      { type: "user", id: "msg_u1", time: { created: 1 }, text: "回一首诗" },
+      {
+        type: "assistant",
+        id: "msg_a1",
+        time: { created: 2 },
+        content: [],
+        snapshot: { files: ["a.md"] },
+        tools: [],
+      },
+    ];
+    const controller = controllerWith(
+      "ses_b",
+      {
+        sessionDiff: async () => ({
+          data: [
+            {
+              file: "a.md",
+              status: "deleted",
+              additions: 0,
+              deletions: 4,
+              patch: "diff --git a/a.md b/a.md\ndeleted file mode 100644\n",
+            },
+          ],
+        }),
+      },
+      messages,
+    );
+
+    await run(controller);
+
+    assert.deepEqual(controller.diffs, []);
+    assert.deepEqual(
+      controller.posted.map((entry) => entry.diffs),
+      [[]],
+    );
+  });
 });
