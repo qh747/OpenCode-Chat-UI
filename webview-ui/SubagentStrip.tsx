@@ -58,7 +58,6 @@ export function SubagentStrip({ jobs, now, onStop, initialExpanded = false }: Su
           {collapsed ? "▸" : "▾"}
         </span>
         <span className="subagent-count">{t("subagentCount", { count: jobs.length })}</span>
-        {collapsed && <span className="subagent-pulse" aria-hidden="true" />}
       </button>
       {!collapsed &&
         jobs.map((job) => (
@@ -73,8 +72,9 @@ export function SubagentStrip({ jobs, now, onStop, initialExpanded = false }: Su
               className="subagent-stop"
               onClick={() => onStop(job.childSessionID)}
               title={t("subagentStopTitle")}
+              aria-label={t("subagentStopTitle")}
             >
-              {t("subagentStop")}
+              ×
             </button>
           </div>
         ))}

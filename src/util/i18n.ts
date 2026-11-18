@@ -104,7 +104,6 @@ const en = {
   attachFilesTitle: "Attach files",
   sendTitle: "Send (Enter)",
   stopTitle: "Stop (Esc)",
-  queuedHint: "{count} queued",
   maxImages: "Maximum {count} images per message.",
   chipHintImage: "Click to preview · sent as inline data URI",
   chipHintUrl: "Ctrl+click to open in browser · click to preview link",
@@ -159,14 +158,12 @@ const en = {
   queueCollapse: "Hide queue",
   queueCount: "Queue {count}",
   queuePausedNote: "Paused · resumes when you continue",
-  queueAutoNote: "Sends when the turn ends",
   resume: "Resume",
   sendNow: "Send now",
   removeFromQueue: "Remove from queue",
 
   // subagent strip
   subagentCount: "Subagent {count}",
-  subagentStop: "Stop",
   subagentStopTitle: "Stop this subagent",
 
   // markdown code block
@@ -338,7 +335,6 @@ const zhCn: Record<MessageKey, string> = {
   attachFilesTitle: "附加文件",
   sendTitle: "发送 (Enter)",
   stopTitle: "停止执行 (Esc)",
-  queuedHint: "已排队 {count}",
   maxImages: "每条消息最多 {count} 张图片。",
   chipHintImage: "单击 预览图片 · 发送时以 inline data URI 传递",
   chipHintUrl: "Ctrl+单击 在浏览器中打开 · 单击 预览链接",
@@ -393,14 +389,12 @@ const zhCn: Record<MessageKey, string> = {
   queueCollapse: "收起队列",
   queueCount: "队列 {count}",
   queuePausedNote: "已暂停 · 继续后自动发送",
-  queueAutoNote: "turn 结束后自动发送",
   resume: "继续",
   sendNow: "立即发送",
   removeFromQueue: "从队列中删除",
 
   // subagent strip
   subagentCount: "子代理 {count}",
-  subagentStop: "停止",
   subagentStopTitle: "停止这个子代理",
 
   // markdown code block

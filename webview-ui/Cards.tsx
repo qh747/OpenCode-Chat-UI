@@ -44,18 +44,22 @@ interface DiffProps {
   diffs: FileDiffInfo[];
   /** Rows visible before the expanded list scrolls (from `opencode.diffList.maxVisibleRows`). */
   maxVisibleRows: number;
+  /** Test hook: render with the rows expanded (default is collapsed). */
+  initialOpen?: boolean;
   onOpen: (file: string) => void;
   onRevert: (file: string) => void;
 }
 
 /**
  * The files the agent changed. Collapsed to a single header row by default —
- * the counts are the signal, the rows are only for acting on one — expanding
+ * the count is the signal, the rows are only for acting on one — expanding
  * reveals the per-file revert action. When open, rows beyond `maxVisibleRows`
- * scroll inside the card instead of stretching the panel.
+ * scroll inside the card instead of stretching the panel. Each row encodes
+ * the change type as an `st-<status>` class (the filename is coloured in CSS);
+ * there is no status text badge and no header total.
  */
-export function DiffList({ diffs, maxVisibleRows, onOpen, onRevert }: DiffProps) {
-  const [open, setOpen] = useState(false);
+export function DiffList({ diffs, maxVisibleRows, initialOpen = false, onOpen, onRevert }: DiffProps) {
+  const [open, setOpen] = useState(initialOpen);
 
   useEffect(() => {
     if (diffs.length === 0) {
@@ -66,8 +70,6 @@ export function DiffList({ diffs, maxVisibleRows, onOpen, onRevert }: DiffProps)
   if (diffs.length === 0) {
     return null;
   }
-  const additions = diffs.reduce((sum, diff) => sum + diff.additions, 0);
-  const deletions = diffs.reduce((sum, diff) => sum + diff.deletions, 0);
   return (
     <div className="diff-list">
       <div className="diff-head">
@@ -81,9 +83,6 @@ export function DiffList({ diffs, maxVisibleRows, onOpen, onRevert }: DiffProps)
             {open ? "▾" : "▸"}
           </span>
           <span className="diff-count">{t("changesCount", { count: diffs.length })}</span>
-          <span className="diff-total">
-            <span className="additions">+{additions}</span> <span className="deletions">-{deletions}</span>
-          </span>
         </button>
       </div>
       <div
@@ -92,9 +91,8 @@ export function DiffList({ diffs, maxVisibleRows, onOpen, onRevert }: DiffProps)
       >
         {open &&
           diffs.map((diff) => (
-            <div key={diff.file} className="diff-card">
+            <div key={diff.file} className={`diff-card st-${diff.status}`}>
               <button className="diff-file" onClick={() => onOpen(diff.file)} title={diff.file}>
-                <span className="diff-status-badge">{diff.status}</span>
                 <span className="diff-name">{fileName(diff.file)}</span>
               </button>
               <span className="diff-stats">

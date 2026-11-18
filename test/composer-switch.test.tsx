@@ -125,7 +125,7 @@ describe("busy composer shows a stop button (send/stop A)", () => {
     });
   }
 
-  test("忙时：停止按钮替换发送按钮，显示排队微提示，点击发出 abort", () => {
+  test("忙时：停止按钮替换发送按钮（不再显示排队微提示），点击发出 abort", () => {
     container = document.getElementById("root") as HTMLElement;
     handleRef = { current: undefined };
     root = createRoot(container);
@@ -146,9 +146,8 @@ describe("busy composer shows a stop button (send/stop A)", () => {
     // 发送按钮被停止按钮替换（同一位置，红底方块）。
     const stop = document.querySelector<HTMLButtonElement>(".send-btn.stop");
     assert.ok(stop, "busy 时应渲染 .send-btn.stop 停止按钮");
-    assert.ok(document.querySelector(".queued-hint"), "排队 > 0 时应显示微提示");
-    // 微提示文案（默认 en 语区）。
-    assert.equal(document.querySelector(".queued-hint")?.textContent, "2 queued");
+    // 排队数量不再出现在输入框里——队列条带自己会显示。
+    assert.equal(document.querySelector(".queued-hint"), null);
 
     // 点击停止 → 向宿主发出 abort。
     act(() => {
@@ -159,11 +158,10 @@ describe("busy composer shows a stop button (send/stop A)", () => {
       "点击停止应发出 {kind:'abort'}",
     );
 
-    // 空闲（不忙）时：恢复为发送按钮，无停止按钮、无微提示。
+    // 空闲（不忙）时：恢复为发送按钮，无停止按钮。
     renderBusy(base, (msg) => calls.push(msg));
     assert.ok(document.querySelector<HTMLButtonElement>(".send-btn:not(.stop)"));
     assert.equal(document.querySelector(".send-btn.stop"), null);
-    assert.equal(document.querySelector(".queued-hint"), null);
 
     root.unmount();
   });

@@ -75,10 +75,10 @@ describe("QueueStrip", () => {
     assert.doesNotMatch(html, /class="queue-row"/);
   });
 
-  test("collapsed by default: header only, no message rows", () => {
+  test("collapsed by default: header only, no message rows, no auto-send note", () => {
     const html = renderStrip([item("a", "one"), item("b", "two")], false);
     assert.match(html, /Queue 2/);
-    assert.match(html, /Sends when the turn ends/);
+    assert.doesNotMatch(html, /Sends when the turn ends/);
     assert.doesNotMatch(html, /class="queue-row"/);
   });
 

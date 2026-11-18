@@ -853,16 +853,16 @@ body {
 
 /* --- strips above the composer -------------------------------------------
    Changed files, queued messages and running subagents are one visual family:
-   same card (input background, 6px radius), same mono uppercase 9px header
-   with an 8px caret, same 20px rows padded 2px 10px, dashed separators. */
+   one flat tinted block per strip (input background at 55%, no border), the
+   same mono uppercase 9px header with an 8px caret, same 20px rows padded
+   2px 10px. No lines anywhere — row hover is a tint, never an underline. */
 .diff-list,
 .queue-strip,
 .subagent-strip {
   flex: none;
   margin: 0 10px 4px;
-  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--input-bg);
+  background: color-mix(in srgb, var(--input-bg) 55%, transparent);
   overflow: hidden;
 }
 .diff-head,
@@ -904,15 +904,17 @@ body {
   font-family: var(--mono);
   font-size: 11px;
 }
-.diff-card + .diff-card,
-.queue-row + .queue-row,
-.subagent-row + .subagent-row {
-  border-top: 1px dashed color-mix(in srgb, var(--border) 65%, transparent);
+/* Row separation comes from spacing alone; hover marks the row being acted on. */
+.diff-card:hover,
+.queue-row:hover,
+.subagent-row:hover {
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
 }
 /* Icon actions in every strip share one hit box; only colour differs. */
 .diff-revert,
 .queue-force,
-.queue-remove {
+.queue-remove,
+.subagent-stop {
   flex: none;
   background: none;
   border: none;
@@ -921,7 +923,8 @@ body {
   cursor: pointer;
 }
 .diff-revert,
-.queue-remove {
+.queue-remove,
+.subagent-stop {
   font-size: 13px;
 }
 .queue-force {
@@ -947,17 +950,12 @@ body {
 .diff-toggle:hover {
   color: var(--fg);
 }
-.diff-total {
-  font-size: 9.5px;
-  letter-spacing: 0;
-  text-transform: none;
-}
 /* Expanded rows: cap at N rows (--diff-max-rows, from opencode.diffList.maxVisibleRows)
-   and scroll the rest instead of stretching the panel. 21px ≈ one unified row
-   (20px min-height + 1px dashed separator); rows beyond the cap peek a few px
-   as a scroll affordance. */
+   and scroll the rest instead of stretching the panel. 20px ≈ one unified row
+   (rows have no separators); rows beyond the cap peek a few px as a scroll
+   affordance. */
 .diff-rows {
-  max-height: calc(var(--diff-max-rows, 5) * 21px);
+  max-height: calc(var(--diff-max-rows, 5) * 20px);
   overflow-y: auto;
 }
 .diff-rows::-webkit-scrollbar {
@@ -986,16 +984,16 @@ body {
   gap: 6px;
   min-width: 0;
 }
-.diff-file:hover {
-  text-decoration: underline;
+/* The change type is encoded as colour on the filename itself — no status
+   text badge: added = green, modified = yellow, deleted = red. */
+.diff-card.st-added .diff-name {
+  color: var(--ok);
 }
-.diff-status-badge {
-  font-size: 10px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0 4px;
-  color: var(--muted);
-  flex: none;
+.diff-card.st-modified .diff-name {
+  color: var(--warn);
+}
+.diff-card.st-deleted .diff-name {
+  color: var(--danger);
 }
 .diff-name {
   white-space: nowrap;
@@ -1120,10 +1118,11 @@ body {
 .queue-head-btn:hover {
   color: var(--fg);
 }
+/* The index sits in the strips' shared first column: left-aligned, no fixed
+   width, so its gap to the text is the same 6px the subagent dot keeps. */
 .queue-index {
   flex: none;
-  width: 12px;
-  text-align: right;
+  text-align: left;
   font-family: var(--mono);
   font-size: 9.5px;
   color: var(--muted);
@@ -1138,18 +1137,22 @@ body {
   font-size: 11px;
   color: var(--fg);
 }
+/* 立即发送的 ↑ 保持安静：只有 hover 才提醒它是可点的 */
 .queue-force {
-  color: #4da3ff;
+  color: var(--muted);
   font-family: var(--mono);
 }
 .queue-force:hover {
-  filter: brightness(1.25);
+  color: var(--fg);
 }
-.queue-remove {
-  color: var(--muted);
-}
-.queue-remove:hover {
+/* 删除队列项与停止子代理同款红色 ×，hover 一层淡红 */
+.queue-remove,
+.subagent-stop {
   color: var(--danger);
+}
+.queue-remove:hover,
+.subagent-stop:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 /* running subagents: one row per agent, aligned with the composer box */
@@ -1165,15 +1168,6 @@ body {
 }
 .subagent-head:hover {
   color: var(--fg);
-}
-.subagent-pulse {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  margin-left: auto;
-  border-radius: 50%;
-  background: var(--accent, #3794ff);
-  animation: subagent-pulse 1.4s ease-in-out infinite;
 }
 .subagent-dot {
   flex: none;
@@ -1210,18 +1204,10 @@ body {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* 停止子代理与删除队列项同款：红色 ×，不给文字 */
 .subagent-stop {
-  flex: none;
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-family: inherit;
-  font-size: 9.5px;
-  padding: 1px 6px;
-  cursor: pointer;
-}
-.subagent-stop:hover {
-  color: var(--danger);
+  font-family: var(--mono);
+  border-radius: 3px;
 }
 
 /* composer */
@@ -1874,13 +1860,6 @@ body {
   height: 10px;
   border-radius: 2px;
   background: currentColor;
-}
-/* 忙时左侧的排队微提示（如「已排队 2」） */
-.queued-hint {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--warn);
-  white-space: nowrap;
 }
 .send-btn:disabled {
   opacity: 0.45;

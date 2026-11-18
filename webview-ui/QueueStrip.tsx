@@ -84,9 +84,7 @@ export function QueueStrip({ queue, paused, sessionID, onForce, onRemove, onResu
             {open ? "▾" : "▸"}
           </span>
           <span className="queue-count">{t("queueCount", { count: queue.length })}</span>
-          <span className={`queue-note${paused ? " paused" : ""}`}>
-            {paused ? t("queuePausedNote") : t("queueAutoNote")}
-          </span>
+          {paused && <span className="queue-note paused">{t("queuePausedNote")}</span>}
         </button>
         <span className="spacer" />
         {paused && (

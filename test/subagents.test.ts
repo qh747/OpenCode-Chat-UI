@@ -88,10 +88,10 @@ describe("SubagentStrip", () => {
     assert.match(html, /class="subagent-agent">General</);
     assert.match(html, /class="subagent-desc"[^>]*>Run sleep 45</);
     assert.match(html, /class="subagent-elapsed">12s</);
-    assert.match(html, /<button class="subagent-stop"[^>]*>Stop<\/button>/);
+    assert.match(html, /class="subagent-stop"[^>]*>×<\/button>/);
   });
 
-  test("defaults to collapsed: only the clickable head row with a pulse", () => {
+  test("defaults to collapsed: only the clickable head row, no pulse", () => {
     const html = renderToStaticMarkup(
       createElement(SubagentStrip, {
         jobs: toSubagentJobs([running]),
@@ -101,7 +101,7 @@ describe("SubagentStrip", () => {
     );
     assert.match(html, /class="subagent-strip"/);
     assert.match(html, /aria-expanded="false"/);
-    assert.match(html, /class="subagent-pulse"/);
+    assert.doesNotMatch(html, /subagent-pulse/);
     assert.doesNotMatch(html, /subagent-agent/);
     assert.doesNotMatch(html, /subagent-stop/);
   });

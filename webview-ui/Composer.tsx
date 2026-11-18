@@ -46,8 +46,6 @@ interface ComposerProps {
   sessionID?: string;
   /** Mode/model/effort pickers rendered into the composer action bar. */
   pickers?: React.ReactNode;
-  /** Number of messages waiting in this session's queue (drives the busy hint). */
-  queuedCount?: number;
   /** fileResults from the store, keyed by requestId. */
   fileResults: Record<string, { path: string; name: string }[]>;
   /** Slash commands from the server catalog. */
@@ -100,7 +98,6 @@ export function Composer({
   submitKey,
   sessionID,
   pickers,
-  queuedCount,
   fileResults,
   commands,
   skills,
@@ -765,9 +762,6 @@ export function Composer({
               +
             </button>
             {pickers}
-            {busy && (queuedCount ?? 0) > 0 && (
-              <span className="queued-hint">{t("queuedHint", { count: queuedCount ?? 0 })}</span>
-            )}
           </div>
           <span className="spacer" />
           {busy ? (

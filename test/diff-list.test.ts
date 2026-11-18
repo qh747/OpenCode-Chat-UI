@@ -10,11 +10,12 @@ const DIFFS: FileDiffInfo[] = [
   { file: "h:\\proj\\src\\panel.ts", status: "modified", additions: 12, deletions: 3, patch: "" },
 ];
 
-function render(diffs: FileDiffInfo[], maxVisibleRows = 5): string {
+function render(diffs: FileDiffInfo[], maxVisibleRows = 5, initialOpen = false): string {
   return renderToStaticMarkup(
     createElement(DiffList, {
       diffs,
       maxVisibleRows,
+      initialOpen,
       onOpen: () => {},
       onRevert: () => {},
     }),
@@ -22,15 +23,21 @@ function render(diffs: FileDiffInfo[], maxVisibleRows = 5): string {
 }
 
 describe("diff list", () => {
-  test("collapsed by default: a header with the counts, no rows", () => {
+  test("collapsed by default: a header with the count, no rows, no totals", () => {
     const html = render(DIFFS);
     assert.match(html, /Changes 2/);
-    assert.match(html, /\+26/);
-    assert.match(html, /-3/);
+    assert.doesNotMatch(html, /\+26/);
     assert.doesNotMatch(html, /TEST\.md/);
-    assert.doesNotMatch(html, /Keep/);
-    assert.doesNotMatch(html, /Revert/);
+    assert.doesNotMatch(html, /diff-status-badge/);
     assert.match(html, /aria-expanded="false"/);
+  });
+
+  test("expanded rows carry the change type as a class, no status text", () => {
+    const html = render(DIFFS, 5, true);
+    assert.match(html, /class="diff-card st-added"/);
+    assert.match(html, /class="diff-card st-modified"/);
+    assert.doesNotMatch(html, /diff-status-badge/);
+    assert.match(html, /TEST\.md/);
   });
 
   test("nothing renders when there is nothing to show", () => {

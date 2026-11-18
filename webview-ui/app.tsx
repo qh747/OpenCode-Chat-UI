@@ -355,7 +355,6 @@ export function App({ state, send, composerHandleRef }: Props) {
             : undefined
         }
         pickers={pickers}
-        queuedCount={state.queue.length}
         fileResults={state.fileResults}
         commands={state.catalog.commands}
         skills={state.catalog.skills}
