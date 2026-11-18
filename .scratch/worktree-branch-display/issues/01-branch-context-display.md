@@ -1,6 +1,6 @@
 # 01 分支上下文显示:三层取真 + 事件真值覆盖
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 02
 
@@ -25,6 +25,10 @@ Blocked by: 02
 - `resolveBranchContext`:会话目录优先 / 分支缺失回退 worktree / 回退工作区 / 事件分支压过扩展分支 / 覆盖层无 dirty / 会话目录等于工作区时忽略(`test/branch-context.test.ts`)。
 - 面板接线(真原型方法 + stub 控制器,`test/branch-events.test.ts`):worktree 事件翻转条带、主仓事件切回、`refreshSessionMeta` 捕获会话目录、`switchSession` 清空。
 - `ContextBar` tooltip 与 i18n 键位(`test/context-bar.test.ts`、`test/i18n.test.ts`)。
+
+## Comments
+
+- 2026-11-19 实施完成,红绿顺序按计划走完。实施差异:会话身份变更点的覆盖清空改为**内联字段赋值**(与 busy 等显示态清理同风格),不新增方法依赖——既有 stub 测试零改动;`postSnapshot` 成为目标 git 的发布点并登记 `postedGit`,等值跳过防抖在快照与 {kind:"git"} 两种发布间保持一致。eventBranch 仅在 fullResync(服务器重连)清空,会话切换不清(它是工作区自己的最新真值,不属于会话)。span 形态仅在覆盖模式(directory 存在)才带 tooltip,默认形态与既有断言兼容。测试:branch-context(9 例)、branch-events(worktree 翻转/外部不达条/工作区切回+采纳事件分支/无分支或无目录忽略/等值去重/meta 捕获会话目录/switch 清空)、context-bar tooltip 三例。提交 e1b64f2、5c60e45、ff476f0。
 
 ## 红绿顺序
 
