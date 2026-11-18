@@ -1846,7 +1846,20 @@ export class ChatController implements vscode.Disposable {
       // 无条件过滤——放行会把其他会话（或本面板自己的 revert）造成的
       // 树变化灌进这个会话的列表。
       const attribution = attributionSet(messages);
-      this.diffs = result.data.filter((diff) => attribution.has(diffFileKey(diff.file)));
+      const rows: FileDiffInfo[] = [];
+      for (const diff of result.data) {
+        if (!attribution.has(diffFileKey(diff.file))) {
+          continue;
+        }
+        // added 行磁盘真相兜底（spec 决策 Q8）：B 侧被写宽归因、或窗口
+        // 重载丢了内存记忆后复活的 added 行，文件多半已不在盘上，不显示。
+        // deleted 不查（文件不在盘上恰是其待处理常态），modified 无法廉价校验。
+        if (diff.status === "added" && !(await this.fileOnDisk(diff.file))) {
+          continue;
+        }
+        rows.push(diff);
+      }
+      this.diffs = rows;
       this.broadcastDiffs();
     });
   }
@@ -2042,6 +2055,16 @@ export class ChatController implements vscode.Disposable {
       return vscode.Uri.file(file);
     }
     return vscode.Uri.joinPath(this.folder.uri, file);
+  }
+
+  /** 盘上是否存在此文件：与 `revertFile` 走同一 URI 解析路径，避免形态分歧。 */
+  private async fileOnDisk(file: string): Promise<boolean> {
+    try {
+      await vscode.workspace.fs.stat(this.resolveFileUri(file));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async currentContent(uri: vscode.Uri, status: FileDiffInfo["status"]): Promise<string> {
