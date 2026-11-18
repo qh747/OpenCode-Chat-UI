@@ -85,6 +85,11 @@
 
 - 用户在新构建上复现队列跨会话发送(分支 5);排错期两次审计(subagent 腿干净;队列腿定根因为 EMPTY 别名)。统一原则与三条腿结论见上方新增小节。工票:issues/05。diff 列表腿另立 `.scratch/diff-list-memory/`;服务器归因调查另立 `.scratch/server-snapshot-attribution/`。ADR-0012 记 Diff list 信任边界。
 
+### 2026-11-19(code-review 收口)
+
+- 双轴并行评审(Standards / Spec):Standards 零硬违规,6 条判断级 smell;Spec 缺失 0、范围 creep 3 项(均已在工票披露)、实现有误 2(1 硬 1 轻)。修复轮(单一实施者,TDD)修完:① sendNow 显示态守卫缺失(后台送达把 busy 气泡轮询泄给显示会话,测试缝重构后红灯还钓出「B 的附件选择被带进 A 的请求体」,一并守卫);② fileOnDisk 非 not-found 错误改为 fail open;③ `sameSession()` 收编 11 处同形守卫、④ `dropSessionState` 收编 4 处清理重复。判断级不修项(?? "" 假标签/Data Clumps/queue getter/ChatController 多职责)已记录并附理由。
+- 终态:358 测试 357 通过 0 失败 1 跳过,typecheck / lint 干净;集成分支 `batch/0.4.22-session-bound-state` @ `1eb824c`。
+
 ### 2026-11-19 code-review 修复轮(ticket/fix-review,已接受的取舍记录)
 
 code-review 四条发现:sendNow 缺显示态守卫(ssl-05 issues/05 追记)、fileOnDisk 吞一切报错(dl-03 issues/03 追记)、webview reducer 会话守卫重复、panel.ts 会话删除清理重复——前三类已修,TDD 先红后绿(机械去重除外),358/357/0/1。**以下为明确不做的评审建议,记录在案**:
