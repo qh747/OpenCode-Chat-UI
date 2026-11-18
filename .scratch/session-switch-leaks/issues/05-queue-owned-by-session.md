@@ -1,6 +1,6 @@
 # 05 队列状态归会话所有:键控化 + 后台排水随会话
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 
 按 spec 分支 5 实施(Q17/Q19/Q20)。**分阶段 TDD,每阶段先红后绿,全程 `npm run typecheck` 随改随跑。**
@@ -39,3 +39,46 @@ Type: task
 4. 会话删除清队列状态;
 5. 广播消息 `sessionID` 必填(编译期);
 6. 竞态:盖章 B 的动作在切换 await 窗口内解析到 B 的队列(A 不受影响)——补一条测试钉住。
+
+## Comments
+
+### 2026-11-19(实施:ticket/ssl-05)
+
+三阶段 TDD 完成,分支 `ticket/ssl-05`(基于 `batch/0.4.22-session-bound-state`,收尾并入该分支 tip,无冲突)。每阶段先红后绿,`npm run typecheck` 随改随跑,lint 收尾通过。全量:**355 通过 0 失败 1 跳过**(基线 338)。
+
+**阶段 1(EMPTY 别名,commit f291859)**
+- 端到端红:`a queue typed in A stays out of B: B's strip is empty and nothing is sent to B`(test/session-switch.test.ts,新 `queue does not leak across sessions` 组)。走真 `switchSession`,不再 stub `drainRestoredQueue`;harness 让 A 的活队列先经 `loadQueue` 空泊位分支取得 EMPTY 别名再排队,复现真实路径。既有早快照用例此前只因"从未有人向 EMPTY.items push 过"而碰巧绿(用例顺序脆弱),修复后全部转绿。
+- 修复:`take()` 两个空分支返回全新 `{ items: [], paused: false }` 字面量,模块级 `EMPTY` 常量删除。
+- 单元红(green 时一并转绿):`two empty-berth takes hand out independent fresh arrays`、`pushing into a returned empty snapshot never affects later takes`(test/session-queues.test.ts)。
+- 备注:`assert/strict` 的 `deepEqual` 带 `asserts actual is T` 签名,会把 actual 收窄到期望字面量类型——测试里先 push 再断言以规避。
+
+**阶段 2(键控化,commit fe6691c)**
+- `SessionQueues` 重写为按键 API:`state/push/shift/unshift/remove/setPaused/setPendingForce/drop`;`state()` 一律交出新副本(cloneSnapshot),空读返回新字面量;条目在"无 items 且无 pendingForce"时归一化删除。类注释同步改写(阶段 3 再落 Q17-A 终稿)。
+- `panel.ts`:`this.queue` 退化为当前会话键控状态的只读 getter;`queuePaused`/`pendingForce` 字段删除;`stashQueue`/`loadQueue`/`drainRestoredQueue`/`resetQueue` 删除;发送路径带显式所属会话:`sendNow(text, attachments, sessionID)`(prompt 不再用裸 `this.sessionId`)、`startQueued(item, sessionID)`、`drainQueue(sessionID)`;`forceQueued`/`resumeQueue`/`removeQueued` 解析目标为盖章守卫后的 `this.sessionId`;`postQueue(sessionID)` 显式带标签;`postSnapshot` 读当前会话视图。
+- **过渡决定**:按键解析的 `drainSwitchedQueue(sessionID)` 保留旧 `drainRestoredQueue` 语义(切回时目标会话空闲则排水,pendingForce 转回队头),阶段 3 落地后删除。
+- 会话删除清队列状态:`dropQueueState`(drop + 附件释放)落在 `deleteSessionById` 两分支与 `session.deleted` 两分支,与 dl-01 的 `sessionDismissed.drop` 同点组合、未互踩。
+- 测试迁移:`test/session-queues.test.ts` 全量重写为新 API(行为钉保持:跨会话独立、FIFO、空读新字面量、drop 清理、副本不出逃、pendingForce 克隆);`test/session-switch.test.ts` harness 迁移(自有 `get queue()` 只读视图、排队消息直接 `sessionQueues.push`)、"parked before the flip" 改为键控状态断言 `the outgoing session's queue stays in its own keyed state across the flip`;`test/dismissed-memory.test.ts` 三个 fake 迁移;queue/queue-strip 保持绿未动。
+
+**阶段 3(后台排水随会话 Q17-A,commit bbc5159)**
+- 新文件 `test/queue-turn-end.test.ts`(6+1 用例,注册进 run.ts),红→绿:
+  - `A's turn ends while B is displayed: the message goes to A, B stays quiet`;
+  - `switching back to A afterwards does not re-send the message`;
+  - `a background failed turn pauses A's queue, rules matching the foreground`;
+  - `an interrupted turn's pendingForce starts against its owning session`;
+  - `an end-of-turn event burst drains exactly one queued message`;
+  - `a turn end for a session the panel never saw running leaves its queue alone`;
+  - 前台钉:`the displayed session's turn end still drives its own queue`(FIFO 链存活)。
+- 绿:回合结束队列块抽为 `handleTurnEndQueue(sessionID, outcome)`(返回是否启动新回合,显示侧据此决定补不补消息刷新);显示副作用(busy 复位、通知、settleSubagents、scheduleMessagesRefresh/sessionMetaRefresh/refreshDiffs)仍守在 `eventSession === this.sessionId` 内,后台分支只推进该会话队列。`sendNow`/`failTurn` 的显示态副作用按目标会话守卫(后台失败不污染显示)。类注释重写为 Q17-A 语义。
+- **新增机制(工票未点名,实施补齐)**:`runningTurns` Set(会话 → 在跑回合 latch)。动因:回合结束事件成簇到达(idle + execution.*),前台靠 `this.busy` 去重,后台无对应物——无 latch 会并发启动两条回合。转移:sendNow 在 prompt 被服务器接受后登记(拒绝不登记)、`session.step.started`/`execution.started` 对任意会话登记、回合结束事件消费一次(消费成功才排水)。`drainQueue` 的在跑判定跟随目标会话(显示会话用 `this.busy`,后台用 latch)。队列状态、显示 busy 谓词(Q7)均未受影响。
+- **过渡排水删除**:后台回合结束已按时排水,切回不再承担恢复职责。已知取舍:事件流丢失回合结束事件时该会话队列滞留,直到用户下一次动作(发送/恢复);与事件流有损、重连即全量 resync 的既有约定一致,未另建 meta 触发排水(会与 prompt 在途窗口竞态)。
+- 竞态钉(验收 6):`a queue action stamped B inside the switch window resolves against B's queue; A is untouched`(test/session-switch.test.ts)。
+
+**收尾(协议硬化,commit 1464015)**
+- `busy`/`queue`/`forms`/`subagents`/`permissions`/`diffs` 六条 host→webview 广播的 `sessionID` 改必填;webview reducer 六个守卫收紧为严格比对。**范围决定**:`imageStaged`/`fileResults`/`pickedPaths` 保持可选——请求/响应类消息允许在无会话时发出(会话建立前的附件检索/拾取),强制必填会砍掉该流程;`sessionMeta` 保持可选(pending 拾取选择在无会话时合法落 post)。
+- 落点:refreshPermissions/refreshForms 取守卫后局部常量;broadcastDiffs 参数化;事件路径用 eventSession;clearForms/clearSubagents 以 `?? ""` 兜底(webview 守卫丢弃,比旧 undefined 通道更严)。
+
+**复核提示(给 merger)**
+1. `runningTurns` 是工票"抽 handleTurnEndQueue"之外的实施级补齐,语义如上;若后续有人以 per-session busy 缓存之名质疑,请对照 Q7(那是显示谓词的取舍)与本 latch(队列排水去重)的分工。
+2. 显示会话回合结束的队列排水门槛从 `wasBusy` 改为 latch 消费:服务器侧发起且 `step.started` 事件丢失的回合结束时不再排水(旧行为会)——超低概率、事件流有损场景,取舍记录在案。
+3. 阶段 1 的红暴露过一批"碰巧绿"的既有用例(EMPTY 全局污染跨用例),均已随修复转绿,无删用例。
+4. `switchSession` 的早快照后不再有任何排水调用;若日后出现"切回即想立即送"的新诉求,请在 Q17-A 的事件驱动模型上立项,不要恢复泊位机制。

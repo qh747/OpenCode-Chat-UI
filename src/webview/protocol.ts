@@ -152,12 +152,14 @@ export type HostToWeb =
   /** Authoritative content of a message, pushed as it changes on the server. */
   | { kind: "messageContent"; sessionID: string; messageID: string; content: AssistantContent[] }
   | { kind: "messages"; sessionID: string; messages: MessageInfo[] }
-  | { kind: "busy"; sessionID?: string; busy: boolean }
-  | { kind: "queue"; sessionID?: string; queue: QueuedMessage[]; paused: boolean }
-  | { kind: "forms"; sessionID?: string; forms: FormInfo[] }
-  | { kind: "subagents"; sessionID?: string; jobs: SubagentJob[] }
-  | { kind: "permissions"; sessionID?: string; pending: PermissionRequest[] }
-  | { kind: "diffs"; sessionID?: string; diffs: FileDiffInfo[] }
+  /** Broadcasts for a specific session; `sessionID` is required so the
+   *  webview's guard cannot be bypassed by an unlabelled message. */
+  | { kind: "busy"; sessionID: string; busy: boolean }
+  | { kind: "queue"; sessionID: string; queue: QueuedMessage[]; paused: boolean }
+  | { kind: "forms"; sessionID: string; forms: FormInfo[] }
+  | { kind: "subagents"; sessionID: string; jobs: SubagentJob[] }
+  | { kind: "permissions"; sessionID: string; pending: PermissionRequest[] }
+  | { kind: "diffs"; sessionID: string; diffs: FileDiffInfo[] }
   | { kind: "catalog"; catalog: Catalog }
   | { kind: "editors"; editors: EditorFile[] }
   | { kind: "attachmentPreview"; preview: AttachmentPreview }

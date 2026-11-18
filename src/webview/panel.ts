@@ -100,12 +100,21 @@ export class ChatController implements vscode.Disposable {
   private busy = false;
   /** Set when the running turn failed, so the completion notice stays quiet. */
   private turnFailed = false;
-  /** Messages held until the running turn finishes. */
-  private queue: QueuedMessage[] = [];
-  /** Held after a stop/failure until the user explicitly resumes. */
-  private queuePaused = false;
-  /** A forced message waiting for the interrupted turn to actually end. */
-  private pendingForce: QueuedMessage | undefined;
+  /**
+   * 会话 → 在跑回合 latch(Q17-A 队列排水的事实来源,与显示 busy 解耦):
+   * sendNow 在 prompt 被服务器接受后登记、step.started 事件登记、回合结束
+   * 事件消费一次。回合结束事件成簇到达(idle + execution.*),消费一次即
+   * 挡住同簇的重复排水;新回合(prompt 再发)重新登记后,其结束事件才会
+   * 再次放行。
+   */
+  private readonly runningTurns = new Set<string>();
+  /**
+   * 当前会话队列的只读视图(items):队列状态只活在 SessionQueues、按会话
+   * 键存(spec Q19),变更一律走 sessionQueues 的方法。
+   */
+  private get queue(): QueuedMessage[] {
+    return this.sessionQueues.state(this.sessionId).items;
+  }
   private title: string | undefined;
   private agent: string | undefined;
   private model: { providerID: string; id: string; variant?: string } | undefined;
@@ -253,8 +262,8 @@ export class ChatController implements vscode.Disposable {
         if (this.sessionId) {
           await this.safeCall(() => this.client()?.interrupt(this.sessionId ?? ""));
           if (this.busy && this.queue.length > 0) {
-            this.queuePaused = true;
-            this.postQueue();
+            this.sessionQueues.setPaused(this.sessionId, true);
+            this.postQueue(this.sessionId);
           }
         }
         break;
@@ -508,8 +517,7 @@ export class ChatController implements vscode.Disposable {
     this.pendingAgent = undefined;
     this.pendingModel = undefined;
     // A new session starts empty; anything queued or dismissed in the old one
-    // stays there.
-    this.stashQueue();
+    // stays there (队列状态按会话键存,旧会话的状态原地保留,spec Q19)。
     this.stashDismissed();
     try {
       const created = await client.createSession({ location: { directory: this.host.folderPath } });
@@ -528,7 +536,6 @@ export class ChatController implements vscode.Disposable {
       this.contextTokens = undefined;
       this.revertMessageID = undefined;
       this.clearSubagents();
-      this.loadQueue(sessionId);
       this.clearForms();
       this.title = created.data.title;
       this.agent = created.data.agent ?? "build";
@@ -555,7 +562,6 @@ export class ChatController implements vscode.Disposable {
   }
 
   async switchSession(id: string): Promise<void> {
-    this.stashQueue();
     this.stashDismissed();
     this.sessionId = id;
     this.isSubagentSession = false;
@@ -572,9 +578,9 @@ export class ChatController implements vscode.Disposable {
     this.diffs = [];
     this.turnCache = undefined;
     // 泊出旧会话、载入目标会话的驻留（无泊位则空表，spec Q10）：
-    // 切走不再失忆，切回不再复活已撤销的行。
+    // 切走不再失忆，切回不再复活已撤销的行。队列状态按会话键存(spec Q19),
+    // 旧会话的状态原地保留,视图随 sessionId 翻页,无需 stash/load。
     this.loadDismissed(id);
-    this.loadQueue(id);
     this.clearForms();
     this.clearSubagents();
     // 早快照（issue 04a）：同步清理一完成就翻 webview 的会话页——旧会话的
@@ -584,7 +590,6 @@ export class ChatController implements vscode.Disposable {
     // 往返内纠正。
     this.postSnapshot();
     await this.fullResync();
-    this.drainRestoredQueue();
     await vscode.commands.executeCommand("opencode.chat.focus");
   }
 
@@ -605,19 +610,31 @@ export class ChatController implements vscode.Disposable {
       // 排队仅发生在“主回合执行中”窗口（spec 分支 8）：busy=true 即主回合
       // 在跑。“等待子代理”窗口（主回合已结束、仅子代理 job 在跑）busy=false，
       // 消息会直接走 sendNow——服务器接受为 steer 或开启新回合，不本地扣留。
-      this.queue.push({ id: randomBytes(6).toString("hex"), text, attachments });
+      const sessionID = this.sessionId;
+      if (!sessionID) {
+        return;
+      }
+      this.sessionQueues.push(sessionID, {
+        id: randomBytes(6).toString("hex"),
+        text,
+        attachments,
+      });
       // A new user message means the queue should move again after this turn.
-      this.queuePaused = false;
-      this.postQueue();
+      this.sessionQueues.setPaused(sessionID, false);
+      this.postQueue(sessionID);
       return;
     }
-    await this.sendNow(text, attachments);
+    await this.sendNow(text, attachments, this.sessionId ?? "");
   }
 
   /** Start a turn immediately. Callers guarantee that the session is idle. */
-  private async sendNow(text: string, attachments: AttachmentRef[]): Promise<void> {
+  private async sendNow(
+    text: string,
+    attachments: AttachmentRef[],
+    sessionID: string,
+  ): Promise<void> {
     const client = this.client();
-    if (!client || !this.sessionId) {
+    if (!client || !sessionID) {
       return;
     }
     // Links have no attachment form on the prompt API; they travel in the text.
@@ -648,7 +665,7 @@ export class ChatController implements vscode.Disposable {
     // (spec 决策 Q6/Q9).
     this.busy = true;
     this.turnFailed = false;
-    this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
+    this.post({ kind: "busy", sessionID, busy: true });
     this.startPermissionPolling();
     this.startSubagentPolling();
     // Optimistic local bubble: the user sees their message instantly instead
@@ -661,38 +678,47 @@ export class ChatController implements vscode.Disposable {
       text,
     };
     this.messages.push(localMessage);
-    this.post({ kind: "messages", sessionID: this.sessionId, messages: this.mergedMessages() });
+    this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
     // Remember the model actually in use for the picker's Recent section.
     const usedModel = this.model ?? this.host.catalog.defaultModel;
     if (usedModel) {
       this.host.recordModelUsed(usedModel);
     }
     try {
-      await client.prompt(this.sessionId ?? "", { text: promptText, files: promptAttachments });
+      // prompt 以显式所属会话为目标:不再使用裸 this.sessionId(spec Q19)。
+      await client.prompt(sessionID, { text: promptText, files: promptAttachments });
+      // 回合已被服务器接受并运行:登记在跑 latch,该会话的回合结束事件据此
+      // 排水其队列(Q17-A)。prompt 拒绝时不登记,失败的发送不排水。
+      this.runningTurns.add(sessionID);
     } catch (error) {
       // The server never accepted the turn, so nothing will emit session.idle:
       // end it here or the send button stays in its stop state forever.
-      this.failTurn(error);
+      this.failTurn(error, sessionID);
     }
   }
 
   // --- queued messages ---------------------------------------------------
 
-  private postQueue(): void {
-    this.post({ kind: "queue", sessionID: this.sessionId, queue: this.queue, paused: this.queuePaused });
+  /** Post a session's queue view, labelled with its owning session. */
+  private postQueue(sessionID: string): void {
+    const state = this.sessionQueues.state(sessionID);
+    this.post({ kind: "queue", sessionID, queue: state.items, paused: state.paused });
   }
 
   private removeQueued(id: string): void {
-    const removed = this.queue.find((item) => item.id === id);
+    const sessionID = this.sessionId;
+    if (!sessionID) {
+      return;
+    }
+    const removed = this.sessionQueues.remove(sessionID, id);
     if (!removed) {
       return;
     }
     this.discardQueuedAttachments([removed]);
-    this.queue = this.queue.filter((item) => item.id !== id);
-    if (this.queue.length === 0) {
-      this.queuePaused = false;
+    if (this.sessionQueues.state(sessionID).items.length === 0) {
+      this.sessionQueues.setPaused(sessionID, false);
     }
-    this.postQueue();
+    this.postQueue(sessionID);
   }
 
   /** Drop staged images held for messages that will never be sent. */
@@ -712,88 +738,86 @@ export class ChatController implements vscode.Disposable {
   }
 
   private resumeQueue(): void {
-    this.queuePaused = false;
-    this.postQueue();
-    this.drainQueue();
+    // 队列动作族:目标解析为盖章守卫后的当前会话(spec Q19)。
+    const sessionID = this.sessionId;
+    if (!sessionID) {
+      return;
+    }
+    this.sessionQueues.setPaused(sessionID, false);
+    this.postQueue(sessionID);
+    this.drainQueue(sessionID);
   }
 
   private async forceQueued(id: string): Promise<void> {
-    const item = this.queue.find((entry) => entry.id === id);
+    // 队列动作族:目标解析为盖章守卫后的当前会话(spec Q19)。
+    const sessionID = this.sessionId;
+    if (!sessionID) {
+      return;
+    }
+    const item = this.sessionQueues
+      .state(sessionID)
+      .items.find((entry) => entry.id === id);
     if (!item) {
       return;
     }
-    this.queue = this.queue.filter((entry) => entry.id !== id);
-    this.queuePaused = false;
-    this.postQueue();
+    this.sessionQueues.remove(sessionID, id);
+    this.sessionQueues.setPaused(sessionID, false);
+    this.postQueue(sessionID);
     if (!this.busy) {
-      await this.sendNow(item.text, item.attachments);
+      await this.sendNow(item.text, item.attachments, sessionID);
       return;
     }
     const client = this.client();
-    if (!client || !this.sessionId) {
-      this.queue.unshift(item);
-      this.postQueue();
+    if (!client) {
+      this.sessionQueues.unshift(sessionID, item);
+      this.postQueue(sessionID);
       return;
     }
     // The prompt must not reach the server while the old turn is still running:
     // hold the item and start it from the interrupted turn's end event.
-    this.pendingForce = item;
+    // pendingForce 属于该会话,回合结束事件按键取用。
+    this.sessionQueues.setPendingForce(sessionID, item);
     try {
-      await client.interrupt(this.sessionId);
+      await client.interrupt(sessionID);
     } catch (error) {
-      this.pendingForce = undefined;
-      this.queue.unshift(item);
-      this.postQueue();
+      this.sessionQueues.setPendingForce(sessionID, undefined);
+      this.sessionQueues.unshift(sessionID, item);
+      this.postQueue(sessionID);
       this.post({ kind: "error", message: errorMessage(error) });
     }
   }
 
   /** Start the queue head if the turn is over. Returns whether it did. */
-  private drainQueue(): boolean {
-    if (this.queuePaused || this.busy || this.queue.length === 0) {
+  private drainQueue(sessionID: string): boolean {
+    const state = this.sessionQueues.state(sessionID);
+    if (state.paused || state.items.length === 0) {
       return false;
     }
-    const head = this.queue.shift();
+    // 在跑判定跟随目标会话:显示会话用 busy,后台会话用在跑 latch
+    // (Q17-A:排水只认所属会话自己的回合状态,与显示会话无关)。
+    const busy = sessionID === this.sessionId ? this.busy : this.runningTurns.has(sessionID);
+    if (busy) {
+      return false;
+    }
+    const head = this.sessionQueues.shift(sessionID);
     if (!head) {
       return false;
     }
-    this.postQueue();
-    this.startQueued(head);
+    this.postQueue(sessionID);
+    this.startQueued(head, sessionID);
     return true;
   }
 
-  private startQueued(item: QueuedMessage): void {
-    void this.sendNow(item.text, item.attachments);
+  private startQueued(item: QueuedMessage, sessionID: string): void {
+    void this.sendNow(item.text, item.attachments, sessionID);
   }
 
-  /** A session switch must not leak messages into the new conversation. */
-  private resetQueue(sessionID: string | undefined = this.sessionId): void {
-    const saved = this.sessionQueues.drop(sessionID);
-    this.discardSnapshot({ items: this.queue, paused: this.queuePaused, pendingForce: this.pendingForce });
-    if (saved) {
-      this.discardSnapshot(saved);
+  /** 会话删除即丢弃其队列状态:未发送消息的暂存附件一并释放。 */
+  private dropQueueState(sessionID: string | undefined): void {
+    const dropped = this.sessionQueues.drop(sessionID);
+    if (dropped) {
+      this.discardSnapshot(dropped);
     }
-    this.queue = [];
-    this.queuePaused = false;
-    this.pendingForce = undefined;
-    this.clearForms();
-  }
-
-  /** Park the current session's queue so switching back can restore it. */
-  private stashQueue(sessionID: string | undefined = this.sessionId): void {
-    this.sessionQueues.stash(sessionID, {
-      items: this.queue,
-      paused: this.queuePaused,
-      pendingForce: this.pendingForce,
-    });
-  }
-
-  /** Load a session's parked queue into the live fields. */
-  private loadQueue(sessionID: string | undefined): void {
-    const snapshot = this.sessionQueues.take(sessionID);
-    this.queue = snapshot.items;
-    this.queuePaused = snapshot.paused;
-    this.pendingForce = snapshot.pendingForce;
   }
 
   /** Park the current session's dismissed rows so switching back can restore them. */
@@ -807,24 +831,33 @@ export class ChatController implements vscode.Disposable {
   }
 
   /**
-   * After `fullResync`, a restored queue belongs to a session that may have
-   * finished its turn while the user was elsewhere: send what was waiting.
+   * 回合结束的队列处理,按所属会话参数化(spec Q17-A):前台与后台共用这
+   * 一条路径。pendingForce → 以该会话为目标启动;失败/中断 → 该会话队列
+   * 置 paused(规则与前台一致);成功 → 队头以该会话为目标启动(FIFO 链
+   * 不变)。返回是否启动了新回合——显示侧据此决定是否补一次消息刷新。
+   * 调用方以 runningTurns latch 消费判定"该会话确有回合在跑",同簇的
+   * 重复结束事件不会二次排水。
    */
-  private drainRestoredQueue(): void {
-    if (this.pendingForce) {
-      const forced = this.pendingForce;
-      this.pendingForce = undefined;
-      if (this.busy) {
-        this.queue.unshift(forced);
-      } else {
-        this.startQueued(forced);
-        return;
+  private handleTurnEndQueue(
+    sessionID: string,
+    outcome: "succeeded" | "failed" | "interrupted",
+  ): boolean {
+    const state = this.sessionQueues.state(sessionID);
+    const forced = state.pendingForce;
+    if (forced) {
+      // 被打断的回合终于结束:强制消息以所属会话为目标启动(优先于暂停规则)。
+      this.sessionQueues.setPendingForce(sessionID, undefined);
+      this.startQueued(forced, sessionID);
+      return true;
+    }
+    if (outcome !== "succeeded") {
+      if (state.items.length > 0) {
+        this.sessionQueues.setPaused(sessionID, true);
+        this.postQueue(sessionID);
       }
+      return false;
     }
-    if (!this.busy) {
-      this.drainQueue();
-    }
-    this.postQueue();
+    return this.drainQueue(sessionID);
   }
 
   private clearForms(): void {
@@ -832,7 +865,7 @@ export class ChatController implements vscode.Disposable {
     // question 卡片污染新会话（与 messages/pending 同一套隔离原则）。
     if (this.forms.length > 0) {
       this.forms = [];
-      this.post({ kind: "forms", sessionID: this.sessionId, forms: [] });
+      this.post({ kind: "forms", sessionID: this.sessionId ?? "", forms: [] });
     }
   }
 
@@ -940,15 +973,20 @@ export class ChatController implements vscode.Disposable {
   }
 
   /** Abort the local turn after a request that never reached the agent loop. */
-  private failTurn(error: unknown): void {
+  private failTurn(error: unknown, sessionID: string): void {
+    // 队列停走规则与会话绑定(spec Q17-A):该会话队列里有等待消息才暂停它。
+    if (this.sessionQueues.state(sessionID).items.length > 0) {
+      this.sessionQueues.setPaused(sessionID, true);
+      this.postQueue(sessionID);
+    }
+    if (sessionID !== this.sessionId) {
+      // 后台发送失败只影响该会话的队列,不触碰当前显示态。
+      return;
+    }
     this.busy = false;
     this.turnFailed = true;
     this.stopPermissionPolling();
-    this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
-    if (this.queue.length > 0) {
-      this.queuePaused = true;
-      this.postQueue();
-    }
+    this.post({ kind: "busy", sessionID, busy: false });
     const message = errorMessage(error);
     this.post({ kind: "error", message });
     this.notify("notifications.errors", false, t("errorNotice", { message }));
@@ -1135,7 +1173,9 @@ export class ChatController implements vscode.Disposable {
     if (confirm === t("deleteButton")) {
       await this.safeCall(() => this.client()?.deleteSession(id));
       if (this.sessionId === id) {
-        this.resetQueue(id);
+        // 删除即丢弃该会话的队列状态(未发送消息不再有效,附件一并释放)。
+        this.dropQueueState(id);
+        this.clearForms();
         // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
         this.sessionDismissed.drop(id);
         this.dismissed.clear();
@@ -1148,10 +1188,7 @@ export class ChatController implements vscode.Disposable {
         void this.context.workspaceState.update(this.storageKey(), undefined);
         this.postSnapshot();
       } else {
-        const saved = this.sessionQueues.drop(id);
-        if (saved) {
-          this.discardSnapshot(saved);
-        }
+        this.dropQueueState(id);
         this.sessionDismissed.drop(id);
       }
     }
@@ -1302,9 +1339,14 @@ export class ChatController implements vscode.Disposable {
       }
       case "session.step.started":
       case "session.execution.started":
-        if (eventSession === this.sessionId) {
+        // 后台会话的回合同样登记在跑 latch(Q17-A):它的回合结束事件要据此
+        // 排水其队列。显示效果(busy 置位、轮询、strip)仍只属于当前会话。
+        if (eventSession) {
+          this.runningTurns.add(eventSession);
+        }
+        if (eventSession && eventSession === this.sessionId) {
           this.busy = true;
-          this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
+          this.post({ kind: "busy", sessionID: eventSession, busy: true });
           // 服务器拉起的回合（steer/continuation）也会启动子代理，
           // 轮询必须同样跟上（spec 分支 6）；已启动时为幂等 no-op。
           this.startSubagentPolling();
@@ -1315,12 +1357,18 @@ export class ChatController implements vscode.Disposable {
       case "session.idle":
       case "session.execution.succeeded":
       case "session.execution.failed":
-      case "session.execution.interrupted":
+      case "session.execution.interrupted": {
+        const outcome =
+          event.type === "session.execution.failed"
+            ? "failed"
+            : event.type === "session.execution.interrupted"
+              ? "interrupted"
+              : "succeeded";
         if (eventSession === this.sessionId) {
           const wasBusy = this.busy;
           this.busy = false;
           this.flushDeltas();
-          this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
+          this.post({ kind: "busy", sessionID: eventSession ?? "", busy: false });
           this.stopPermissionPolling();
           // 回合结束不再盲清 strip（spec 分支 6）：子代理 job 与回合解耦、
           // 可跨回合存活，先做一次最终刷新——仍有 running job 就保留轮询
@@ -1337,30 +1385,27 @@ export class ChatController implements vscode.Disposable {
               );
             }
           }
-          if (wasBusy && this.pendingForce) {
-            // The interrupted turn is finally over — start the forced message.
-            const forced = this.pendingForce;
-            this.pendingForce = undefined;
-            this.startQueued(forced);
-          } else if (
-            wasBusy &&
-            (event.type === "session.execution.failed" ||
-              event.type === "session.execution.interrupted")
-          ) {
-            if (this.queue.length > 0) {
-              this.queuePaused = true;
-              this.postQueue();
-            }
-            this.scheduleMessagesRefresh(0);
-          } else if (wasBusy && !this.drainQueue()) {
-            this.scheduleMessagesRefresh(0);
-          } else if (!wasBusy) {
+          // 队列随所属会话排水(spec Q17-A):以在跑 latch 消费为准,与显示
+          // busy 解耦——本会话的回合结束同样推进它自己的队列;队列排水可能
+          // 以本会话为目标启动新回合。
+          const startedTurn =
+            eventSession !== undefined && this.runningTurns.delete(eventSession)
+              ? this.handleTurnEndQueue(eventSession, outcome)
+              : false;
+          if (!startedTurn) {
             this.scheduleMessagesRefresh(0);
           }
           this.scheduleSessionMetaRefresh();
           void this.refreshDiffs();
+        } else if (eventSession) {
+          // 后台回合结束(spec Q17-A):只推进该会话的队列,不触碰任何显示态
+          // ——消息发给 A,哪怕用户正在看 B、B 自己也在跑。
+          if (this.runningTurns.delete(eventSession)) {
+            this.handleTurnEndQueue(eventSession, outcome);
+          }
         }
         break;
+      }
       case "session.tool.called":
       case "session.tool.success":
       case "session.tool.failed":
@@ -1387,7 +1432,7 @@ export class ChatController implements vscode.Disposable {
         const formSession = formEventSession(data);
         if (form && formSession === this.sessionId) {
           this.forms = [...this.forms.filter((f) => f.id !== form.id), form];
-          this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+          this.post({ kind: "forms", sessionID: formSession ?? "", forms: this.forms });
           this.notify("notifications.permissionRequest", true, t("questionNotice"));
           // The event stream is lossy; keep polling as the authoritative backstop.
           this.startPermissionPolling();
@@ -1400,7 +1445,7 @@ export class ChatController implements vscode.Disposable {
           const formID = typeof data.id === "string" ? data.id : undefined;
           if (formID) {
             this.forms = this.forms.filter((f) => f.id !== formID);
-            this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+            this.post({ kind: "forms", sessionID: eventSession ?? "", forms: this.forms });
             this.scheduleMessagesRefresh(0);
           }
         }
@@ -1432,7 +1477,9 @@ export class ChatController implements vscode.Disposable {
         break;
       case "session.deleted":
         if (eventSession === this.sessionId) {
-          this.resetQueue(eventSession);
+          // 删除即丢弃该会话的队列状态(未发送消息不再有效,附件一并释放)。
+          this.dropQueueState(eventSession);
+          this.clearForms();
           // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
           this.sessionDismissed.drop(eventSession);
           this.sessionId = undefined;
@@ -1450,10 +1497,7 @@ export class ChatController implements vscode.Disposable {
           void this.context.workspaceState.update(this.storageKey(), undefined);
           this.postSnapshot();
         } else if (eventSession) {
-          const saved = this.sessionQueues.drop(eventSession);
-          if (saved) {
-            this.discardSnapshot(saved);
-          }
+          this.dropQueueState(eventSession);
           this.sessionDismissed.drop(eventSession);
         }
         break;
@@ -1640,11 +1684,12 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
     await this.safeCall(async () => {
       const result = await client.pendingPermissions(this.host.folderPath);
       const previous = this.pending.length;
-      this.pending = result.data.filter((p) => p.sessionID === this.sessionId);
-      this.post({ kind: "permissions", sessionID: this.sessionId, pending: this.pending });
+      this.pending = result.data.filter((p) => p.sessionID === sessionID);
+      this.post({ kind: "permissions", sessionID, pending: this.pending });
       if (previous === 0 && this.pending.length > 0) {
         this.notify("notifications.permissionRequest", true, t("permissionNotice"));
       }
@@ -1669,10 +1714,11 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
     await this.safeCall(async () => {
-      const result = await client.sessionForms(this.sessionId ?? "");
-      this.forms = result.data.filter((f) => f.sessionID === this.sessionId);
-      this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+      const result = await client.sessionForms(sessionID);
+      this.forms = result.data.filter((f) => f.sessionID === sessionID);
+      this.post({ kind: "forms", sessionID, forms: this.forms });
     });
   }
 
@@ -1766,7 +1812,7 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     this.subagents = [];
-    this.post({ kind: "subagents", sessionID: this.sessionId, jobs: [] });
+    this.post({ kind: "subagents", sessionID: this.sessionId ?? "", jobs: [] });
   }
 
   /** Stop one subagent without cancelling the turn: interrupt its child session. */
@@ -1862,7 +1908,7 @@ export class ChatController implements vscode.Disposable {
         rows.push(diff);
       }
       this.diffs = rows;
-      this.broadcastDiffs();
+      this.broadcastDiffs(sessionID);
     });
   }
 
@@ -1878,10 +1924,10 @@ export class ChatController implements vscode.Disposable {
     return this.diffs.filter((diff) => this.dismissed.get(diffFileKey(diff.file)) !== diffKey(diff));
   }
 
-  private broadcastDiffs(): void {
+  private broadcastDiffs(sessionID: string): void {
     this.post({
       kind: "diffs",
-      sessionID: this.sessionId,
+      sessionID,
       diffs: this.visibleDiffs(),
     });
   }
@@ -1952,6 +1998,8 @@ export class ChatController implements vscode.Disposable {
   }
 
   private postSnapshot(): void {
+    // 当前会话队列的只读视图:早快照与权威快照都从这里取(spec Q19)。
+    const queueState = this.sessionQueues.state(this.sessionId);
     this.post({
       kind: "snapshot",
       snapshot: {
@@ -1960,8 +2008,8 @@ export class ChatController implements vscode.Disposable {
         agent: this.agent,
         model: this.model,
         busy: this.busy,
-        queue: this.queue,
-        queuePaused: this.queuePaused,
+        queue: queueState.items,
+        queuePaused: queueState.paused,
         forms: this.forms,
         subagents: this.subagents,
         isSubagentSession: this.isSubagentSession,

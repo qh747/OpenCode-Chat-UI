@@ -105,8 +105,8 @@ function refreshControllerWith(diffs: FileDiffInfo[], serverDiffs: FileDiffInfo[
     pollSessionCurrent: proto.pollSessionCurrent,
     resolveFileUri: proto.resolveFileUri,
     fileOnDisk: proto.fileOnDisk,
-    broadcastDiffs() {
-      posted.push({ sessionID: controller.sessionId, diffs: controller.diffs });
+    broadcastDiffs(sessionID: string) {
+      posted.push({ sessionID, diffs: controller.diffs });
     },
     dismiss: proto.dismiss,
     visibleDiffs: proto.visibleDiffs,

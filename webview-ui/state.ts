@@ -297,7 +297,8 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       return { ...state, messages: message.messages };
     }
     case "busy": {
-      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+      // 广播消息的 sessionID 由类型保证必填,守卫只做严格归属比对。
+      if (message.sessionID !== state.sessionID) {
         return state;
       }
       // Inline failures belong to the turn that produced them: once a new turn
@@ -305,31 +306,31 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       return { ...state, busy: message.busy, errors: message.busy ? [] : state.errors };
     }
     case "queue": {
-      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+      if (message.sessionID !== state.sessionID) {
         return state;
       }
       return { ...state, queue: message.queue, queuePaused: message.paused };
     }
     case "forms": {
-      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+      if (message.sessionID !== state.sessionID) {
         return state;
       }
       return { ...state, forms: message.forms };
     }
     case "subagents": {
-      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+      if (message.sessionID !== state.sessionID) {
         return state;
       }
       return { ...state, subagents: message.jobs };
     }
     case "permissions": {
-      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+      if (message.sessionID !== state.sessionID) {
         return state;
       }
       return { ...state, pending: message.pending };
     }
     case "diffs": {
-      if (message.sessionID !== undefined && message.sessionID !== state.sessionID) {
+      if (message.sessionID !== state.sessionID) {
         return state;
       }
       return { ...state, diffs: message.diffs };

@@ -13,6 +13,7 @@ import "./composer-keys.test";
 import "./composer-drafts.test";
 import "./composer-switch.test";
 import "./queue-strip.test";
+import "./queue-turn-end.test";
 import "./question-form.test";
 import "./queue.test";
 import "./dcp-markers.test";
