@@ -643,7 +643,9 @@ export class ChatController implements vscode.Disposable {
       text,
       links.map((link) => link.ref),
     );
-    this.dismissed.clear();
+    // The rows the user reverted stay dismissed across turns: the signature
+    // memory is self-sufficient, only a changed signature revives a row
+    // (spec 决策 Q6/Q9).
     this.busy = true;
     this.turnFailed = false;
     this.post({ kind: "busy", sessionID: this.sessionId, busy: true });

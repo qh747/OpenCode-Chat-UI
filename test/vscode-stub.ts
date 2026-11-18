@@ -88,8 +88,20 @@ export const fs = {
   },
 };
 
-/** git.ts/revertFile 运行时用到的 workspace API 面。 */
-export const workspace = { name: "stub", workspaceFolders: undefined, fs };
+/** git.ts/revertFile/sendNow 运行时用到的 workspace API 面。 */
+export const workspace = {
+  name: "stub",
+  workspaceFolders: undefined,
+  fs,
+  /** 与 vscode.workspace.getConfiguration 行为一致：总是回给调用方的回退值。 */
+  getConfiguration(_section: string) {
+    return {
+      get(_key: string, fallback?: unknown) {
+        return fallback;
+      },
+    };
+  },
+};
 
 /** 与 vscode.Uri.file / joinPath 行为一致的最小实现（仅 fsPath/path 字段）。 */
 export const Uri = {
