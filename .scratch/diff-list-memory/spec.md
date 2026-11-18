@@ -27,11 +27,25 @@
 - **Q10**:`dismissed` 改**按会话 park**(与 `sessionQueues` 同款模式):`switchSession` 用存/取替代 clear;`createSession` 的 clear 改为「泊出旧会话、新会话载入空表」;`rewindTo:1048` **保留** clear(倒带动了会话历史基准,重新开始合理);`deleteSessionById` 顺带清该会话 parked 记忆。
 - **Q12**:ADR-0012「Diff list 的信任边界」。
 
+## 增补(2026-11-19,研究结论并入):归因 credibility 校验(Q21 = 并入本批)
+
+`server-snapshot-attribution/01` 已 resolved,实证(详见其 Answer):`snapshot.files` 的真实语义是**该 assistant 消息自身窗口内共享工作树的内容变化**,不是「本会话 agent 碰过的文件」——扩展自己的 revertFile 写盘、别的会话的写,只要落进 B 某条消息的窗口,就被记进 B(`tools:[]`);B 行实际形态钉死为 `deleted +0 -4`(并发创建变体 `modified +1 -1`)。
+
+- **决策 Q21(2026-11-19,与用户确认)**:归因加固**并入本批**(issue 04),与 `session-switch-leaks` issue 05 并行(区域不相交)。
+- **规则(窄校验,零漏报风险)**:`attributionSet` 跳过 **`tools` 为空**的 assistant 消息声称的文件——没调用过任何工具的消息无权认领文件;`tools` 非空的消息照旧全量归因(真写必经 tool)。已知二阶局限:某条 tools 非空的消息窗口恰好框住外来写 → 仍可能串行;观测到再升级为 tool-input 逐文件交叉(那才有「bash 变量路径写法漏归因」的代价,本批不付)。
+- 顺带:`src/opencode/types.ts:168-173` 的服务器契约注释按研究结论改写(原「files names the files the turn touched」不成立);ADR-0008 追加修订节;GLOSSARY「Attribution set」词条修订。
+
 ## What was implemented
 
-(实施后填)
+(0.4.22 批次,与 `session-switch-leaks` issue 05 同批;三票独立分支 TDD 落地,合入集成分支 `batch/0.4.22-session-bound-state`。)
+
+- **01(dismissed 按会话 park)**:新 `src/webview/session-dismissed.ts`(`SessionDismissed`,与 `SessionQueues` 同款 stash/take/drop——泊位克隆、取走即消、空表擦泊位);`panel.ts` 增 `sessionDismissed` 字段与 `stashDismissed`/`loadDismissed`,`switchSession`/`createSession` 泊出载入替代 `clear()`,`deleteSessionById` 与 `session.deleted` 两路顺带 drop parked;`dismiss`/`visibleDiffs` 键统一走 `diffFileKey`;`rewindTo` 的 clear 按决策保留。测试:`test/dismissed-memory.test.ts`(13 条,含「切走切回保持隐藏」「会话删除清理」「签名变化重现」);实施者自纠一例空洞通过——switchSession 本身清空 diffs 会让断言平凡为真,改为模拟切回后 refreshDiffs 重取同签名历史 diff。
+- **02(新回合不清)**:`sendNow` 删 `this.dismissed.clear()`,留三行注释引 spec 决策 Q6/Q9。测试:`test/diff-send-memory.test.ts`(3 条:新回合不复活、签名变则重现、同签名刷新保持隐藏)。
+- **03(added 行磁盘真相)**:`refreshDiffs` 过滤链改为单趟:归因过滤后对 `added` 行做 `fileOnDisk` 存在性检查(同一 `resolveFileUri` 路径),盘上无文件即弃;`deleted`/`modified` 不受影响。测试:`test/diff-disk-truth.test.ts`(4 条:幽灵 added 不显示、盘上有文件不过滤、deleted 行豁免、链序)。
+- 支撑:`test/vscode-stub.ts` 扩 `workspace.fs.stat`、可注入 `showWarningMessage`、`getConfiguration`;新测试文件均注册进 `test/run.ts`。
+- 全量:337 通过 0 失败 1 跳过(既有跳过:Windows 盘符路径用例);typecheck / lint 过。
 
 ## Open
 
 - 窗口重载后已撤销的 modified/deleted 行可复活(内存记忆边界)。
-- B 侧串行根因(服务器 `snapshot.files` 写宽)待 `.scratch/server-snapshot-attribution/` 调查结论。
+- 二阶串行形状(tools 非空的消息窗口框住外来写)未防,观测到再升级为 tool-input 逐文件交叉(见增补节);服务器归因边界事实已钉死,见 `.scratch/server-snapshot-attribution/issues/01-investigate-attribution-boundary.md`。
