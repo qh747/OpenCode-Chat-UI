@@ -74,8 +74,8 @@ function controllerWith(
     },
     pollStale: proto.pollStale,
     pollSessionCurrent: proto.pollSessionCurrent,
-    broadcastDiffs() {
-      posted.push({ sessionID: controller.sessionId, diffs: controller.diffs });
+    broadcastDiffs(sessionID: string) {
+      posted.push({ sessionID, diffs: controller.diffs });
     },
   };
   return controller;

@@ -195,7 +195,7 @@ describe("background turn end delivers the owning session's queue", () => {
   test("a turn end for a session the panel never saw running leaves its queue alone", () => {
     // latch 只登记面板确知的在跑回合:未登记会话的结束事件不排水
     // (队列属于会话,不属于事件的来看热闹者)。
-    const { controller, posted, started } = turnEndController("ses_b");
+    const { controller, started } = turnEndController("ses_b");
     controller.sessionQueues.push("ses_a", message("m1"));
 
     handleEvent.call(controller as unknown as ChatController, {

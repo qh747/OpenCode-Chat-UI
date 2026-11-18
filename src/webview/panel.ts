@@ -865,7 +865,7 @@ export class ChatController implements vscode.Disposable {
     // question 卡片污染新会话（与 messages/pending 同一套隔离原则）。
     if (this.forms.length > 0) {
       this.forms = [];
-      this.post({ kind: "forms", sessionID: this.sessionId, forms: [] });
+      this.post({ kind: "forms", sessionID: this.sessionId ?? "", forms: [] });
     }
   }
 
@@ -1344,9 +1344,9 @@ export class ChatController implements vscode.Disposable {
         if (eventSession) {
           this.runningTurns.add(eventSession);
         }
-        if (eventSession === this.sessionId) {
+        if (eventSession && eventSession === this.sessionId) {
           this.busy = true;
-          this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
+          this.post({ kind: "busy", sessionID: eventSession, busy: true });
           // 服务器拉起的回合（steer/continuation）也会启动子代理，
           // 轮询必须同样跟上（spec 分支 6）；已启动时为幂等 no-op。
           this.startSubagentPolling();
@@ -1368,7 +1368,7 @@ export class ChatController implements vscode.Disposable {
           const wasBusy = this.busy;
           this.busy = false;
           this.flushDeltas();
-          this.post({ kind: "busy", sessionID: this.sessionId, busy: false });
+          this.post({ kind: "busy", sessionID: eventSession ?? "", busy: false });
           this.stopPermissionPolling();
           // 回合结束不再盲清 strip（spec 分支 6）：子代理 job 与回合解耦、
           // 可跨回合存活，先做一次最终刷新——仍有 running job 就保留轮询
@@ -1432,7 +1432,7 @@ export class ChatController implements vscode.Disposable {
         const formSession = formEventSession(data);
         if (form && formSession === this.sessionId) {
           this.forms = [...this.forms.filter((f) => f.id !== form.id), form];
-          this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+          this.post({ kind: "forms", sessionID: formSession ?? "", forms: this.forms });
           this.notify("notifications.permissionRequest", true, t("questionNotice"));
           // The event stream is lossy; keep polling as the authoritative backstop.
           this.startPermissionPolling();
@@ -1445,7 +1445,7 @@ export class ChatController implements vscode.Disposable {
           const formID = typeof data.id === "string" ? data.id : undefined;
           if (formID) {
             this.forms = this.forms.filter((f) => f.id !== formID);
-            this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+            this.post({ kind: "forms", sessionID: eventSession ?? "", forms: this.forms });
             this.scheduleMessagesRefresh(0);
           }
         }
@@ -1684,11 +1684,12 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
     await this.safeCall(async () => {
       const result = await client.pendingPermissions(this.host.folderPath);
       const previous = this.pending.length;
-      this.pending = result.data.filter((p) => p.sessionID === this.sessionId);
-      this.post({ kind: "permissions", sessionID: this.sessionId, pending: this.pending });
+      this.pending = result.data.filter((p) => p.sessionID === sessionID);
+      this.post({ kind: "permissions", sessionID, pending: this.pending });
       if (previous === 0 && this.pending.length > 0) {
         this.notify("notifications.permissionRequest", true, t("permissionNotice"));
       }
@@ -1713,10 +1714,11 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
     await this.safeCall(async () => {
-      const result = await client.sessionForms(this.sessionId ?? "");
-      this.forms = result.data.filter((f) => f.sessionID === this.sessionId);
-      this.post({ kind: "forms", sessionID: this.sessionId, forms: this.forms });
+      const result = await client.sessionForms(sessionID);
+      this.forms = result.data.filter((f) => f.sessionID === sessionID);
+      this.post({ kind: "forms", sessionID, forms: this.forms });
     });
   }
 
@@ -1810,7 +1812,7 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     this.subagents = [];
-    this.post({ kind: "subagents", sessionID: this.sessionId, jobs: [] });
+    this.post({ kind: "subagents", sessionID: this.sessionId ?? "", jobs: [] });
   }
 
   /** Stop one subagent without cancelling the turn: interrupt its child session. */
@@ -1906,7 +1908,7 @@ export class ChatController implements vscode.Disposable {
         rows.push(diff);
       }
       this.diffs = rows;
-      this.broadcastDiffs();
+      this.broadcastDiffs(sessionID);
     });
   }
 
@@ -1922,10 +1924,10 @@ export class ChatController implements vscode.Disposable {
     return this.diffs.filter((diff) => this.dismissed.get(diffFileKey(diff.file)) !== diffKey(diff));
   }
 
-  private broadcastDiffs(): void {
+  private broadcastDiffs(sessionID: string): void {
     this.post({
       kind: "diffs",
-      sessionID: this.sessionId,
+      sessionID,
       diffs: this.visibleDiffs(),
     });
   }
