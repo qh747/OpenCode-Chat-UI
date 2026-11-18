@@ -22,10 +22,13 @@ export type { FormInfo, FormAnswerValue };
 
 export type ConnectionState = "stopped" | "starting" | "connected" | "error";
 
-/** Branch / dirty state of the workspace folder (absent when git is unavailable). */
+/** Branch / dirty state shown in the context strip (absent when git is unavailable). */
 export interface GitInfo {
   branch?: string;
   dirty?: boolean;
+  /** The directory the branch was read from when it is not the workspace
+   *  folder — a worktree or a moved session's directory (ADR-0013). */
+  directory?: string;
 }
 
 export interface Catalog {

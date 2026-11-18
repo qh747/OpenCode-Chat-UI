@@ -3,6 +3,7 @@
 import "./dom-setup";
 import "./attachments.test";
 import "./attachment-rows.test";
+import "./branch-context.test";
 import "./catalog-params.test";
 import "./chat-render.test";
 import "./chat-reducer.test";
