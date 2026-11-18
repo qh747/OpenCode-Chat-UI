@@ -32,7 +32,7 @@ The collapsed-by-default strip listing the files this session's agent changes ar
 The user's decision that one round of a file's changes is handled, recorded at Revert time as the file plus its change signature (status plus additions plus deletions). Kept per session; it hides the row across refreshes, session switches and new turns. The row returns only when the file's changes change again — a new signature is news, an old one is not. Distinct from Revert's disk effect, which the server's message history never sees.
 
 **Attribution set**
-The union of the files a session's own assistant snapshots list — the only per-session file attribution the server exposes. The diff list is filtered to it; an empty attribution set yields an empty diff list, never another session's changes.
+The union of the files a session's own assistant snapshots list — the only per-session file attribution the server exposes — counting only messages that made tool calls: a message's snapshot lists whatever changed in the shared working tree inside its own snapshot window, so a message that called no tool (a pure chat turn) has nothing of its own to claim, and the changes its window framed are treated as foreign. The diff list is filtered to the set; an empty attribution set yields an empty diff list, never another session's changes.
 
 **Part**
 One ordered block inside an assistant reply: a passage of text, a passage of reasoning, or a tool call. Tool calls carry an identity of their own; text and reasoning parts are known by their position within the reply.

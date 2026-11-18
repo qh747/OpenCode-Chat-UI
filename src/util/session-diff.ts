@@ -40,6 +40,18 @@ export function diffRange(messages: MessageInfo[]): DiffRange {
  * the user) editing the repo between two turns would leak into it. Filtering
  * the result to the files this session actually snapshotted keeps the list
  * session-scoped.
+ *
+ * Credibility check (server-snapshot-attribution/01, spec 增补 Q21):
+ * `snapshot.files` is the shared working tree's content delta inside one
+ * message's own snapshot window — not "the files its agent touched". A
+ * message that made no tool calls (`tools: []`) cannot have written anything
+ * itself, so the files its window framed (another session's turn, the
+ * panel's own revert, a manual edit) are foreign, and its claims are
+ * skipped. Messages that did call tools keep full attribution: a real write
+ * goes through a tool, so no true row is dropped. Known second-order
+ * limitation: a tool-using message whose window happens to frame a foreign
+ * write still serializes — upgrade to a per-file tool-input cross-check
+ * only when observed.
  */
 export function attributionSet(messages: MessageInfo[]): Set<string> {
   const files = new Set<string>();
@@ -47,7 +59,14 @@ export function attributionSet(messages: MessageInfo[]): Set<string> {
     if (message.type !== "assistant") {
       continue;
     }
-    for (const file of (message as AssistantMessage).snapshot?.files ?? []) {
+    const assistant = message as AssistantMessage;
+    // An absent `tools` field is unknown, not empty: older servers may not
+    // send it, and unknown keeps the previous behavior rather than risk
+    // dropping real writes (the rule must stay zero-false-negative).
+    if (assistant.tools !== undefined && assistant.tools.length === 0) {
+      continue;
+    }
+    for (const file of assistant.snapshot?.files ?? []) {
       files.add(diffFileKey(file));
     }
   }

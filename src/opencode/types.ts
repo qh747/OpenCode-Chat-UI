@@ -155,6 +155,13 @@ export interface UserMessage {
   files?: StoredFileAttachment[];
 }
 
+/** A tool call as recorded on the assistant message itself (v2.3.0 message JSON). */
+export interface AssistantToolCall {
+  name?: string;
+  status?: string;
+  input?: Record<string, unknown>;
+}
+
 export interface AssistantMessage {
   type: "assistant";
   id: string;
@@ -166,11 +173,24 @@ export interface AssistantMessage {
   cost?: number;
   tokens?: TokenUsage;
   /**
-   * Workspace snapshot range this assistant turn covered. `files` names the
-   * files the turn touched — the only per-session attribution the server
-   * exposes (the diff endpoint itself is turn- or range-based).
+   * Workspace snapshot range this assistant message covered. `files` is NOT
+   * "the files the turn touched": it is the content delta of the shared
+   * working tree between this message's own `start`/`end` snapshot
+   * revisions, so a change from any source that lands inside the window —
+   * another session's turn, the panel's own disk writes, a manual edit — is
+   * recorded here even when this message made no tool calls (verified live
+   * against v2.3.0; server-snapshot-attribution/01). A message whose `tools`
+   * array is empty called no tool, so any file it names came from such an
+   * outside change; the diff list treats those claims as foreign.
    */
   snapshot?: { start?: string; end?: string; files?: string[] };
+  /**
+   * Tool calls recorded at message top level; empty (`[]`) for a message
+   * that made none (e.g. a pure chat turn). This is the server's own record
+   * of the turn's tool use — distinct from the `content` tool parts, which
+   * carry the per-call render view (state, input, output).
+   */
+  tools?: AssistantToolCall[];
   error?: { message?: string; code?: string };
 }
 
