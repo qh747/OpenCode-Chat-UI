@@ -28,7 +28,7 @@ export interface BranchContextInput {
 }
 
 /** Path comparison ignores separators, trailing slashes and letter case. */
-function samePath(a: string, b: string): boolean {
+export function samePath(a: string, b: string): boolean {
   const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
   return norm(a) === norm(b);
 }

@@ -31,7 +31,8 @@ import {
   groupFoldedByDate,
 } from "../util/sessions";
 import type { HistoryRow } from "../util/sessions";
-import { GitStatusProvider } from "../git";
+import { GitStatusProvider, readGitHead } from "../git";
+import { resolveBranchContext, samePath } from "../util/branch-context";
 import type { OpencodeClient } from "../opencode/client";
 import { SessionQueues } from "./session-queues";
 import { SessionDismissed } from "./session-dismissed";
@@ -148,6 +149,46 @@ export class ChatController implements vscode.Disposable {
   /** Revert point reported by the server, when the session has been rewound. */
   private revertMessageID: string | undefined;
   private git: GitInfo = {};
+  /**
+   * 分支上下文覆盖(ADR-0013):条显示"agent 工作上下文的分支"——
+   * 会话目录(被搬移的会话)> 本仓活跃 worktree > 工作区。
+   * postedGit 是最近一次发布的生效值(含快照),等值跳过防抖。
+   * 覆盖字段的清空内联在各会话身份变更点(与 busy 等显示态同风格)。
+   */
+  private sessionDirectory: string | undefined;
+  private worktree: { directory: string; branch: string } | undefined;
+  private eventBranch: string | undefined;
+  private postedGit: GitInfo | undefined;
+
+  /** 生效的分支显示:三层取真的唯一入口(ADR-0013)。 */
+  private effectiveGit(): GitInfo {
+    const sessionDirectory = this.sessionDirectory;
+    return resolveBranchContext({
+      workspacePath: this.folder.uri.fsPath,
+      workspace: this.git,
+      eventBranch: this.eventBranch,
+      sessionDirectory,
+      sessionBranch: sessionDirectory ? readGitHead(sessionDirectory) : undefined,
+      worktree: this.worktree,
+    });
+  }
+
+  /** 计算并按需发布分支显示;等值跳过,与快照共用同一生效值。 */
+  private publishGit(): void {
+    const git = this.effectiveGit();
+    const prev = this.postedGit;
+    if (
+      prev &&
+      prev.branch === git.branch &&
+      prev.dirty === git.dirty &&
+      prev.directory === git.directory
+    ) {
+      return;
+    }
+    this.postedGit = git;
+    this.post({ kind: "git", git });
+  }
+
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private metaRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   private permissionTimer: ReturnType<typeof setInterval> | undefined;
@@ -187,7 +228,7 @@ export class ChatController implements vscode.Disposable {
       git,
       git.onDidChange((status) => {
         this.git = status;
-        this.post({ kind: "git", git: status });
+        this.publishGit();
       }),
     );
 
@@ -549,6 +590,9 @@ export class ChatController implements vscode.Disposable {
       const sessionId = created.data.id;
       this.sessionId = sessionId;
       this.isSubagentSession = false;
+      // 新会话即新上下文:覆盖清空,条回到工作区,等新会话的信号重建(ADR-0013)。
+      this.sessionDirectory = undefined;
+      this.worktree = undefined;
       this.parentSessionID = undefined;
       this.messages = [];
       this.resetStreams();
@@ -594,6 +638,9 @@ export class ChatController implements vscode.Disposable {
     this.parentSessionID = undefined;
     this.pendingAgent = undefined;
     this.pendingModel = undefined;
+    // 换会话即换上下文:覆盖清空,条回到工作区,等新会话的信号重建(ADR-0013)。
+    this.sessionDirectory = undefined;
+    this.worktree = undefined;
     // 换会话即离开旧回合的执行窗口：busy 必须先归零（spec 分支 4），
     // 否则旧会话的 busy 残留会让新会话误显“处理中”并污染 postHistory 戳记；
     // 若新会话真在跑，fullResync → refreshSessionMeta 会重新置位。
@@ -1238,6 +1285,8 @@ export class ChatController implements vscode.Disposable {
         this.diffs = [];
         this.turnCache = undefined;
         this.busy = false;
+        this.sessionDirectory = undefined;
+        this.worktree = undefined;
         void this.context.workspaceState.update(this.storageKey(), undefined);
         this.postSnapshot();
       } else {
@@ -1322,7 +1371,11 @@ export class ChatController implements vscode.Disposable {
 
   // --- event handling ---------------------------------------------------
 
-  private handleEvent(event: { type: string; data: Record<string, unknown> }): void {
+  private handleEvent(event: {
+    type: string;
+    data: Record<string, unknown>;
+    location?: { directory?: string };
+  }): void {
     const data = event.data;
     const eventSession = typeof data.sessionID === "string" ? data.sessionID : undefined;
     switch (event.type) {
@@ -1541,6 +1594,8 @@ export class ChatController implements vscode.Disposable {
           this.turnCache = undefined;
           this.dismissed.clear();
           this.busy = false;
+          this.sessionDirectory = undefined;
+          this.worktree = undefined;
           this.clearSubagents();
           this.cacheHitRate = undefined;
           this.contextTokens = undefined;
@@ -1551,6 +1606,27 @@ export class ChatController implements vscode.Disposable {
           this.dropSessionState(eventSession);
         }
         break;
+      case "vcs.branch.updated": {
+        // 分支条的事件真值(ADR-0013):信封 location.directory 即发生
+        // 分支变更的 checkout。目录=工作区 → 覆盖清除、采纳事件分支
+        // (治疗 git 扩展降级环境的冻结);目录=本仓 worktree → 覆盖为
+        // 该 worktree。最近信号优先(spec Q7),publishGit 等值跳过。
+        const branch = typeof data.branch === "string" ? data.branch : undefined;
+        const directory = event.location?.directory;
+        if (!branch || !directory) {
+          break;
+        }
+        if (samePath(directory, this.folder.uri.fsPath)) {
+          this.worktree = undefined;
+          this.eventBranch = branch;
+        } else if (this.host.isWorkspaceWorktree(directory)) {
+          this.worktree = { directory, branch };
+        } else {
+          break;
+        }
+        this.publishGit();
+        break;
+      }
       default:
         break;
     }
@@ -2095,6 +2171,13 @@ export class ChatController implements vscode.Disposable {
       this.model = result.data.model;
       this.isSubagentSession = result.data.parentID !== undefined;
       this.parentSessionID = result.data.parentID;
+      // 会话被搬移(opencode worktree 机制)时,location.directory 指向
+      // 新目录;分支条随之跟随(ADR-0013)。变化才发布,等值跳过。
+      const directory = result.data.location?.directory;
+      if (directory !== this.sessionDirectory) {
+        this.sessionDirectory = directory;
+        this.publishGit();
+      }
       const previousRevert = this.revertMessageID;
       this.revertMessageID = result.data.revert?.messageID;
       if (this.revertMessageID !== previousRevert && this.earlierMessages.length > 0) {
@@ -2128,6 +2211,10 @@ export class ChatController implements vscode.Disposable {
   }
 
   async fullResync(): Promise<void> {
+    // 服务器重连/权威重读:事件分支真值作废,退回 git 扩展快照,等
+    // 新的事件流重建(事件只在变化时推送,旧值可能是断连期间的过期态)。
+    this.eventBranch = undefined;
+    this.publishGit();
     this.broadcastState();
     this.post({ kind: "catalog", catalog: this.host.catalog });
     if (!this.sessionId) {
@@ -2152,6 +2239,10 @@ export class ChatController implements vscode.Disposable {
   private postSnapshot(): void {
     // 当前会话队列的只读视图:早快照与权威快照都从这里取(spec Q19)。
     const queueState = this.sessionQueues.state(this.sessionId);
+    // 快照也是一次 git 发布:登记为最新生效值,publishGit 的等值跳过
+    // 才不会把"快照已送达的值"再发一遍或漏发回退值(ADR-0013)。
+    const git = this.effectiveGit();
+    this.postedGit = git;
     this.post({
       kind: "snapshot",
       snapshot: {
@@ -2175,7 +2266,7 @@ export class ChatController implements vscode.Disposable {
         contextTokens: this.contextTokens,
         cacheHitRate: this.cacheHitRate,
         workspacePath: this.folder.uri.fsPath,
-        git: this.git,
+        git,
         editors: this.editors,
         locale: getLocale(),
       },

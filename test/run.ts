@@ -14,6 +14,7 @@ import "./composer-keys.test";
 import "./composer-drafts.test";
 import "./composer-switch.test";
 import "./event-filter.test";
+import "./branch-events.test";
 import "./queue-strip.test";
 import "./queue-turn-end.test";
 import "./question-form.test";
