@@ -108,6 +108,15 @@ The extension's local, per-workspace list of the last five model refs used — s
 **Session info panel**
 The slide-over opened from the context strip's usage figure. It mirrors the desktop's session view: the stat grid for the current session, the system prompt, and the raw message list, all read from the state the chat already holds. Distinct from the transcript, which renders the conversation readably rather than raw.
 
+**Workspace folder**
+The VS Code folder the panel binds to (`workspaceFolders[0]`): the opencode server's working directory and the repository the context strip falls back to. One per window; the extension has no multi-root awareness. Distinct from where the agent may actually be working — a session or a worktree of the same repository.
+
+**Session directory**
+The directory a session is anchored to on the server (its location); the agent's tools run there. Sessions are created at the workspace folder, and the extension never moves one, but opencode's worktree feature can. Every event a session emits is tagged with its directory, which is how the panel tells a moved session apart.
+
+**Active worktree**
+A git worktree of the workspace repository whose branch the context strip currently follows: the most recent branch-update signal among the session's directory, the repo's worktrees, and the workspace folder itself. The user's editor still points at the workspace folder — only the strip's branch segment follows the worktree, with its full path in the tooltip.
+
 **Local preference**
 A setting the extension keeps for itself, stored in the VS Code configuration under the `opencode.*` prefix and edited on the native VS Code settings page. It belongs to this extension and travels with the editor, not with the opencode server.
 
