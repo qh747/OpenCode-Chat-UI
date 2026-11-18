@@ -113,16 +113,14 @@ describe("collectAllMessages", () => {
     assert.equal(calls.length, 2);
   });
 
-  test("gives up after a safety cap of pages instead of looping forever", async () => {
-    let calls = 0;
-    const collected = await collectAllMessages(
-      async () => {
-        calls += 1;
-        return page([assistant(`a${calls}`, calls)], `c-${calls}`);
-      },
-      { maxPages: 5 },
+  test("gives up loudly instead of silently truncating when the cap is hit", async () => {
+    await assert.rejects(
+      () =>
+        collectAllMessages(
+          async () => page([assistant("a1", 1)], "c-end"),
+          { maxPages: 3 },
+        ),
+      /did not end within 3 pages/,
     );
-    assert.equal(calls, 5);
-    assert.equal(collected.length, 5);
   });
 });

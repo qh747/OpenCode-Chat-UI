@@ -88,5 +88,7 @@ export async function collectAllMessages(
       return all;
     }
   }
-  return all;
+  // The cap is a runaway-loop guard, not a truncation: an export stops short
+  // only by failing loudly, never by handing back a silently partial file.
+  throw new Error(`opencode: message export did not end within ${maxPages} pages`);
 }

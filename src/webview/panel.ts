@@ -8,6 +8,7 @@ import type {
   FileDiffInfo,
   FormAnswerValue,
   FormInfo,
+  ListPage,
   MessageInfo,
   PermissionRequest,
   PromptFileAttachment,
@@ -74,6 +75,12 @@ export class ChatController implements vscode.Disposable {
   private hasEarlier = false;
   /** 一次回填补取在途；并发的回填请求直接忽略。 */
   private loadingEarlier = false;
+  /**
+   * 回填存储的代次：每次清空（切换/rewind/回滚点变化）自增。在途的回填
+   * 响应落地时比对代次——代次已变就丢弃，旧页不许混进重置后的存储
+   * （rewind 竞态会把被隐藏的消息复活成鬼影）。
+   */
+  private historyEpoch = 0;
   /** Streaming text/reasoning of the current turn, per assistant message. */
   private liveStreams = new Map<string, LiveStream>();
   /** Authoritative content pushed by `session.message.content.updated`. */
@@ -704,7 +711,7 @@ export class ChatController implements vscode.Disposable {
         text,
       };
       this.messages.push(localMessage);
-      this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
+      this.post({ kind: "messages", sessionID, messages: this.renderableTranscript() });
       // Remember the model actually in use for the picker's Recent section.
       // 只在显示会话的发送里记录:后台回合动不了显示会话 picker 的状态,
       // 记下 this.model 会把 B 的 picker 选择记到 A 的回合头上。
@@ -1597,8 +1604,7 @@ export class ChatController implements vscode.Disposable {
       // The v2 endpoint returns newest-first; the UI renders oldest-first.
       // 替换的是最近窗口；回填的更早消息在 this.earlierMessages 里存活。
       this.messages = orderMessages(page.data);
-      this.earlierCursor = olderCursorOf(page);
-      this.hasEarlier = this.messages.length > 0 && Boolean(this.earlierCursor);
+      this.adoptPageCursor(page);
       this.turnCache = { sessionID, messages: this.messages, at: Date.now() };
       // Context gauge and cache-hit rate read the latest assistant usage, not
       // the cumulative session counters; see contextTokensOf / cacheHitRateOf.
@@ -1615,11 +1621,11 @@ export class ChatController implements vscode.Disposable {
 
   /**
    * The transcript's loaded history: the append-only backfilled pages folded
-   * with the recent window. This merged view is what the webview renders and
-   * what the session info panel counts; diff-list inputs keep reading the
-   * recent window alone (issue 01 keeps them on the newest page).
+   * with the recent window. This is what the webview renders and what the
+   * session info panel counts; diff-list inputs keep reading the recent
+   * window alone (issue 01 keeps them on one page).
    */
-  private allMessages(): MessageInfo[] {
+  private loadedTranscript(): MessageInfo[] {
     return mergeMessages(this.earlierMessages, this.messages);
   }
 
@@ -1628,7 +1634,7 @@ export class ChatController implements vscode.Disposable {
     this.post({
       kind: "messages",
       sessionID,
-      messages: this.mergedMessages(),
+      messages: this.renderableTranscript(),
       hasEarlier: this.hasEarlier,
       loadingEarlier: this.loadingEarlier,
     });
@@ -1640,6 +1646,17 @@ export class ChatController implements vscode.Disposable {
     this.earlierCursor = undefined;
     this.hasEarlier = false;
     this.loadingEarlier = false;
+    this.historyEpoch += 1;
+  }
+
+  /**
+   * Absorb one fetched page's pagination state: the cursor that continues
+   * toward older messages plus whether any may exist. Shared by the refresh
+   * (initial page) and the backfill so both read the cursor the same way.
+   */
+  private adoptPageCursor(page: ListPage<MessageInfo>): void {
+    this.earlierCursor = olderCursorOf(page);
+    this.hasEarlier = page.data.length > 0 && Boolean(this.earlierCursor);
   }
 
   /**
@@ -1658,18 +1675,20 @@ export class ChatController implements vscode.Disposable {
     }
     this.loadingEarlier = true;
     this.postMessages(sessionID);
+    const epoch = this.historyEpoch;
     await this.safeCall(async () => {
       try {
         const page = await client.listMessages(sessionID, {
           cursor: this.earlierCursor,
           limit: ChatController.MESSAGE_PAGE_LIMIT,
         });
-        if (!this.pollSessionCurrent(sessionID)) {
+        if (!this.pollSessionCurrent(sessionID) || epoch !== this.historyEpoch) {
+          // 会话已切换，或存储在途时被重置（rewind/回滚点变化）：这一页
+          // 描述的是重置前的历史，落地即鬼影，丢弃。
           return;
         }
         this.earlierMessages = mergeMessages(this.earlierMessages, orderMessages(page.data));
-        this.earlierCursor = olderCursorOf(page);
-        this.hasEarlier = page.data.length > 0 && Boolean(this.earlierCursor);
+        this.adoptPageCursor(page);
       } finally {
         this.loadingEarlier = false;
         if (sessionID === this.sessionId) {
@@ -1688,8 +1707,8 @@ export class ChatController implements vscode.Disposable {
    * `this.messages` — a previous version patched parts in place, which made the
    * short-lived guess outlive its turn.
    */
-  private mergedMessages(): MessageInfo[] {
-    return this.allMessages().map((message) => {
+  private renderableTranscript(): MessageInfo[] {
+    return this.loadedTranscript().map((message) => {
       if (message.type !== "assistant") {
         return message;
       }
@@ -1974,7 +1993,11 @@ export class ChatController implements vscode.Disposable {
     ) {
       return cached.messages;
     }
-    const page = await client.listMessages(sessionID);
+    const page = await client.listMessages(sessionID, {
+      // 冷路径与 warm 路径（refreshMessages 写入的 turnCache）取同一页
+      // 大小，diff 输入的范围/归因口径才不随缓存命中漂移。
+      limit: ChatController.MESSAGE_PAGE_LIMIT,
+    });
     const messages = orderMessages(page.data);
     this.turnCache = { sessionID, messages, at: Date.now() };
     return messages;
@@ -2136,7 +2159,7 @@ export class ChatController implements vscode.Disposable {
         forms: this.forms,
         subagents: this.subagents,
         isSubagentSession: this.isSubagentSession,
-        messages: this.mergedMessages(),
+        messages: this.renderableTranscript(),
         hasEarlier: this.hasEarlier,
         loadingEarlier: this.loadingEarlier,
         pending: this.pending,

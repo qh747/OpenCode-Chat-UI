@@ -4,7 +4,8 @@ Status: needs-triage
 
 The same fetch truncation that hid the transcript's beginning also bounds the
 diff list: `turnMessages` (`src/webview/panel.ts`) feeds `refreshDiffs` with a
-single message page (server default: newest 50), so `diffRange`'s start time
+single message page (both the warm cache and the cold fetch now use the
+transcript's page size, 100), so `diffRange`'s start time
 and the attribution set (ADR-0008: empty attribution = empty list) only cover
 those messages. In a long session, unprocessed file changes from older turns
 can miss both the range and the attribution set, and never appear as pending

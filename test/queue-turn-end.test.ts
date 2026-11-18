@@ -100,8 +100,8 @@ function turnEndController(displayed: string | undefined, busy = false) {
     activeSelection: () => ({ path: "/ws/b.md", start: 1, end: 2 }),
     toPromptAttachment: proto.toPromptAttachment,
     selectionAttachment: proto.selectionAttachment,
-    mergedMessages: proto.mergedMessages,
-    allMessages: proto.allMessages,
+    renderableTranscript: proto.renderableTranscript,
+    loadedTranscript: proto.loadedTranscript,
     // handleEvent 显示侧依赖:一律 stub,测试只看队列语义、发送归属与显示态。
     flushDeltas: () => {},
     settleSubagents: async () => {},

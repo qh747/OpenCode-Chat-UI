@@ -107,8 +107,9 @@ function controller(options: {
     refreshMessages: method<() => Promise<void>>("refreshMessages").bind(c),
     loadEarlier: method<() => Promise<void>>("loadEarlier").bind(c),
     postMessages: method<(sessionID: string) => void>("postMessages").bind(c),
-    mergedMessages: method<() => MessageInfo[]>("mergedMessages").bind(c),
-    allMessages: method<() => MessageInfo[]>("allMessages").bind(c),
+    adoptPageCursor: method<(page: ListPage<MessageInfo>) => void>("adoptPageCursor").bind(c),
+    renderableTranscript: method<() => MessageInfo[]>("renderableTranscript").bind(c),
+    loadedTranscript: method<() => MessageInfo[]>("loadedTranscript").bind(c),
     resetLoadedHistory: method<() => void>("resetLoadedHistory").bind(c),
   });
   return {
@@ -118,7 +119,7 @@ function controller(options: {
     refreshMessages: method<() => Promise<void>>("refreshMessages").bind(c),
     loadEarlier: method<() => Promise<void>>("loadEarlier").bind(c),
     postMessages: method<(sessionID: string) => void>("postMessages").bind(c),
-    allMessages: method<() => MessageInfo[]>("allMessages").bind(c),
+    loadedTranscript: method<() => MessageInfo[]>("loadedTranscript").bind(c),
     resetLoadedHistory: method<() => void>("resetLoadedHistory").bind(c),
     refreshSessionMeta: method<() => Promise<void>>("refreshSessionMeta").bind(c),
   };
@@ -156,7 +157,7 @@ describe("refreshMessages with history pages", () => {
       earlierMessages: [user("u1", 100)],
       pages: [page([])],
     });
-    assert.deepEqual(h.allMessages().map((m) => m.id), ["u1", "u5"]);
+    assert.deepEqual(h.loadedTranscript().map((m) => m.id), ["u1", "u5"]);
   });
 
   test("the turn cache keeps holding the recent window only", async () => {
@@ -254,6 +255,34 @@ describe("loadEarlier", () => {
     assert.equal(h.c.earlierCursor, undefined);
     assert.equal(h.c.hasEarlier, false);
     assert.equal(h.c.loadingEarlier, false);
+  });
+
+  test("a backfill in flight when the store is reset lands as a ghost, not history", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const h = controller({
+      messages: [user("u5", 500)],
+      earlierCursor: "c-oldest",
+      hasEarlier: true,
+      pages: [],
+    });
+    h.c.client = () =>
+      ({
+        listMessages: async () => {
+          await gate;
+          // The pre-rewind page: real history then, hidden by the revert now.
+          return page([user("u1", 100)], "c-1");
+        },
+      }) as unknown as OpencodeClient;
+    const flight = h.loadEarlier();
+    h.resetLoadedHistory();
+    release();
+    await flight;
+    // The reset's whole purpose: pre-revert pages must not re-enter the store.
+    assert.deepEqual(h.c.earlierMessages, []);
+    assert.equal(h.c.hasEarlier, false);
   });
 });
 

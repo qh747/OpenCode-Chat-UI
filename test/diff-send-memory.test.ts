@@ -78,7 +78,7 @@ function sendControllerWith(diffs: FileDiffInfo[], dismissed: Map<string, string
     },
     startPermissionPolling() {},
     startSubagentPolling() {},
-    mergedMessages() {
+    renderableTranscript() {
       return controller.messages;
     },
     visibleDiffs: proto.visibleDiffs,
