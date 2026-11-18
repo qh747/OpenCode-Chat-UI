@@ -96,6 +96,7 @@ function deleteController(current: string) {
     safeCall: async (fn: () => unknown) => {
       await fn();
     },
+    dropSessionState: proto.dropSessionState,
     dropQueueState: proto.dropQueueState,
     clearForms: () => {},
     storageKey: () => "test-key",
@@ -118,6 +119,7 @@ function eventController(current: string) {
     sessionQueues: new SessionQueues(),
     sessionDismissed: new SessionDismissed(),
     stagedImages: new Map<string, unknown>(),
+    dropSessionState: proto.dropSessionState,
     dropQueueState: proto.dropQueueState,
     clearForms: () => {},
     resetStreams: () => {},

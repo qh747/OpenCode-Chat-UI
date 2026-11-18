@@ -832,6 +832,19 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
+  /**
+   * 会话删除即丢弃其会话侧状态(spec Q10/Q19):队列(未发送消息不再有效,
+   * 暂存附件一并释放)与驻留记忆(删除的会话不得留下幽灵记忆)。删除的若
+   * 正是显示会话,连表单一起清——表单属于显示态;别的会话的表单不能动。
+   */
+  private dropSessionState(id: string | undefined): void {
+    this.dropQueueState(id);
+    if (id === this.sessionId) {
+      this.clearForms();
+    }
+    this.sessionDismissed.drop(id);
+  }
+
   /** Park the current session's dismissed rows so switching back can restore them. */
   private stashDismissed(sessionID: string | undefined = this.sessionId): void {
     this.sessionDismissed.stash(sessionID, this.dismissed);
@@ -1185,11 +1198,8 @@ export class ChatController implements vscode.Disposable {
     if (confirm === t("deleteButton")) {
       await this.safeCall(() => this.client()?.deleteSession(id));
       if (this.sessionId === id) {
-        // 删除即丢弃该会话的队列状态(未发送消息不再有效,附件一并释放)。
-        this.dropQueueState(id);
-        this.clearForms();
-        // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
-        this.sessionDismissed.drop(id);
+        // 删除即丢弃该会话的队列状态、驻留记忆与表单(spec Q10/Q19)。
+        this.dropSessionState(id);
         this.dismissed.clear();
         this.sessionId = undefined;
         this.messages = [];
@@ -1200,8 +1210,7 @@ export class ChatController implements vscode.Disposable {
         void this.context.workspaceState.update(this.storageKey(), undefined);
         this.postSnapshot();
       } else {
-        this.dropQueueState(id);
-        this.sessionDismissed.drop(id);
+        this.dropSessionState(id);
       }
     }
   }
@@ -1489,11 +1498,8 @@ export class ChatController implements vscode.Disposable {
         break;
       case "session.deleted":
         if (eventSession === this.sessionId) {
-          // 删除即丢弃该会话的队列状态(未发送消息不再有效,附件一并释放)。
-          this.dropQueueState(eventSession);
-          this.clearForms();
-          // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
-          this.sessionDismissed.drop(eventSession);
+          // 删除即丢弃该会话的队列状态、驻留记忆与表单(spec Q10/Q19)。
+          this.dropSessionState(eventSession);
           this.sessionId = undefined;
           this.messages = [];
           this.resetStreams();
@@ -1509,8 +1515,7 @@ export class ChatController implements vscode.Disposable {
           void this.context.workspaceState.update(this.storageKey(), undefined);
           this.postSnapshot();
         } else if (eventSession) {
-          this.dropQueueState(eventSession);
-          this.sessionDismissed.drop(eventSession);
+          this.dropSessionState(eventSession);
         }
         break;
       default:
