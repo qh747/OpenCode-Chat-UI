@@ -36,6 +36,19 @@ describe("session-scoped client routes", () => {
     assert.deepEqual(calls, ["http://127.0.0.1:1/api/session/abc/model"]);
   });
 
+  test("a session diff can ask for the whole session's turn range", async () => {
+    const calls: string[] = [];
+    const client = makeClient(calls);
+    await client.sessionDiff("abc");
+    await client.sessionDiff("abc", { from: "u1", to: "u2" });
+    await client.sessionDiff("abc", { from: "u1" });
+    assert.deepEqual(calls, [
+      "http://127.0.0.1:1/api/session/abc/diff",
+      "http://127.0.0.1:1/api/session/abc/diff?from=u1&to=u2",
+      "http://127.0.0.1:1/api/session/abc/diff?from=u1",
+    ]);
+  });
+
   test("the subagent job list asks for descendants of one session", async () => {
     const calls: string[] = [];
     const client = makeClient(calls);

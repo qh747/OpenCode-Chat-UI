@@ -37,6 +37,29 @@ export function deriveSessionStatus(
 }
 
 /**
+ * A root row's color aggregates over itself and its folded subagent children
+ * (ADR-0010): red when anything is blocked or failed, green when anything is
+ * working, else the root's own state. Supersedes the 2026-11-17 rule that
+ * painted folded rows red for merely-running children — red is reserved for
+ * "needs you". Both attention states map to the `failed` class, whose color
+ * is the single red; the root's own `blocked` (yellow) only applies to rows
+ * without children, which are out of this aggregation's scope.
+ */
+export function aggregateRowStatus(
+  root: HistoryRow,
+  children: readonly HistoryRow[],
+): SessionRunStatus {
+  const statuses = [root.status, ...children.map((child) => child.status)];
+  if (statuses.some((status) => status === "blocked" || status === "failed")) {
+    return "failed";
+  }
+  if (statuses.some((status) => status === "working")) {
+    return "working";
+  }
+  return root.status;
+}
+
+/**
  * Fold subagent sessions under their root session. One level only: every
  * descendant is flattened into the nearest root's `children`.
  */

@@ -19,6 +19,7 @@ import type {
   SkillInfo,
 } from "./types";
 import { locationQuery } from "../util/catalog-params";
+import type { DiffRange } from "../util/session-diff";
 
 export class ApiError extends Error {
   constructor(
@@ -401,10 +402,21 @@ export class OpencodeClient {
   }
 
   /** File diffs produced by the session so far. */
-  async sessionDiff(id: string): Promise<{ data: FileDiffInfo[] }> {
+  async sessionDiff(
+    id: string,
+    range: DiffRange = {},
+  ): Promise<{ data: FileDiffInfo[] }> {
+    const params = new URLSearchParams();
+    if (range.from) {
+      params.set("from", range.from);
+    }
+    if (range.to) {
+      params.set("to", range.to);
+    }
+    const query = params.toString();
     return this.request<{ data: FileDiffInfo[] }>(
       "GET",
-      sessionPath(id, "/diff"),
+      sessionPath(id, "/diff") + (query ? `?${query}` : ""),
     );
   }
 

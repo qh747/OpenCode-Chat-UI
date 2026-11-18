@@ -23,6 +23,7 @@ import { stripTrailingMarkers } from "../util/dcp-markers";
 import { cacheHitRateOf, contextTokensOf } from "../util/tokens";
 import { toSubagentJobs, type SubagentJob } from "../util/subagents";
 import { resolveCommandAction, findSkillByCommand } from "../util/commands";
+import { diffFileKey, diffRange, attributionSet } from "../util/session-diff";
 import {
   deriveSessionStatus,
   foldSubagentSessions,
@@ -30,6 +31,10 @@ import {
 } from "../util/sessions";
 import type { HistoryRow } from "../util/sessions";
 import { GitStatusProvider } from "../git";
+import type { OpencodeClient } from "../opencode/client";
+import { SessionQueues } from "./session-queues";
+import type { QueueSnapshot } from "./session-queues";
+import { isStaleAction } from "./protocol";
 import type {
   AttachmentRef,
   EditorFile,
@@ -72,6 +77,15 @@ export class ChatController implements vscode.Disposable {
   /** Pending session forms (the `question` tool); non-empty blocks the turn. */
   private forms: FormInfo[] = [];
   private diffs: FileDiffInfo[] = [];
+  /** Token of the latest diff poll; older responses are dropped, not applied. */
+  private diffRequest = 0;
+  /**
+   * Ordered server messages used to build a session-wide diff range. Seeded by
+   * `refreshMessages`, refreshed by `refreshDiffs` when stale.
+   */
+  private turnCache: { sessionID: string; messages: MessageInfo[]; at: number } | undefined;
+  /** Per-session queues, so switching through history does not drop messages. */
+  private readonly sessionQueues = new SessionQueues();
   /**
    * Files the user chose not to see, keyed by the diff they dismissed. A file
    * whose diff has changed since comes back: the agent editing it again is
@@ -108,6 +122,8 @@ export class ChatController implements vscode.Disposable {
   /** True when the open session is a subagent's child session. */
   private isSubagentSession = false;
   private subagentTimer: ReturnType<typeof setInterval> | undefined;
+  /** Token of the latest subagent poll; a stale response must not cross sessions. */
+  private subagentRequest = 0;
   private fileCache: { path: string; name: string }[] | undefined;
   /** Images staged by the composer, keyed by the reference sent back to the webview. */
   private readonly stagedImages = new Map<string, StagedImage>();
@@ -204,6 +220,11 @@ export class ChatController implements vscode.Disposable {
   }
 
   async handleMessage(web: WebToHost): Promise<void> {
+    // 动作消息带会话戳：切换的精神分裂窗口内（宿主已翻到新会话、webview
+    // 还渲染着旧会话），落在旧会话界面上的点击直接丢弃，不打进新会话。
+    if (isStaleAction(web, this.sessionId)) {
+      return;
+    }
     switch (web.kind) {
       case "ready":
         await this.fullResync();
@@ -338,10 +359,6 @@ export class ChatController implements vscode.Disposable {
       case "openDiff":
         await this.openDiff(web.file);
         break;
-      case "keepFile":
-        this.dismiss(web.file);
-        this.broadcastDiffs();
-        break;
       case "revertFile":
         await this.revertFile(web.file);
         break;
@@ -356,9 +373,6 @@ export class ChatController implements vscode.Disposable {
         break;
       case "showLogs":
         await vscode.commands.executeCommand("opencode.showLogs");
-        break;
-      case "executePlan":
-        await this.executePlan();
         break;
       case "cycleAgent":
         this.cycleAgent(web.direction);
@@ -488,6 +502,8 @@ export class ChatController implements vscode.Disposable {
     const pendingModel = this.pendingModel;
     this.pendingAgent = undefined;
     this.pendingModel = undefined;
+    // A new session starts empty; anything queued in the old one stays there.
+    this.stashQueue();
     try {
       const created = await client.createSession({ location: { directory: this.host.folderPath } });
       const sessionId = created.data.id;
@@ -497,13 +513,15 @@ export class ChatController implements vscode.Disposable {
       this.resetStreams();
       this.pending = [];
       this.diffs = [];
+      this.turnCache = undefined;
       this.dismissed.clear();
       this.busy = false;
       this.cacheHitRate = undefined;
       this.contextTokens = undefined;
       this.revertMessageID = undefined;
       this.clearSubagents();
-      this.resetQueue();
+      this.loadQueue(sessionId);
+      this.clearForms();
       this.title = created.data.title;
       this.agent = created.data.agent ?? "build";
       this.model = created.data.model;
@@ -529,6 +547,7 @@ export class ChatController implements vscode.Disposable {
   }
 
   async switchSession(id: string): Promise<void> {
+    this.stashQueue();
     this.sessionId = id;
     this.isSubagentSession = false;
     this.pendingAgent = undefined;
@@ -542,10 +561,19 @@ export class ChatController implements vscode.Disposable {
     this.resetStreams();
     this.pending = [];
     this.diffs = [];
+    this.turnCache = undefined;
     this.dismissed.clear();
-    this.resetQueue();
+    this.loadQueue(id);
+    this.clearForms();
     this.clearSubagents();
+    // 早快照（issue 04a）：同步清理一完成就翻 webview 的会话页——旧会话的
+    // 队列条/输入框立刻消失，精神分裂窗口从 UI 侧关闭；fullResync 随后补
+    // 权威数据。此刻 busy 尚无新会话的可靠同步值（activeSessions 是异步
+    // 端点），先带复位标志，refreshSessionMeta（busy > idle 谓词）在一个
+    // 往返内纠正。
+    this.postSnapshot();
     await this.fullResync();
+    this.drainRestoredQueue();
     await vscode.commands.executeCommand("opencode.chat.focus");
   }
 
@@ -663,6 +691,13 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
+  /** Release the staged images a discarded parked queue was holding. */
+  private discardSnapshot(snapshot: QueueSnapshot): void {
+    this.discardQueuedAttachments(
+      snapshot.pendingForce ? [...snapshot.items, snapshot.pendingForce] : snapshot.items,
+    );
+  }
+
   private resumeQueue(): void {
     this.queuePaused = false;
     this.postQueue();
@@ -671,9 +706,6 @@ export class ChatController implements vscode.Disposable {
 
   private async forceQueued(id: string): Promise<void> {
     const item = this.queue.find((entry) => entry.id === id);
-    this.output?.appendLine(
-      `[DEBUG-force1] force id=${id} found=${item ? "yes" : "no"} busy=${this.busy} sid=${this.sessionId}`,
-    );
     if (!item) {
       return;
     }
@@ -722,11 +754,57 @@ export class ChatController implements vscode.Disposable {
   }
 
   /** A session switch must not leak messages into the new conversation. */
-  private resetQueue(): void {
-    this.discardQueuedAttachments(this.pendingForce ? [...this.queue, this.pendingForce] : this.queue);
+  private resetQueue(sessionID: string | undefined = this.sessionId): void {
+    const saved = this.sessionQueues.drop(sessionID);
+    this.discardSnapshot({ items: this.queue, paused: this.queuePaused, pendingForce: this.pendingForce });
+    if (saved) {
+      this.discardSnapshot(saved);
+    }
     this.queue = [];
     this.queuePaused = false;
     this.pendingForce = undefined;
+    this.clearForms();
+  }
+
+  /** Park the current session's queue so switching back can restore it. */
+  private stashQueue(sessionID: string | undefined = this.sessionId): void {
+    this.sessionQueues.stash(sessionID, {
+      items: this.queue,
+      paused: this.queuePaused,
+      pendingForce: this.pendingForce,
+    });
+  }
+
+  /** Load a session's parked queue into the live fields. */
+  private loadQueue(sessionID: string | undefined): void {
+    const snapshot = this.sessionQueues.take(sessionID);
+    this.queue = snapshot.items;
+    this.queuePaused = snapshot.paused;
+    this.pendingForce = snapshot.pendingForce;
+  }
+
+  /**
+   * After `fullResync`, a restored queue belongs to a session that may have
+   * finished its turn while the user was elsewhere: send what was waiting.
+   */
+  private drainRestoredQueue(): void {
+    if (this.pendingForce) {
+      const forced = this.pendingForce;
+      this.pendingForce = undefined;
+      if (this.busy) {
+        this.queue.unshift(forced);
+      } else {
+        this.startQueued(forced);
+        return;
+      }
+    }
+    if (!this.busy) {
+      this.drainQueue();
+    }
+    this.postQueue();
+  }
+
+  private clearForms(): void {
     // 表单同样属于旧会话：切换/新建/删除即丢弃，避免旧会话的
     // question 卡片污染新会话（与 messages/pending 同一套隔离原则）。
     if (this.forms.length > 0) {
@@ -877,17 +955,6 @@ export class ChatController implements vscode.Disposable {
     };
   }
 
-  async executePlan(): Promise<void> {
-    const client = this.client();
-    if (!client || !this.sessionId) {
-      return;
-    }
-    await this.safeCall(() => client.setAgent(this.sessionId ?? "", "build"));
-    this.agent = "build";
-    this.post({ kind: "sessionMeta", sessionID: this.sessionId, agent: "build" });
-    await this.send("Proceed with the plan.", []);
-  }
-
   /** Execute a slash command: built-ins client-side, the rest on the server. */
   private async executeRunCommand(command: string, args: string): Promise<void> {
     const action = resolveCommandAction(command);
@@ -979,6 +1046,7 @@ export class ChatController implements vscode.Disposable {
       await client.revertCommit(this.sessionId ?? "");
       this.resetStreams();
       this.dismissed.clear();
+      this.turnCache = undefined;
       // Pick up the server's revert point before recomputing the context
       // gauge, which stops at that point.
       await this.refreshSessionMeta();
@@ -1044,14 +1112,20 @@ export class ChatController implements vscode.Disposable {
     if (confirm === t("deleteButton")) {
       await this.safeCall(() => this.client()?.deleteSession(id));
       if (this.sessionId === id) {
+        this.resetQueue(id);
         this.sessionId = undefined;
         this.messages = [];
         this.pending = [];
         this.diffs = [];
+        this.turnCache = undefined;
         this.busy = false;
-        this.resetQueue();
         void this.context.workspaceState.update(this.storageKey(), undefined);
         this.postSnapshot();
+      } else {
+        const saved = this.sessionQueues.drop(id);
+        if (saved) {
+          this.discardSnapshot(saved);
+        }
       }
     }
   }
@@ -1236,9 +1310,6 @@ export class ChatController implements vscode.Disposable {
               );
             }
           }
-          this.output?.appendLine(
-            `[DEBUG-force1] turn-end wasBusy=${wasBusy} pending=${this.pendingForce ? "yes" : "no"} type=${event.type}`,
-          );
           if (wasBusy && this.pendingForce) {
             // The interrupted turn is finally over — start the forced message.
             const forced = this.pendingForce;
@@ -1334,19 +1405,25 @@ export class ChatController implements vscode.Disposable {
         break;
       case "session.deleted":
         if (eventSession === this.sessionId) {
+          this.resetQueue(eventSession);
           this.sessionId = undefined;
           this.messages = [];
           this.resetStreams();
           this.pending = [];
           this.diffs = [];
+          this.turnCache = undefined;
           this.busy = false;
           this.clearSubagents();
           this.cacheHitRate = undefined;
           this.contextTokens = undefined;
           this.revertMessageID = undefined;
-          this.resetQueue();
           void this.context.workspaceState.update(this.storageKey(), undefined);
           this.postSnapshot();
+        } else if (eventSession) {
+          const saved = this.sessionQueues.drop(eventSession);
+          if (saved) {
+            this.discardSnapshot(saved);
+          }
         }
         break;
       default:
@@ -1392,17 +1469,25 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
     await this.safeCall(async () => {
-      const page = await client.listMessages(this.sessionId ?? "");
+      const page = await client.listMessages(sessionID);
+      if (!this.pollSessionCurrent(sessionID)) {
+        return;
+      }
       // The v2 endpoint returns newest-first; the UI renders oldest-first.
       this.messages = orderMessages(page.data);
+      this.turnCache = { sessionID, messages: this.messages, at: Date.now() };
       // Context gauge and cache-hit rate read the latest assistant usage, not
       // the cumulative session counters; see contextTokensOf / cacheHitRateOf.
       this.contextTokens = contextTokensOf(this.messages, this.revertMessageID);
       this.cacheHitRate = cacheHitRateOf(this.messages, this.revertMessageID);
       this.flushDeltas();
-      this.post({ kind: "messages", sessionID: this.sessionId ?? "", messages: this.mergedMessages() });
+      this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
       this.pruneStreams();
+      // The turn cache just changed shape (newest turn, snapshot files), so a
+      // diff refresh that ran before this landed may have used the old range.
+      void this.refreshDiffs();
     });
   }
 
@@ -1592,16 +1677,17 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
+    const request = ++this.subagentRequest;
     await this.safeCall(async () => {
-      const result = await client.jobs(this.sessionId ?? "");
-      this.output?.appendLine(
-        `[DEBUG-sub1] n=${result.data.length} ` +
-          result.data
-            .map((j) => `${j.kind}/${j.status}/${j.sessionID}/child=${j.childSessionID ?? "-"}`)
-            .join(" "),
-      );
+      const result = await client.jobs(sessionID);
+      // Polling restarts on every switch; a late answer from the session the
+      // user just left must not repopulate (or clear) the current strip.
+      if (this.pollStale(request, this.subagentRequest, sessionID)) {
+        return;
+      }
       this.subagents = toSubagentJobs(result.data);
-      this.post({ kind: "subagents", sessionID: this.sessionId, jobs: this.subagents });
+      this.post({ kind: "subagents", sessionID, jobs: this.subagents });
       if (this.subagents.length === 0 && this.subagentTimer && !this.busy) {
         // 轮询发现已无运行中的子代理：收尾停轮询（strip 由上面的空列表更新关闭）。
         // 主回合仍在执行（busy）时不因空列表停表——task job 可能尚未 spawn，
@@ -1662,6 +1748,46 @@ export class ChatController implements vscode.Disposable {
     await this.refreshSubagents();
   }
 
+  /**
+   * Ordered server messages for the session, cached briefly so a burst of
+   * tool events does not re-fetch the transcript for every diff refresh.
+   */
+  /**
+   * True when a poll's answer no longer describes the newest request or the
+   * session the panel has open. Event bursts and session switches start
+   * overlapping polls; applying a late one would stamp the wrong session.
+   */
+  private pollStale(request: number, counter: number, sessionID: string): boolean {
+    return request !== counter || sessionID !== this.sessionId;
+  }
+
+  /** True when the record a poll will write is for the session still open. */
+  private pollSessionCurrent(sessionID: string): boolean {
+    return sessionID === this.sessionId;
+  }
+
+  /**
+   * How long one cached message list may serve repeated reads. Event bursts
+   * and session switches re-request within milliseconds; the cache only has
+   * to collapse those, not survive a turn.
+   */
+  private static readonly TURN_CACHE_TTL_MS = 1_500;
+
+  private async turnMessages(sessionID: string, client: OpencodeClient): Promise<MessageInfo[]> {
+    const cached = this.turnCache;
+    if (
+      cached &&
+      cached.sessionID === sessionID &&
+      Date.now() - cached.at < ChatController.TURN_CACHE_TTL_MS
+    ) {
+      return cached.messages;
+    }
+    const page = await client.listMessages(sessionID);
+    const messages = orderMessages(page.data);
+    this.turnCache = { sessionID, messages, at: Date.now() };
+    return messages;
+  }
+
   private async refreshDiffs(): Promise<void> {
     if (!this.sessionId) {
       return;
@@ -1670,9 +1796,28 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
+    const request = ++this.diffRequest;
     await this.safeCall(async () => {
-      const result = await client.sessionDiff(this.sessionId ?? "");
-      this.diffs = result.data;
+      const messages = await this.turnMessages(sessionID, client);
+      // Event bursts and session switches start overlapping polls. Applying a
+      // late answer would stamp A's files with B's session id (the webview
+      // accepts it) or let an older empty poll hide a newer result.
+      if (this.pollStale(request, this.diffRequest, sessionID)) {
+        return;
+      }
+      // The diff endpoint defaults to the newest turn alone, so a follow-up
+      // turn with no edits used to empty the list. Ask for the whole session
+      // range, then keep only the files this session's snapshots touched.
+      const result = await client.sessionDiff(sessionID, diffRange(messages));
+      if (this.pollStale(request, this.diffRequest, sessionID)) {
+        return;
+      }
+      // 空归因即空列表（ADR-0008）：范围 diff 在共享工作树上计算，
+      // 无条件过滤——放行会把其他会话（或本面板自己的 revert）造成的
+      // 树变化灌进这个会话的列表。
+      const attribution = attributionSet(messages);
+      this.diffs = result.data.filter((diff) => attribution.has(diffFileKey(diff.file)));
       this.broadcastDiffs();
     });
   }
@@ -1704,19 +1849,27 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    const sessionID = this.sessionId;
     await this.safeCall(async () => {
-      const result = await client.getSession(this.sessionId ?? "");
+      const result = await client.getSession(sessionID);
+      // A late meta answer from the session the user just left would set the
+      // new session's busy/title/model to the old one's values.
+      if (sessionID !== this.sessionId) {
+        return;
+      }
       this.title = result.data.title;
       this.agent = result.data.agent;
       this.model = result.data.model;
       this.isSubagentSession = result.data.parentID !== undefined;
       this.revertMessageID = result.data.revert?.messageID;
-      // busy 双向重算（spec 分支 4）：服务器侧的 busy/idle 是唯一事实，
-      // 这里既置位也复位——单向置位会把已完成子会话的 busy 残留带进新会话。
-      this.busy = Boolean(result.data.time.busy) && !result.data.time.idle;
+      // busy 双向重算：服务器侧 time.busy/time.idle 是持久 epoch 时间戳，
+      // "在跑"只能比较两者（busy > idle，与 sessions.ts 的
+      // deriveSessionStatus 同一事实）；!time.idle 会把任何跑过回合的
+      // 会话永久算成空闲（issue 03，ADR-0009）。
+      this.busy = (result.data.time.busy ?? 0) > (result.data.time.idle ?? 0);
       this.post({
         kind: "sessionMeta",
-        sessionID: this.sessionId,
+        sessionID,
         title: this.title,
         agent: this.agent,
         model: this.model,
@@ -1883,6 +2036,21 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
+  /**
+   * The before content for a revert, strictly: `undefined` when the cached
+   * patch no longer matches the file. Unlike `beforeContent` (whose patch-text
+   * fallback only feeds a diff view), a revert must never write derived text
+   * into the shared tree — refusing is the only safe answer.
+   */
+  private async revertedContent(diff: FileDiffInfo, uri: vscode.Uri): Promise<string | undefined> {
+    const after = await this.currentContent(uri, diff.status);
+    try {
+      return reverseApply(after, diff.patch);
+    } catch {
+      return undefined;
+    }
+  }
+
   async openDiff(file: string): Promise<void> {
     const diff = this.diffs.find((d) => d.file === file);
     if (!diff) {
@@ -1909,7 +2077,13 @@ export class ChatController implements vscode.Disposable {
       if (diff.status === "added") {
         await vscode.workspace.fs.delete(uri, { useTrash: true });
       } else {
-        const before = await this.beforeContent(diff, uri);
+        const before = await this.revertedContent(diff, uri);
+        if (before === undefined) {
+          // 缓存 patch 与磁盘内容不再匹配（±3 行锚定失败）：文件多半被
+          // 其他会话或用户改过。不写盘、保持原样，报错让用户自行处理。
+          this.post({ kind: "error", message: t("revertConflict") });
+          return;
+        }
         if (diff.status === "deleted") {
           await vscode.workspace.fs.createDirectory(
             vscode.Uri.file(uri.path.slice(0, uri.path.lastIndexOf("/"))),

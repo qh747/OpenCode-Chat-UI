@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "./state";
 import type { HistoryGroup } from "../src/webview/protocol";
-import { relativeSessionTime, rootToExpand } from "../src/util/sessions";
+import { aggregateRowStatus, relativeSessionTime, rootToExpand } from "../src/util/sessions";
 import type { FoldedHistoryRow, HistoryRow } from "../src/util/sessions";
 import { t } from "../src/util/i18n";
 
@@ -79,6 +79,13 @@ export function HistoryMenu({ dispatch, groups, currentSessionId, onOpen, initia
     const isChild = indent;
     const canExpand = fold !== undefined && fold.children.length > 0;
     const isOpen = canExpand && (expanded.has(session.id) || session.id === forcedRoot);
+    // 行状态聚合（ADR-0010）：有折叠子会话的行聚合自己与子代理的状态，
+    // 折叠、展开一致——blocked/failed 红，否则任一 working 绿。推翻
+    // 2026-11-17 “子代理在跑 → 折叠行红”的警示；红色只留给需要用户介入。
+    const rowStatus =
+      fold !== undefined && fold.children.length > 0
+        ? aggregateRowStatus(session, fold.children)
+        : session.status;
     return (
       <div
         key={session.id}
@@ -103,14 +110,9 @@ export function HistoryMenu({ dispatch, groups, currentSessionId, onOpen, initia
           >
             {canExpand ? (isOpen ? "▾" : "▸") : ""}
           </span>
-          {/* 状态直接用标题颜色表达，不再渲染独立圆点（spec 分支 1）。
-              has-running-children 警示只给折叠行：展开时子代理行自带
-              状态色，红色警示反而与“失败”撞色（诊断 2026-11-17，用户截图）。 */}
-          <span
-            className={`history-title${
-              fold !== undefined && fold.runningChildren > 0 && !isOpen ? " has-running-children" : ""
-            } status-${session.status}`}
-          >
+          {/* 状态直接用标题颜色表达，不再渲染独立圆点（spec 分支 1）；
+              有折叠子会话的行用聚合状态（ADR-0010）。 */}
+          <span className={`history-title status-${rowStatus}`}>
             {session.title || t("untitled")}
           </span>
           {fold !== undefined && fold.children.length > 0 && (

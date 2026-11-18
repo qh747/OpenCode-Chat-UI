@@ -165,6 +165,12 @@ export interface AssistantMessage {
   finish?: string;
   cost?: number;
   tokens?: TokenUsage;
+  /**
+   * Workspace snapshot range this assistant turn covered. `files` names the
+   * files the turn touched — the only per-session attribution the server
+   * exposes (the diff endpoint itself is turn- or range-based).
+   */
+  snapshot?: { start?: string; end?: string; files?: string[] };
   error?: { message?: string; code?: string };
 }
 

@@ -59,3 +59,13 @@ Status: implemented
 
 原型按仓库惯例应提交到 throwaway 分支留存，本次未做（未获提交授权）；
 `prototype/diff-visibility/` 目录是当前唯一副本，`rm -rf` 即失。
+
+## Correction (0.4.21): the endpoint was not cumulative
+
+上面「每个 turn 拉一次全量 session diff」的假设在 v2.3.0 上不成立：
+`GET /api/session/{id}/diff` 不带参数时只 diff **最新 user message 的那一轮**，
+所以一个没有改动的后续 turn 会把列表清空（实测：`test.md` 创建后，接着
+回了一条「1」，列表立即消失）。现在请求 `from=<首个 user message>&to=<最新
+user message>` 得到整个会话区间，再用各 assistant message 的
+`snapshot.files` 过滤——区间是共享工作区上的，另一个会话在这段时间里的改动
+不该算进本会话。

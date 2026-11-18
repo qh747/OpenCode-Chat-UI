@@ -45,16 +45,36 @@ function renderMenu(expanded: ReadonlySet<string>): string {
   );
 }
 
-describe("history title running-children warning", () => {
-  test("a folded row with running children warns red on the title", () => {
+describe("history row aggregate status (ADR-0010)", () => {
+  const parentTitle = (html: string): string =>
+    (html.match(/<span class="history-title[^"]*">父会话<\/span>/) ?? [""])[0] ?? "";
+
+  test("a folded row with a working child is green, not the old red warning", () => {
     const html = renderMenu(new Set());
-    assert.match(html, /has-running-children/);
+    // 折叠行聚合自己与子代理：working → 绿（推翻 2026-11-17 的红色警示）。
+    assert.doesNotMatch(html, /has-running-children/);
+    assert.match(parentTitle(html), /status-working/);
   });
 
-  test("an expanded row does not warn red — children show their own green", () => {
+  test("an expanded root row aggregates the same way", () => {
     const html = renderMenu(new Set(["ses_parent"]));
     assert.doesNotMatch(html, /has-running-children/);
-    // 展开后子代理行直接可见，自身状态色仍在。
-    assert.match(html, /status-working/);
+    // 父会话行自身（不是子代理行）也聚合出 working 绿。
+    assert.match(parentTitle(html), /status-working/);
+  });
+
+  test("a blocked child paints the root red", () => {
+    const blockedChild: HistoryRow = { ...runningChild, status: "blocked" };
+    const html = renderToStaticMarkup(
+      createElement(HistoryMenu, {
+        dispatch,
+        groups: [{ label: "今天", sessions: foldSubagentSessions([parent, blockedChild]) }],
+        currentSessionId: undefined,
+        onOpen,
+        initialExpanded: new Set<string>(),
+        initialOpen: true,
+      }),
+    );
+    assert.match(parentTitle(html), /status-failed/);
   });
 });

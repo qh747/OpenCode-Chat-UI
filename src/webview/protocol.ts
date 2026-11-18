@@ -167,12 +167,18 @@ export type HostToWeb =
 
 export type WebToHost =
   | { kind: "ready" }
-  | { kind: "send"; text: string; attachments: AttachmentRef[] }
-  | { kind: "removeQueued"; id: string }
-  | { kind: "forceQueued"; id: string }
-  | { kind: "resumeQueue" }
-  | { kind: "stopSubagent"; childSessionID: string }
-  | { kind: "abort" }
+  | {
+      kind: "send";
+      text: string;
+      attachments: AttachmentRef[];
+      /** Session stamp: the session the user was looking at (see `stampSession`). */
+      sessionID?: string;
+    }
+  | { kind: "removeQueued"; id: string; sessionID?: string }
+  | { kind: "forceQueued"; id: string; sessionID?: string }
+  | { kind: "resumeQueue"; sessionID?: string }
+  | { kind: "stopSubagent"; childSessionID: string; sessionID?: string }
+  | { kind: "abort"; sessionID?: string }
   | { kind: "openFile"; path: string; start?: number; end?: number }
   | { kind: "openUrl"; url: string }
   | { kind: "copyCode"; text: string }
@@ -191,19 +197,79 @@ export type WebToHost =
   | { kind: "setModel"; providerID: string; id: string; variant?: string }
   | { kind: "stageImage"; requestId: string; name: string; dataBase64: string; mime: string }
   | { kind: "rewindTo"; messageID: string }
-  | { kind: "permissionReply"; requestID: string; decision: "once" | "always" | "reject" }
-  | { kind: "formReply"; formID: string; answer: Record<string, FormAnswerValue> }
-  | { kind: "formCancel"; formID: string }
+  | { kind: "permissionReply"; requestID: string; decision: "once" | "always" | "reject"; sessionID?: string }
+  | { kind: "formReply"; formID: string; answer: Record<string, FormAnswerValue>; sessionID?: string }
+  | { kind: "formCancel"; formID: string; sessionID?: string }
   | { kind: "openDiff"; file: string }
-  | { kind: "keepFile"; file: string }
-  | { kind: "revertFile"; file: string }
+  | { kind: "revertFile"; file: string; sessionID?: string }
   | { kind: "searchFiles"; requestId: string; query: string }
   | { kind: "pickFiles"; requestId: string }
   | { kind: "openCLI" }
   | { kind: "showLogs" }
-  | { kind: "executePlan" }
   | { kind: "cycleAgent"; direction: 1 | -1 }
   | { kind: "restartServer" }
   | { kind: "openSettings" }
   /** Whether the user is currently looking at this surface. */
   | { kind: "focusChanged"; focused: boolean };
+
+/**
+ * Action messages whose effect belongs to the session the user was looking at
+ * when they made it. During a session switch the host flips to the incoming
+ * session while the webview still renders the outgoing one; a stamped action
+ * lets the host drop clicks that were made against the stale surface instead
+ * of firing them into the wrong conversation.
+ */
+type StampedAction = Extract<
+  WebToHost,
+  {
+    kind:
+      | "send"
+      | "removeQueued"
+      | "forceQueued"
+      | "resumeQueue"
+      | "abort"
+      | "stopSubagent"
+      | "permissionReply"
+      | "formReply"
+      | "formCancel"
+      | "revertFile";
+  }
+>;
+
+/** Attach the session stamp to an outgoing action message; others pass through. */
+export function stampSession(message: WebToHost, sessionID: string | undefined): WebToHost {
+  switch (message.kind) {
+    case "send":
+      return { ...message, sessionID };
+    case "removeQueued":
+      return { ...message, sessionID };
+    case "forceQueued":
+      return { ...message, sessionID };
+    case "resumeQueue":
+      return { ...message, sessionID };
+    case "abort":
+      return { ...message, sessionID };
+    case "stopSubagent":
+      return { ...message, sessionID };
+    case "permissionReply":
+      return { ...message, sessionID };
+    case "formReply":
+      return { ...message, sessionID };
+    case "formCancel":
+      return { ...message, sessionID };
+    case "revertFile":
+      return { ...message, sessionID };
+    default:
+      return message;
+  }
+}
+
+/**
+ * True when an incoming action was stamped with a session the host no longer
+ * hosts — a click on a surface the webview has not re-rendered past a switch
+ * yet. The host drops it instead of firing it into the incoming session.
+ */
+export function isStaleAction(message: WebToHost, currentSessionID: string | undefined): boolean {
+  const stamped = (message as Partial<StampedAction>).sessionID;
+  return stamped !== undefined && stamped !== currentSessionID;
+}

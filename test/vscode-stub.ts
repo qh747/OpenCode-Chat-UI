@@ -42,8 +42,58 @@ export const extensions = {
   },
 };
 
-/** 占位：git.ts 运行时未使用 workspace 下的 API。 */
-export const workspace = { name: "stub", workspaceFolders: undefined };
+// --- 极简内存文件系统：revertFile 单测使用 -------------------------------
+
+/** 键为绝对路径（fsPath）的内存文件内容。 */
+export const memoryFiles = new Map<string, string>();
+
+/** 记录进回收站的 delete 目标路径。 */
+export const trashedPaths: string[] = [];
+
+/** 记录 createDirectory 的目录路径。 */
+export const createdDirectories: string[] = [];
+
+/** 每个测试自行清空内存文件系统与记录。 */
+export function resetFs(): void {
+  memoryFiles.clear();
+  trashedPaths.length = 0;
+  createdDirectories.length = 0;
+}
+
+/** 与 vscode.workspace.fs 行为一致的最小实现（内存版）。 */
+export const fs = {
+  async readFile(uri: { fsPath: string }): Promise<Buffer> {
+    const content = memoryFiles.get(uri.fsPath);
+    if (content === undefined) {
+      throw new Error(`ENOENT: ${uri.fsPath}`);
+    }
+    return Buffer.from(content, "utf8");
+  },
+  async writeFile(uri: { fsPath: string }, content: Buffer): Promise<void> {
+    memoryFiles.set(uri.fsPath, content.toString("utf8"));
+  },
+  async delete(uri: { fsPath: string }): Promise<void> {
+    trashedPaths.push(uri.fsPath);
+    memoryFiles.delete(uri.fsPath);
+  },
+  async createDirectory(uri: { fsPath: string }): Promise<void> {
+    createdDirectories.push(uri.fsPath);
+  },
+};
+
+/** git.ts/revertFile 运行时用到的 workspace API 面。 */
+export const workspace = { name: "stub", workspaceFolders: undefined, fs };
+
+/** 与 vscode.Uri.file / joinPath 行为一致的最小实现（仅 fsPath/path 字段）。 */
+export const Uri = {
+  file(path: string): { fsPath: string; path: string } {
+    return { fsPath: path, path };
+  },
+  joinPath(base: { path: string }, ...segments: string[]): { fsPath: string; path: string } {
+    const joined = [base.path.replace(/\/$/, ""), ...segments].join("/");
+    return { fsPath: joined, path: joined };
+  },
+};
 
 /** 与 vscode.env 行为一致的最小实现。 */
 export const env = { language: "en" };

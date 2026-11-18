@@ -45,17 +45,16 @@ interface DiffProps {
   /** Rows visible before the expanded list scrolls (from `opencode.diffList.maxVisibleRows`). */
   maxVisibleRows: number;
   onOpen: (file: string) => void;
-  onKeep: (file: string) => void;
   onRevert: (file: string) => void;
 }
 
 /**
  * The files the agent changed. Collapsed to a single header row by default —
  * the counts are the signal, the rows are only for acting on one — expanding
- * reveals the per-file Keep / Revert. When open, rows beyond `maxVisibleRows`
+ * reveals the per-file revert action. When open, rows beyond `maxVisibleRows`
  * scroll inside the card instead of stretching the panel.
  */
-export function DiffList({ diffs, maxVisibleRows, onOpen, onKeep, onRevert }: DiffProps) {
+export function DiffList({ diffs, maxVisibleRows, onOpen, onRevert }: DiffProps) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -103,15 +102,13 @@ export function DiffList({ diffs, maxVisibleRows, onOpen, onKeep, onRevert }: Di
                 <span className="deletions">-{diff.deletions}</span>
               </span>
               <span className="diff-buttons">
-                <button className="btn small" onClick={() => onKeep(diff.file)} title={t("keepChangeTitle")}>
-                  {t("keep")}
-                </button>
                 <button
-                  className="btn small danger"
+                  className="diff-revert"
                   onClick={() => onRevert(diff.file)}
                   title={t("revertFileTitle")}
+                  aria-label={t("revertFileTitle")}
                 >
-                  {t("revert")}
+                  ×
                 </button>
               </span>
             </div>

@@ -20,7 +20,6 @@
 - **权限卡片**：Allow once / Always allow / Deny，基于 opencode 的权限 API。
 - **模型与模式选择器**：opencode 里配置的所有 provider（包括 `opencode-go/*` 订阅模型）、推理力度（effort）变体、原生 agent（build / plan / 自定义 agent），`Shift+Tab` 循环切换。
 - **上下文**：`@` 模糊搜索附加文件，`+` 多选文件，自动附加当前编辑器的选区。
-- **Plan 衔接**：plan 模式探索完后，一键切换 build 模式并执行计划。
 - **版本守卫**：连接的 server 大版本超出已验证的 v2 范围时给出非阻断警告。
 - **零账号处理**——扩展为每个窗口启动一个私有的 `opencode serve`（随机端口 + 随机密码，随窗口关闭而结束），或连接已有 server；认证完全留在你的 opencode CLI 登录态里。
 

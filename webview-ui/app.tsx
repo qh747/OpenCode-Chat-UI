@@ -307,15 +307,8 @@ export function App({ state, send, composerHandleRef }: Props) {
           diffs={state.diffs}
           maxVisibleRows={state.maxVisibleDiffRows}
           onOpen={(file) => send({ kind: "openDiff", file })}
-          onKeep={(file) => send({ kind: "keepFile", file })}
           onRevert={(file) => send({ kind: "revertFile", file })}
         />
-      )}
-
-      {agent === "plan" && !state.busy && hasMessages && (
-        <button className="btn plan-execute" onClick={() => send({ kind: "executePlan" })}>
-          {t("proceedInBuild")}
-        </button>
       )}
 
       <SubagentStrip

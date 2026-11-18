@@ -851,25 +851,84 @@ body {
   margin-top: 4px;
 }
 
-/* diff list */
-.diff-list {
+/* --- strips above the composer -------------------------------------------
+   Changed files, queued messages and running subagents are one visual family:
+   same card (input background, 6px radius), same mono uppercase 9px header
+   with an 8px caret, same 20px rows padded 2px 10px, dashed separators. */
+.diff-list,
+.queue-strip,
+.subagent-strip {
   flex: none;
-  margin: 0 10px 8px;
+  margin: 0 10px 4px;
   border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--input-bg);
   overflow: hidden;
 }
-.diff-head {
+.diff-head,
+.queue-head,
+.subagent-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px 4px 10px;
+  padding: 4px 10px;
+  border: none;
+  background: none;
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
 }
+.diff-caret,
+.queue-caret,
+.subagent-chev {
+  flex: none;
+  font-size: 8px;
+  opacity: 0.7;
+}
+.diff-count,
+.queue-count,
+.subagent-count {
+  color: var(--fg);
+  font-weight: 700;
+}
+.diff-card,
+.queue-row,
+.subagent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  padding: 2px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.diff-card + .diff-card,
+.queue-row + .queue-row,
+.subagent-row + .subagent-row {
+  border-top: 1px dashed color-mix(in srgb, var(--border) 65%, transparent);
+}
+/* Icon actions in every strip share one hit box; only colour differs. */
+.diff-revert,
+.queue-force,
+.queue-remove {
+  flex: none;
+  background: none;
+  border: none;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.diff-revert,
+.queue-remove {
+  font-size: 13px;
+}
+.queue-force {
+  font-size: 14px;
+}
+
+/* diff list */
 .diff-toggle {
   display: flex;
   align-items: center;
@@ -888,36 +947,17 @@ body {
 .diff-toggle:hover {
   color: var(--fg);
 }
-.diff-caret {
-  flex: none;
-  font-size: 8px;
-  opacity: 0.7;
-}
-.diff-count {
-  color: var(--fg);
-  font-weight: 700;
-}
 .diff-total {
   font-size: 9.5px;
   letter-spacing: 0;
   text-transform: none;
 }
-.diff-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-}
-.diff-card:last-child {
-  border-bottom: none;
-}
 /* Expanded rows: cap at N rows (--diff-max-rows, from opencode.diffList.maxVisibleRows)
-   and scroll the rest instead of stretching the panel. 28px ≈ one row (button
-   21px + padding 8px - border overlap); rows beyond the cap peek a few px as a
-   scroll affordance. */
+   and scroll the rest instead of stretching the panel. 21px ≈ one unified row
+   (20px min-height + 1px dashed separator); rows beyond the cap peek a few px
+   as a scroll affordance. */
 .diff-rows {
-  max-height: calc(var(--diff-max-rows, 5) * 28px);
+  max-height: calc(var(--diff-max-rows, 5) * 21px);
   overflow-y: auto;
 }
 .diff-rows::-webkit-scrollbar {
@@ -938,7 +978,7 @@ body {
   border: none;
   color: var(--fg);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   padding: 0;
   display: flex;
@@ -981,25 +1021,13 @@ body {
   gap: 4px;
   flex: none;
 }
-/* 保留/还原弱化为次级样式：无底色、细描边、弱化文字，避免与行内文件名争夺注意力 */
-.diff-buttons .btn {
-  background: transparent;
-  border-color: var(--border);
-  color: var(--muted);
-  padding: 3px 8px;
-}
-.diff-buttons .btn:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-.diff-buttons .btn.danger {
+/* 还原是一个破坏性动作：只留一个红色 ×，不给它按钮底座抢注意力 */
+.diff-revert {
+  border-radius: 3px;
   color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
-.diff-buttons .btn.danger:hover {
-  color: var(--danger);
-  border-color: var(--danger);
-  filter: none;
+.diff-revert:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 /* buttons */
@@ -1030,13 +1058,6 @@ body {
   font-size: 11px;
   padding: 2px 8px;
 }
-.btn.plan-execute {
-  flex: none;
-  margin: 0 10px 8px;
-  border-color: var(--ok);
-  color: var(--ok);
-  background: transparent;
-}
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
@@ -1057,24 +1078,8 @@ body {
 /* queued messages: one collapsed header row by default, aligned with the
    composer box (hence the same 10px side margin as .composer's padding) */
 .queue-strip {
-  flex: none;
   max-height: 148px;
-  margin: 0 10px 4px;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--input-bg);
-}
-.queue-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px 4px 10px;
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
 }
 .queue-toggle {
   display: flex;
@@ -1093,15 +1098,6 @@ body {
 }
 .queue-toggle:hover {
   color: var(--fg);
-}
-.queue-caret {
-  flex: none;
-  font-size: 8px;
-  opacity: 0.7;
-}
-.queue-count {
-  color: var(--fg);
-  font-weight: 700;
 }
 .queue-note {
   font-size: 9.5px;
@@ -1124,16 +1120,6 @@ body {
 .queue-head-btn:hover {
   color: var(--fg);
 }
-.queue-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 20px;
-  padding: 2px 10px;
-}
-.queue-row + .queue-row {
-  border-top: 1px dashed color-mix(in srgb, var(--border) 65%, transparent);
-}
 .queue-index {
   flex: none;
   width: 12px;
@@ -1153,27 +1139,14 @@ body {
   color: var(--fg);
 }
 .queue-force {
-  flex: none;
-  background: none;
-  border: none;
   color: #4da3ff;
   font-family: var(--mono);
-  font-size: 9.5px;
-  padding: 0 2px;
-  cursor: pointer;
 }
 .queue-force:hover {
-  text-decoration: underline;
+  filter: brightness(1.25);
 }
 .queue-remove {
-  flex: none;
-  background: none;
-  border: none;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1;
-  padding: 0 2px;
-  cursor: pointer;
 }
 .queue-remove:hover {
   color: var(--danger);
@@ -1181,40 +1154,18 @@ body {
 
 /* running subagents: one row per agent, aligned with the composer box */
 .subagent-strip {
-  flex: none;
   max-height: 120px;
-  margin: 0 10px 4px;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--input-bg);
 }
 /* SubagentStrip 标题行可点切换折叠（spec 分支 5）。 */
 .subagent-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   width: 100%;
-  padding: 4px 10px;
-  border: none;
-  background: none;
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
   cursor: pointer;
   text-align: left;
 }
-.subagent-head:hover .subagent-count {
-  color: var(--accent, #3794ff);
+.subagent-head:hover {
+  color: var(--fg);
 }
-.subagent-chev {
-  flex: none;
-  font-size: 9px;
-  color: var(--muted);
-}
-/* 折叠时仍提示“有子代理在跑”的脉冲点。 */
 .subagent-pulse {
   flex: none;
   width: 6px;
@@ -1223,21 +1174,6 @@ body {
   border-radius: 50%;
   background: var(--accent, #3794ff);
   animation: subagent-pulse 1.4s ease-in-out infinite;
-}
-.subagent-count {
-  color: var(--fg);
-  font-weight: 700;
-}
-.subagent-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px 5px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-}
-.subagent-row + .subagent-row {
-  border-top: 1px solid var(--border);
 }
 .subagent-dot {
   flex: none;
@@ -2143,11 +2079,6 @@ body {
   color: var(--warn);
 }
 .history-title.status-failed {
-  color: var(--danger);
-}
-/* 折叠行下仍有子代理在跑 → 标题染红警示。声明在 status-* 之前，
-   会话自身状态（如 working 的绿）优先于该警示色（Q4）。 */
-.history-title.has-running-children {
   color: var(--danger);
 }
 .history-title {

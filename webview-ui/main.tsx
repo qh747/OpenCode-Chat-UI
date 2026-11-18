@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app";
 import { initialState, reducer } from "./state";
 import { resolveLocale, setLocale } from "../src/util/i18n";
+import { stampSession } from "../src/webview/protocol";
 import type { HostToWeb, WebToHost } from "../src/webview/protocol";
 import type { ComposerHandle } from "./composerTypes";
 import "./styles.css";
@@ -20,9 +21,14 @@ function Main() {
   const composerHandleRef = useRef<ComposerHandle | undefined>(undefined);
   const pendingDeltas = useRef<HostToWeb[]>([]);
   const frame = useRef<number | undefined>(undefined);
+  /** 发送时正在看的会话：动作消息据此盖章（spec 分支 4b）。 */
+  const sessionRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    sessionRef.current = state.sessionID;
+  }, [state.sessionID]);
 
   const send = useCallback((message: WebToHost) => {
-    vscode.postMessage(message);
+    vscode.postMessage(stampSession(message, sessionRef.current));
   }, []);
 
   // Stream deltas arrive faster than the panel can paint, so fold them into one

@@ -105,9 +105,10 @@ export function QueueStrip({ queue, paused, sessionID, onForce, onRemove, onResu
             <button
               className="queue-force"
               onClick={() => onForce(item.id)}
-              title={t("queueTitleBusy")}
+              title={t("sendNow")}
+              aria-label={t("sendNow")}
             >
-              {t("sendNow")}
+              ↑
             </button>
             <button
               className="queue-remove"

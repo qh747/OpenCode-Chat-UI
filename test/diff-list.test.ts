@@ -16,7 +16,6 @@ function render(diffs: FileDiffInfo[], maxVisibleRows = 5): string {
       diffs,
       maxVisibleRows,
       onOpen: () => {},
-      onKeep: () => {},
       onRevert: () => {},
     }),
   );

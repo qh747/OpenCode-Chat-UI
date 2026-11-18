@@ -1,6 +1,7 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  aggregateRowStatus,
   deriveSessionStatus,
   foldSubagentSessions,
   groupFoldedByDate,
@@ -171,6 +172,62 @@ describe("foldSubagentSessions", () => {
     ]);
 
     assert.equal(folded[0]?.runningChildren, 1);
+  });
+});
+
+describe("aggregateRowStatus", () => {
+  test("a working child paints the root green", () => {
+    assert.equal(
+      aggregateRowStatus(
+        row({ id: "ses_root", status: "idle" }),
+        [row({ id: "ses_child", status: "working" })],
+      ),
+      "working",
+    );
+  });
+
+  test("a working root is green on its own", () => {
+    assert.equal(aggregateRowStatus(row({ id: "ses_root", status: "working" }), []), "working");
+  });
+
+  test("a blocked child paints the root red, folded or not", () => {
+    assert.equal(
+      aggregateRowStatus(
+        row({ id: "ses_root", status: "idle" }),
+        [row({ id: "ses_child", status: "blocked" })],
+      ),
+      "failed",
+    );
+  });
+
+  test("a failed child paints the root red", () => {
+    assert.equal(
+      aggregateRowStatus(
+        row({ id: "ses_root", status: "working" }),
+        [row({ id: "ses_child", status: "failed" })],
+      ),
+      "failed",
+    );
+  });
+
+  test("attention beats running", () => {
+    assert.equal(
+      aggregateRowStatus(
+        row({ id: "ses_root", status: "working" }),
+        [row({ id: "ses_a", status: "working" }), row({ id: "ses_b", status: "failed" })],
+      ),
+      "failed",
+    );
+  });
+
+  test("an idle root with idle children stays uncolored", () => {
+    assert.equal(
+      aggregateRowStatus(
+        row({ id: "ses_root", status: "idle" }),
+        [row({ id: "ses_child", status: "idle" })],
+      ),
+      "idle",
+    );
   });
 });
 

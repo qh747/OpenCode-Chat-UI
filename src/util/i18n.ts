@@ -61,10 +61,8 @@ const en = {
   diffExpand: "Show changed files",
   diffCollapse: "Hide changed files",
   changesCount: "Changes {count}",
-  keep: "Keep",
-  keepChangeTitle: "Keep this change",
-  revert: "Revert",
   revertFileTitle: "Revert this file to its previous state",
+  revertConflict: "OpenCode: the file changed after this session's edit — revert skipped.",
   "diffStatus.modified": "modified",
   "diffStatus.added": "added",
   "diffStatus.deleted": "deleted",
@@ -104,7 +102,6 @@ const en = {
   composerPlaceholder: "Ask anything · / for commands · @ for context...",
   composerPlaceholderBusy: "Model is working · Enter to queue · Esc to stop",
   attachFilesTitle: "Attach files",
-  queueTitleBusy: "Add to queue (Enter)",
   sendTitle: "Send (Enter)",
   stopTitle: "Stop (Esc)",
   queuedHint: "{count} queued",
@@ -181,9 +178,6 @@ const en = {
   noDir: "no dir",
   contextTokensTitle: "Context tokens used",
   cacheHitRateTitle: "Cache hit rate",
-
-  // plan hand-off
-  proceedInBuild: "▶ Proceed with the plan in build mode",
 
   // host notices and flows
   turnFailed: "OpenCode: the turn failed.",
@@ -302,10 +296,8 @@ const zhCn: Record<MessageKey, string> = {
   diffExpand: "展开已修改文件",
   diffCollapse: "收起已修改文件",
   changesCount: "改动 {count}",
-  keep: "保留",
-  keepChangeTitle: "保留此改动",
-  revert: "还原",
   revertFileTitle: "将此文件还原为修改前的状态",
+  revertConflict: "OpenCode：文件在本会话改动之后又被修改过，已跳过还原。",
   "diffStatus.modified": "修改",
   "diffStatus.added": "新增",
   "diffStatus.deleted": "删除",
@@ -344,7 +336,6 @@ const zhCn: Record<MessageKey, string> = {
   composerPlaceholder: "随便问点什么， / 可查看命令， @ 可添加上下文...",
   composerPlaceholderBusy: "模型处理中 · Enter 加入队列 · Esc 停止",
   attachFilesTitle: "附加文件",
-  queueTitleBusy: "加入队列 (Enter)",
   sendTitle: "发送 (Enter)",
   stopTitle: "停止执行 (Esc)",
   queuedHint: "已排队 {count}",
@@ -421,9 +412,6 @@ const zhCn: Record<MessageKey, string> = {
   noDir: "无工作区",
   contextTokensTitle: "已用上下文 token",
   cacheHitRateTitle: "缓存命中率",
-
-  // plan hand-off
-  proceedInBuild: "▶ 以 build 模式执行计划",
 
   // host notices and flows
   turnFailed: "OpenCode：本轮执行失败。",

@@ -26,7 +26,10 @@ One user prompt plus everything the agent produces until the session goes idle. 
 The share of a turn's prompt tokens that the provider served from its prompt cache rather than re-processing. Reported per assistant reply; a high rate means the ongoing conversation is reusing cached context.
 
 **Diff list**
-The collapsed-by-default strip listing the files the agent changed this turn: one quiet count row that expands into one row per file with Keep / Revert actions. Distinct from a file's diff view, which shows the actual edits.
+The collapsed-by-default strip listing the files this session's agent changes are still pending on: one quiet count row that expands into one row per file with a Revert action. The rows are filtered to the session's attribution set; an empty attribution set shows an empty list. Distinct from a file's diff view, which shows the actual edits.
+
+**Attribution set**
+The union of the files a session's own assistant snapshots list — the only per-session file attribution the server exposes. The diff list is filtered to it; an empty attribution set yields an empty diff list, never another session's changes.
 
 **Part**
 One ordered block inside an assistant reply: a passage of text, a passage of reasoning, or a tool call. Tool calls carry an identity of their own; text and reasoning parts are known by their position within the reply.
@@ -36,6 +39,9 @@ A user message sent while the model is still working. The host holds it in FIFO 
 
 **Subagent job**
 A running subagent, reported by the server's job listing for a session and its descendants. Only jobs of kind `subagent` that are still running are shown: one row with the agent, its description and the elapsed time, plus a Stop action that interrupts the child session. The listing has no events, so the host polls it while a turn runs. Distinct from an agent in the catalog, which is a definition, not a running job.
+
+**Aggregate row status**
+A history row's status derived from the root session and its folded subagent children together: red when anything is blocked or failed, green when anything is working, else the root's own state. Applied identically to folded and expanded rows.
 
 **Rewind point**
 A user message used as the boundary for a revert: everything after it (messages and their file changes) is rolled back via the server's staged revert.
@@ -50,6 +56,12 @@ The server-provided lists of agents, models and the default model ref. Loaded on
 
 **Snapshot**
 The authoritative UI state the host sends to a webview surface: current session, messages, pending permissions, diffs, running subagent jobs and catalog.
+
+**Session stamp**
+The session ID the webview attaches to an action message, naming the session the user was looking at when they made it. The host drops stamped actions whose session it no longer hosts, so a click on a stale surface cannot land in the incoming session.
+
+**Split-brain window**
+The interval during a session switch in which the host has already flipped to the incoming session while the webview still renders the outgoing one. Closed from the UI side by posting a snapshot immediately after the host's synchronous clears, and defended in protocol by session stamps.
 
 **Event stream**
 The server's volatile SSE feed (`/api/event`). Lossy by design; consumers resync authoritative state on reconnect instead of trusting it alone.

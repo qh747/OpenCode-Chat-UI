@@ -20,7 +20,6 @@ A [VS Code](https://code.visualstudio.com) extension that puts a full [opencode]
 - **Permission cards** — Allow once / Always allow / Deny, powered by opencode's permission API.
 - **Model & mode pickers** — every provider configured in opencode (including `opencode-go/*` subscription models), reasoning-effort variants, and the native agents (build / plan / custom). `Shift+Tab` cycles modes.
 - **Context** — `@` to fuzzy-attach files, `+` for a multi-file picker, auto-attach of the active editor selection.
-- **Plan handoff** — finish exploring in plan mode, then one click switches to build and executes.
 - **Version guard** — warns (non-blocking) if the connected server's major version is outside the tested v2 range.
 - **Zero account handling** — the extension spawns a private `opencode serve` per window (random port + random password, killed with the window) or connects to an existing server; auth stays in your opencode CLI login.
 
