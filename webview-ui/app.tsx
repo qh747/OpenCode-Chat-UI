@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatState } from "./state";
 import type { WebToHost } from "../src/webview/protocol";
 import { t } from "../src/util/i18n";
+import { prependDelta, shouldRequestEarlier } from "./earlier";
 import { MessageList, ConversationErrors } from "./MessageList";
 import { Composer } from "./Composer";
 import { DiffList, PermissionCard, Welcome } from "./Cards";
@@ -27,6 +28,18 @@ export function App({ state, send, composerHandleRef }: Props) {
   const consumedImages = useRef(new Set<string>());
   /** 未消费 staged 图的首次出现时间，用于 30s 超时放弃。 */
   const imageSeenAt = useRef(new Map<string, number>());
+  /**
+   * 程序化滚动标记（钉底、回填前插的锚点校正）：滚动事件由它们触发的
+   * 不算用户操作，不能拿去更新「用户在顶部」的状态。
+   */
+  const programmaticScroll = useRef(false);
+  /** 用户最后一次真实滚动位置的 scrollTop；未滚动过为 undefined。 */
+  const lastUserScroll = useRef<number | undefined>(undefined);
+  /** 上一次渲染的列表度量：用于识别「更早消息被前插」。 */
+  const listMetrics = useRef<{ firstId: string | undefined; height: number }>({
+    firstId: undefined,
+    height: 0,
+  });
 
   // Feed file-picker results into composer chips.
   useEffect(() => {
@@ -90,9 +103,42 @@ export function App({ state, send, composerHandleRef }: Props) {
   useEffect(() => {
     const list = listRef.current;
     if (list && stickToBottom.current) {
+      programmaticScroll.current = true;
       list.scrollTop = list.scrollHeight;
     }
   }, [state.messages, state.busy, state.diffs, state.pending, state.errors]);
+
+  // Prepended older pages must not move the viewport (acceptance 4): shift
+  // scrollTop by the height the prepend added. The shift is programmatic, so
+  // the scroll handler ignores it and the load-earlier chain stays alive.
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) {
+      return;
+    }
+    const prev = listMetrics.current;
+    const firstId = state.messages[0]?.id;
+    const delta = prependDelta(state.messages, prev.firstId, prev.height, list.scrollHeight);
+    if (delta > 0 && !stickToBottom.current) {
+      programmaticScroll.current = true;
+      list.scrollTop += delta;
+    }
+    listMetrics.current = { firstId, height: list.scrollHeight };
+  }, [state.messages]);
+
+  // While the user's last genuine scroll kept them near the top, keep asking
+  // for older pages until the history closes (acceptance 1).
+  useEffect(() => {
+    if (
+      shouldRequestEarlier({
+        hasEarlier: state.hasEarlier,
+        loadingEarlier: state.loadingEarlier,
+        lastUserScrollTop: lastUserScroll.current,
+      })
+    ) {
+      send({ kind: "loadEarlier" });
+    }
+  }, [state.messages, state.hasEarlier, state.loadingEarlier, send]);
 
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
 
@@ -106,6 +152,7 @@ export function App({ state, send, composerHandleRef }: Props) {
     const target = list.querySelector(".message-list") ?? list;
     const observer = new ResizeObserver(() => {
       if (stickToBottom.current) {
+        programmaticScroll.current = true;
         list.scrollTop = list.scrollHeight;
       }
     });
@@ -266,8 +313,23 @@ export function App({ state, send, composerHandleRef }: Props) {
         className="scroll-area"
         ref={listRef}
         onScroll={(event) => {
+          // 程序化滚动（钉底、锚点校正）不是用户操作：不更新顶部跟随状态。
+          if (programmaticScroll.current) {
+            programmaticScroll.current = false;
+            return;
+          }
           const el = event.currentTarget;
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          lastUserScroll.current = el.scrollTop;
+          if (
+            shouldRequestEarlier({
+              hasEarlier: state.hasEarlier,
+              loadingEarlier: state.loadingEarlier,
+              lastUserScrollTop: el.scrollTop,
+            })
+          ) {
+            send({ kind: "loadEarlier" });
+          }
         }}
       >
         {!hasMessages && state.connection !== "error" ? (
@@ -276,6 +338,8 @@ export function App({ state, send, composerHandleRef }: Props) {
           <MessageList
             messages={state.messages}
             busy={state.busy}
+            hasEarlier={state.hasEarlier}
+            loadingEarlier={state.loadingEarlier}
             onRewind={(messageID) => send({ kind: "rewindTo", messageID })}
             onOpenUrl={(url) => send({ kind: "openUrl", url })}
             onOpenFile={(path, start, end) => send({ kind: "openFile", path, start, end })}

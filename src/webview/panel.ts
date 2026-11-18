@@ -18,7 +18,7 @@ import { appendLinks } from "../util/message-attachments";
 import { getLocale, t, type MessageKey } from "../util/i18n";
 import { reverseApply } from "../util/diffapply";
 import { LiveStream, mergeLiveContent, type SegmentKind } from "../util/live-segments";
-import { orderMessages } from "../util/messages";
+import { collectAllMessages, mergeMessages, olderCursorOf, orderMessages } from "../util/messages";
 import { stripTrailingMarkers } from "../util/dcp-markers";
 import { cacheHitRateOf, contextTokensOf } from "../util/tokens";
 import { toSubagentJobs, type SubagentJob } from "../util/subagents";
@@ -60,7 +60,20 @@ const SCHEME = "opencode-diff-before";
 export class ChatController implements vscode.Disposable {
   private readonly sinks = new Set<Sink>();
   private sessionId: string | undefined;
+  /** The recent window: the newest page as the server returned it. */
   private messages: MessageInfo[] = [];
+  /**
+   * 回填的更早消息（只增）：初始/刷新页之外，游标续传回来的页。刷新替换
+   * 的只是最近窗口（this.messages），这里的内容在会话切换、rewind 或回滚
+   * 点变化之前一直存活——刷新与回合结束都不许冲掉它（验收⑤）。
+   */
+  private earlierMessages: MessageInfo[] = [];
+  /** 续传更早消息的游标：desc 页 cursor.next 锚在已加载最旧一条上。 */
+  private earlierCursor: string | undefined;
+  /** 服务器可能还有更早的消息；只有空页才关闭历史（服务器的耗尽信号）。 */
+  private hasEarlier = false;
+  /** 一次回填补取在途；并发的回填请求直接忽略。 */
+  private loadingEarlier = false;
   /** Streaming text/reasoning of the current turn, per assistant message. */
   private liveStreams = new Map<string, LiveStream>();
   /** Authoritative content pushed by `session.message.content.updated`. */
@@ -358,6 +371,9 @@ export class ChatController implements vscode.Disposable {
         // 记录请求发起时的会话：结果回传时带会话戳，webview 据此隔离。
         this.stageImage(web.requestId, web.name, web.dataBase64, web.mime, this.sessionId);
         break;
+      case "loadEarlier":
+        await this.loadEarlier();
+        break;
       case "rewindTo":
         await this.rewindTo(web.messageID);
         break;
@@ -573,6 +589,7 @@ export class ChatController implements vscode.Disposable {
     this.busy = false;
     await this.context.workspaceState.update(this.storageKey(), id);
     this.messages = [];
+    this.resetLoadedHistory();
     this.resetStreams();
     this.pending = [];
     this.diffs = [];
@@ -1133,6 +1150,9 @@ export class ChatController implements vscode.Disposable {
       this.resetStreams();
       this.dismissed.clear();
       this.turnCache = undefined;
+      // 回滚点之后的消息被服务器隐藏：回填的更早页可能包含已隐藏的消息，
+      // 一并丢弃，随后 refreshMessages 按最新一页重建（否则快照里留下鬼影）。
+      this.resetLoadedHistory();
       // Pick up the server's revert point before recomputing the context
       // gauge, which stops at that point.
       await this.refreshSessionMeta();
@@ -1237,9 +1257,11 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     try {
-      const page = await client.listMessages(id);
+      // 导出 = 完整会话记录：游标循环拉全（spec 决策），顺序保持服务器
+      // 返回序（新到旧），与既有导出的呈现一致。
+      const messages = await collectAllMessages((query) => client.listMessages(id, query));
       const lines: string[] = [`# OpenCode session`, ""];
-      for (const message of page.data) {
+      for (const message of messages) {
         if (message.type === "user") {
           const user = message as UserMessage;
           lines.push(`## 🧑 User`, "", user.text, "");
@@ -1563,23 +1585,97 @@ export class ChatController implements vscode.Disposable {
     }
     const sessionID = this.sessionId;
     await this.safeCall(async () => {
-      const page = await client.listMessages(sessionID);
+      // 初始页/刷新页：最新 MESSAGE_PAGE_LIMIT 条（desc）。cursor 与 order
+      // 不可同传——v2.3.0 服务器对两者的组合显式报错。
+      const page = await client.listMessages(sessionID, {
+        limit: ChatController.MESSAGE_PAGE_LIMIT,
+        order: "desc",
+      });
       if (!this.pollSessionCurrent(sessionID)) {
         return;
       }
       // The v2 endpoint returns newest-first; the UI renders oldest-first.
+      // 替换的是最近窗口；回填的更早消息在 this.earlierMessages 里存活。
       this.messages = orderMessages(page.data);
+      this.earlierCursor = olderCursorOf(page);
+      this.hasEarlier = this.messages.length > 0 && Boolean(this.earlierCursor);
       this.turnCache = { sessionID, messages: this.messages, at: Date.now() };
       // Context gauge and cache-hit rate read the latest assistant usage, not
       // the cumulative session counters; see contextTokensOf / cacheHitRateOf.
       this.contextTokens = contextTokensOf(this.messages, this.revertMessageID);
       this.cacheHitRate = cacheHitRateOf(this.messages, this.revertMessageID);
       this.flushDeltas();
-      this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
+      this.postMessages(sessionID);
       this.pruneStreams();
       // The turn cache just changed shape (newest turn, snapshot files), so a
       // diff refresh that ran before this landed may have used the old range.
       void this.refreshDiffs();
+    });
+  }
+
+  /**
+   * The transcript's loaded history: the append-only backfilled pages folded
+   * with the recent window. This merged view is what the webview renders and
+   * what the session info panel counts; diff-list inputs keep reading the
+   * recent window alone (issue 01 keeps them on the newest page).
+   */
+  private allMessages(): MessageInfo[] {
+    return mergeMessages(this.earlierMessages, this.messages);
+  }
+
+  /** Push the merged transcript plus the pagination flags to every sink. */
+  private postMessages(sessionID: string): void {
+    this.post({
+      kind: "messages",
+      sessionID,
+      messages: this.mergedMessages(),
+      hasEarlier: this.hasEarlier,
+      loadingEarlier: this.loadingEarlier,
+    });
+  }
+
+  /** Drop the backfilled store: session switch, rewind, or a changed revert point. */
+  private resetLoadedHistory(): void {
+    this.earlierMessages = [];
+    this.earlierCursor = undefined;
+    this.hasEarlier = false;
+    this.loadingEarlier = false;
+  }
+
+  /**
+   * Backfill one older page when the user reaches the top of the transcript.
+   * The request carries the cursor alone (cursor + order together are
+   * rejected by the server); the response merges into the append-only store,
+   * so a refresh or turn end can never drop it (acceptance ⑤). The history
+   * closes on the empty page — the server's own exhaustion signal — never on
+   * a length heuristic, so a server-side limit clamp cannot silently truncate.
+   */
+  private async loadEarlier(): Promise<void> {
+    const sessionID = this.sessionId;
+    const client = this.client();
+    if (!sessionID || !client || this.loadingEarlier || !this.hasEarlier) {
+      return;
+    }
+    this.loadingEarlier = true;
+    this.postMessages(sessionID);
+    await this.safeCall(async () => {
+      try {
+        const page = await client.listMessages(sessionID, {
+          cursor: this.earlierCursor,
+          limit: ChatController.MESSAGE_PAGE_LIMIT,
+        });
+        if (!this.pollSessionCurrent(sessionID)) {
+          return;
+        }
+        this.earlierMessages = mergeMessages(this.earlierMessages, orderMessages(page.data));
+        this.earlierCursor = olderCursorOf(page);
+        this.hasEarlier = page.data.length > 0 && Boolean(this.earlierCursor);
+      } finally {
+        this.loadingEarlier = false;
+        if (sessionID === this.sessionId) {
+          this.postMessages(sessionID);
+        }
+      }
     });
   }
 
@@ -1593,7 +1689,7 @@ export class ChatController implements vscode.Disposable {
    * short-lived guess outlive its turn.
    */
   private mergedMessages(): MessageInfo[] {
-    return this.messages.map((message) => {
+    return this.allMessages().map((message) => {
       if (message.type !== "assistant") {
         return message;
       }
@@ -1866,6 +1962,8 @@ export class ChatController implements vscode.Disposable {
    * to collapse those, not survive a turn.
    */
   private static readonly TURN_CACHE_TTL_MS = 1_500;
+  /** Page size for transcript history: the initial page and every backfill. */
+  private static readonly MESSAGE_PAGE_LIMIT = 100;
 
   private async turnMessages(sessionID: string, client: OpencodeClient): Promise<MessageInfo[]> {
     const cached = this.turnCache;
@@ -1969,7 +2067,15 @@ export class ChatController implements vscode.Disposable {
       this.agent = result.data.agent;
       this.model = result.data.model;
       this.isSubagentSession = result.data.parentID !== undefined;
+      const previousRevert = this.revertMessageID;
       this.revertMessageID = result.data.revert?.messageID;
+      if (this.revertMessageID !== previousRevert && this.earlierMessages.length > 0) {
+        // 回滚点变化（面板内 rewind 或外部 /undo）：被隐藏的更早消息可能
+        // 仍留在回填存储里，丢弃并按最新一页重取。rewindTo 自己已清空并
+        // 重取，这里只兜住不经过面板的外部回滚。
+        this.resetLoadedHistory();
+        void this.refreshMessages();
+      }
       // busy 双向重算：服务器侧 time.busy/time.idle 是持久 epoch 时间戳，
       // "在跑"只能比较两者（busy > idle，与 sessions.ts 的
       // deriveSessionStatus 同一事实）；!time.idle 会把任何跑过回合的
@@ -2031,6 +2137,8 @@ export class ChatController implements vscode.Disposable {
         subagents: this.subagents,
         isSubagentSession: this.isSubagentSession,
         messages: this.mergedMessages(),
+        hasEarlier: this.hasEarlier,
+        loadingEarlier: this.loadingEarlier,
         pending: this.pending,
         diffs: this.visibleDiffs(),
         catalog: this.host.catalog,

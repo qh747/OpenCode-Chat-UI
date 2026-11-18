@@ -51,6 +51,10 @@ export interface Snapshot {
   model?: ModelRef;
   busy: boolean;
   messages: MessageInfo[];
+  /** True when the server may still have older messages beyond the loaded pages. */
+  hasEarlier?: boolean;
+  /** True while a backfill fetch of older messages is in flight. */
+  loadingEarlier?: boolean;
   pending: PermissionRequest[];
   diffs: FileDiffInfo[];
   catalog: Catalog;
@@ -151,7 +155,15 @@ export type HostToWeb =
   | { kind: "reasoningEnded"; sessionID: string; messageID: string; ordinal: number; text: string }
   /** Authoritative content of a message, pushed as it changes on the server. */
   | { kind: "messageContent"; sessionID: string; messageID: string; content: AssistantContent[] }
-  | { kind: "messages"; sessionID: string; messages: MessageInfo[] }
+  | {
+      kind: "messages";
+      sessionID: string;
+      messages: MessageInfo[];
+      /** True when the server may still have older messages beyond the loaded pages. */
+      hasEarlier?: boolean;
+      /** True while a backfill fetch of older messages is in flight. */
+      loadingEarlier?: boolean;
+    }
   /** Broadcasts for a specific session; `sessionID` is required so the
    *  webview's guard cannot be bypassed by an unlabelled message. */
   | { kind: "busy"; sessionID: string; busy: boolean }
@@ -199,6 +211,8 @@ export type WebToHost =
   | { kind: "setModel"; providerID: string; id: string; variant?: string }
   | { kind: "stageImage"; requestId: string; name: string; dataBase64: string; mime: string }
   | { kind: "rewindTo"; messageID: string }
+  /** Backfill one older page of transcript history (scroll reached the top). */
+  | { kind: "loadEarlier"; sessionID?: string }
   | { kind: "permissionReply"; requestID: string; decision: "once" | "always" | "reject"; sessionID?: string }
   | { kind: "formReply"; formID: string; answer: Record<string, FormAnswerValue>; sessionID?: string }
   | { kind: "formCancel"; formID: string; sessionID?: string }
@@ -234,7 +248,8 @@ type StampedAction = Extract<
       | "permissionReply"
       | "formReply"
       | "formCancel"
-      | "revertFile";
+      | "revertFile"
+      | "loadEarlier";
   }
 >;
 
@@ -260,6 +275,8 @@ export function stampSession(message: WebToHost, sessionID: string | undefined):
     case "formCancel":
       return { ...message, sessionID };
     case "revertFile":
+      return { ...message, sessionID };
+    case "loadEarlier":
       return { ...message, sessionID };
     default:
       return message;

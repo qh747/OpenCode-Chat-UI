@@ -42,6 +42,10 @@ export interface ChatState {
   /** True when the open session is a subagent's child session. */
   isSubagentSession: boolean;
   messages: MessageInfo[];
+  /** True when the server may still have older messages beyond the loaded pages. */
+  hasEarlier: boolean;
+  /** True while a backfill fetch of older messages is in flight. */
+  loadingEarlier: boolean;
   pending: PermissionRequest[];
   diffs: FileDiffInfo[];
   catalog: Catalog;
@@ -96,6 +100,8 @@ export const initialState: ChatState = {
   submitKey: "enter",
   showContextBar: true,
   maxVisibleDiffRows: 5,
+  hasEarlier: false,
+  loadingEarlier: false,
 };
 
 function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
@@ -112,6 +118,8 @@ function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
     subagents: snapshot.subagents ?? [],
     isSubagentSession: snapshot.isSubagentSession ?? false,
     messages: snapshot.messages,
+    hasEarlier: snapshot.hasEarlier ?? false,
+    loadingEarlier: snapshot.loadingEarlier ?? false,
     pending: snapshot.pending,
     diffs: snapshot.diffs,
     catalog: snapshot.catalog,
@@ -305,7 +313,12 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       if (!sameSession(state, message.sessionID)) {
         return state;
       }
-      return { ...state, messages: message.messages };
+      return {
+        ...state,
+        messages: message.messages,
+        hasEarlier: message.hasEarlier ?? state.hasEarlier,
+        loadingEarlier: message.loadingEarlier ?? state.loadingEarlier,
+      };
     }
     case "busy": {
       // 广播消息的 sessionID 由类型保证必填,守卫只做严格归属比对。

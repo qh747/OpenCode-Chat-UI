@@ -34,6 +34,8 @@ function render(messages: MessageInfo[]): string {
     createElement(MessageList, {
       messages,
       busy: false,
+      hasEarlier: false,
+      loadingEarlier: false,
       onRewind: () => {},
       onOpenUrl: () => {},
       onOpenFile: () => {},

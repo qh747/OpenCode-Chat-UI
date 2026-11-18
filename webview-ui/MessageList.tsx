@@ -426,6 +426,10 @@ export function ConversationErrors({ errors }: { errors: string[] }) {
 interface Props {
   messages: MessageInfo[];
   busy: boolean;
+  /** True when the server may still have older messages beyond the loaded pages. */
+  hasEarlier: boolean;
+  /** True while a backfill fetch of older messages is in flight. */
+  loadingEarlier: boolean;
   onRewind: (messageID: string) => void;
   onOpenUrl: (url: string) => void;
   onOpenFile: (path: string, start?: number, end?: number) => void;
@@ -435,6 +439,8 @@ interface Props {
 export function MessageList({
   messages,
   busy,
+  hasEarlier,
+  loadingEarlier,
   onRewind,
   onOpenUrl,
   onOpenFile,
@@ -445,6 +451,10 @@ export function MessageList({
   return (
     <>
       <div className="message-list" id="message-list">
+        {loadingEarlier && <div className="history-loading">{t("historyLoading")}</div>}
+        {!loadingEarlier && !hasEarlier && visible.length > 0 && (
+          <div className="history-start">{t("historyStart")}</div>
+        )}
         {visible.map((message) =>
           message.type === "user" ? (
             <UserMessage

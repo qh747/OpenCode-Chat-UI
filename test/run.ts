@@ -51,3 +51,6 @@ import "./settings-command.test";
 import "./settings-items.test";
 import "./settings-render.test";
 import "./tokens.test";
+import "./message-pages.test";
+import "./history-backfill.test";
+import "./earlier-store.test";

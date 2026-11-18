@@ -238,6 +238,10 @@ const en = {
   "settings.instructions.hint": "One path or URL per line.",
   "settings.shell.label": "Terminal shell",
   "settings.shell.hint": "The server writes this key into its global config only.",
+
+  // transcript history
+  historyLoading: "Loading earlier messages…",
+  historyStart: "Start of conversation",
 };
 
 const zhCn: Record<MessageKey, string> = {
@@ -467,6 +471,10 @@ const zhCn: Record<MessageKey, string> = {
   "settings.instructions.hint": "每行一个路径或 URL。",
   "settings.shell.label": "终端 shell",
   "settings.shell.hint": "该键只会写入服务器的全局配置。",
+
+  // transcript history
+  historyLoading: "正在加载更早的消息…",
+  historyStart: "已到会话开头",
 };
 
 /** All copy, per locale. `en` owns the canonical key set. */

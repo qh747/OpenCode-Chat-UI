@@ -4,6 +4,12 @@ Canonical terms for the OpenCode Side Panel extension. Terms are domain concepts
 
 ## Chat domain
 
+**Transcript**
+The readable conversation record the chat panel renders: one row per user prompt and assistant reply, chronological, with tool calls and attachments folded into their messages. Its history loads progressively: a session opens on the newest page and older pages arrive as the reader reaches the top. Distinct from the session info panel's raw message list, which renders the same loaded state unread.
+
+**Load-earlier**
+Backfilling the transcript's older messages on demand as the reader reaches the top. What has been backfilled is append-only: a refresh or a turn end never drops loaded history, and prepending a page keeps the reader's place stable. The history closes only when the server says the beginning is reached. Distinct from export, which always covers the whole session in one pass.
+
 **Session**
 One conversation thread with the agent, scoped to a project directory. Identified by a server-assigned ID; has a title, cost, token usage and timestamps. Created lazily on first message or explicitly via "New Session".
 
@@ -71,6 +77,9 @@ The rule that per-session state — the diff list, the message queue, subagent j
 
 **Event stream**
 The server's volatile SSE feed (`/api/event`). Lossy by design; consumers resync authoritative state on reconnect instead of trusting it alone.
+
+**Message pagination**
+The server's message listing is cursor-paginated: one page carries the newest messages in a chosen order and is never the whole history, and a consumer follows the returned cursor to keep walking the timeline. The cursor travels alone — a request that pairs it with an ordering choice is rejected. A listing without a cursor is a window, not the record.
 
 **Sink**
 A webview surface (sidebar view or editor tab) attached to the shared controller. All sinks receive identical broadcasts.

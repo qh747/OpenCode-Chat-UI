@@ -71,6 +71,7 @@ function switchController(from: string, diffs: FileDiffInfo[]) {
     clearSubagents: () => {},
     stashDismissed: proto.stashDismissed,
     loadDismissed: proto.loadDismissed,
+    resetLoadedHistory: () => {},
     storageKey: () => "test-key",
     postSnapshot: () => {},
     fullResync: async () => {},

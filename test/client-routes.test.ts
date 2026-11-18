@@ -90,4 +90,18 @@ describe("session-scoped client routes", () => {
       "http://127.0.0.1:1/api/session/ses_1/form/frm_2?message=User%20dismissed%20the%20questions%20without%20answering.",
     );
   });
+
+  test("message pages: limit/order on the first page, cursor alone afterwards", async () => {
+    const calls: string[] = [];
+    const client = makeClient(calls);
+    // 无参数即历史行为：缺省页（服务器端 = 最新 50 条）。
+    await client.listMessages("abc");
+    await client.listMessages("abc", { limit: 100, order: "desc" });
+    await client.listMessages("abc", { cursor: "c3", limit: 100 });
+    assert.deepEqual(calls, [
+      "http://127.0.0.1:1/api/session/abc/message",
+      "http://127.0.0.1:1/api/session/abc/message?limit=100&order=desc",
+      "http://127.0.0.1:1/api/session/abc/message?limit=100&cursor=c3",
+    ]);
+  });
 });

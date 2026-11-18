@@ -199,10 +199,32 @@ export class OpencodeClient {
     await this.request<void>("DELETE", sessionPath(id));
   }
 
-  async listMessages(id: string): Promise<ListPage<MessageInfo>> {
+  /**
+   * Message pages of one session, cursor-paginated. Without a query this is
+   * the server's default page — the newest 50 messages (`order: "desc"`) —
+   * which is almost never the whole history. On a `desc` page `cursor.next`
+   * anchors at the page's last (oldest) item and continues toward older
+   * messages; a follow-up request must carry the cursor alone, the server
+   * rejects one that combines cursor and order (verified against v2.3.0).
+   */
+  async listMessages(
+    id: string,
+    query: { limit?: number; order?: "asc" | "desc"; cursor?: string } = {},
+  ): Promise<ListPage<MessageInfo>> {
+    const params = new URLSearchParams();
+    if (query.limit !== undefined) {
+      params.set("limit", String(query.limit));
+    }
+    if (query.order) {
+      params.set("order", query.order);
+    }
+    if (query.cursor) {
+      params.set("cursor", query.cursor);
+    }
+    const qs = params.toString();
     return this.request<ListPage<MessageInfo>>(
       "GET",
-      sessionPath(id, "/message"),
+      sessionPath(id, "/message") + (qs ? `?${qs}` : ""),
     );
   }
 

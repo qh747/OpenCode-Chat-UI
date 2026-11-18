@@ -421,6 +421,20 @@ body {
   gap: 6px;
   margin-top: 10px;
 }
+/* transcript history: the backfill indicator and the closed-history marker */
+.history-loading,
+.history-start {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.history-start {
+  border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.25));
+  margin: 0 8px 4px;
+  padding-bottom: 8px;
+}
 .msg-failure {
   font-family: var(--mono);
   font-size: 11px;

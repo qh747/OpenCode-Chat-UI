@@ -59,6 +59,10 @@ function switchController(from: string, queue: QueuedMessage[]) {
     sessionQueues: new SessionQueues(),
     sessionDismissed: new SessionDismissed(),
     messages: [],
+    earlierMessages: [],
+    earlierCursor: undefined,
+    hasEarlier: false,
+    loadingEarlier: false,
     pending: [],
     diffs: [],
     turnCache: undefined,
@@ -66,6 +70,7 @@ function switchController(from: string, queue: QueuedMessage[]) {
     forms: [],
     context: { workspaceState: { update: async () => {} } },
     resetStreams: () => {},
+    resetLoadedHistory: () => {},
     clearForms: () => {},
     clearSubagents: () => {},
     fullResync: async () => {
