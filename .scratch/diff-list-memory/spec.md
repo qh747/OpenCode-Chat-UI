@@ -29,7 +29,13 @@
 
 ## What was implemented
 
-(实施后填)
+(0.4.22 批次,与 `session-switch-leaks` issue 05 同批;三票独立分支 TDD 落地,合入集成分支 `batch/0.4.22-session-bound-state`。)
+
+- **01(dismissed 按会话 park)**:新 `src/webview/session-dismissed.ts`(`SessionDismissed`,与 `SessionQueues` 同款 stash/take/drop——泊位克隆、取走即消、空表擦泊位);`panel.ts` 增 `sessionDismissed` 字段与 `stashDismissed`/`loadDismissed`,`switchSession`/`createSession` 泊出载入替代 `clear()`,`deleteSessionById` 与 `session.deleted` 两路顺带 drop parked;`dismiss`/`visibleDiffs` 键统一走 `diffFileKey`;`rewindTo` 的 clear 按决策保留。测试:`test/dismissed-memory.test.ts`(13 条,含「切走切回保持隐藏」「会话删除清理」「签名变化重现」);实施者自纠一例空洞通过——switchSession 本身清空 diffs 会让断言平凡为真,改为模拟切回后 refreshDiffs 重取同签名历史 diff。
+- **02(新回合不清)**:`sendNow` 删 `this.dismissed.clear()`,留三行注释引 spec 决策 Q6/Q9。测试:`test/diff-send-memory.test.ts`(3 条:新回合不复活、签名变则重现、同签名刷新保持隐藏)。
+- **03(added 行磁盘真相)**:`refreshDiffs` 过滤链改为单趟:归因过滤后对 `added` 行做 `fileOnDisk` 存在性检查(同一 `resolveFileUri` 路径),盘上无文件即弃;`deleted`/`modified` 不受影响。测试:`test/diff-disk-truth.test.ts`(4 条:幽灵 added 不显示、盘上有文件不过滤、deleted 行豁免、链序)。
+- 支撑:`test/vscode-stub.ts` 扩 `workspace.fs.stat`、可注入 `showWarningMessage`、`getConfiguration`;新测试文件均注册进 `test/run.ts`。
+- 全量:337 通过 0 失败 1 跳过(既有跳过:Windows 盘符路径用例);typecheck / lint 过。
 
 ## Open
 
