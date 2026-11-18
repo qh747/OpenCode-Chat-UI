@@ -126,6 +126,15 @@ export const window = {
       dispose(): void {},
     };
   },
+  /** showWarningMessage 的注入答复（undefined 即用户取消）。 */
+  warningReply: undefined as string | undefined,
+  async showWarningMessage(
+    _message: string,
+    _options: unknown,
+    ..._items: string[]
+  ): Promise<string | undefined> {
+    return this.warningReply;
+  },
 };
 
 /** 一次被记录下来的 executeCommand 调用，供断言使用。 */

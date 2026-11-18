@@ -33,6 +33,7 @@ import type { HistoryRow } from "../util/sessions";
 import { GitStatusProvider } from "../git";
 import type { OpencodeClient } from "../opencode/client";
 import { SessionQueues } from "./session-queues";
+import { SessionDismissed } from "./session-dismissed";
 import type { QueueSnapshot } from "./session-queues";
 import { isStaleAction } from "./protocol";
 import type {
@@ -86,10 +87,14 @@ export class ChatController implements vscode.Disposable {
   private turnCache: { sessionID: string; messages: MessageInfo[]; at: number } | undefined;
   /** Per-session queues, so switching through history does not drop messages. */
   private readonly sessionQueues = new SessionQueues();
+  /** Per-session dismissed rows, so switching through history does not resurrect them. */
+  private readonly sessionDismissed = new SessionDismissed();
   /**
-   * Files the user chose not to see, keyed by the diff they dismissed. A file
-   * whose diff has changed since comes back: the agent editing it again is
-   * news, even if the user already kept an earlier round of it.
+   * Files the user chose not to see in this session, keyed by `diffFileKey` of
+   * the diff they dismissed. A file whose diff has changed since comes back:
+   * the agent editing it again is news, even if the user already kept an
+   * earlier round of it. The map is parked per session on a switch
+   * (`SessionDismissed`), so returning to a session restores its memory.
    */
   private dismissed = new Map<string, string>();
   private busy = false;
@@ -502,8 +507,10 @@ export class ChatController implements vscode.Disposable {
     const pendingModel = this.pendingModel;
     this.pendingAgent = undefined;
     this.pendingModel = undefined;
-    // A new session starts empty; anything queued in the old one stays there.
+    // A new session starts empty; anything queued or dismissed in the old one
+    // stays there.
     this.stashQueue();
+    this.stashDismissed();
     try {
       const created = await client.createSession({ location: { directory: this.host.folderPath } });
       const sessionId = created.data.id;
@@ -514,7 +521,8 @@ export class ChatController implements vscode.Disposable {
       this.pending = [];
       this.diffs = [];
       this.turnCache = undefined;
-      this.dismissed.clear();
+      // 泊出旧会话、载入新会话的空表（spec Q10）：新会话从零开始记忆。
+      this.loadDismissed(sessionId);
       this.busy = false;
       this.cacheHitRate = undefined;
       this.contextTokens = undefined;
@@ -548,6 +556,7 @@ export class ChatController implements vscode.Disposable {
 
   async switchSession(id: string): Promise<void> {
     this.stashQueue();
+    this.stashDismissed();
     this.sessionId = id;
     this.isSubagentSession = false;
     this.pendingAgent = undefined;
@@ -562,7 +571,9 @@ export class ChatController implements vscode.Disposable {
     this.pending = [];
     this.diffs = [];
     this.turnCache = undefined;
-    this.dismissed.clear();
+    // 泊出旧会话、载入目标会话的驻留（无泊位则空表，spec Q10）：
+    // 切走不再失忆，切回不再复活已撤销的行。
+    this.loadDismissed(id);
     this.loadQueue(id);
     this.clearForms();
     this.clearSubagents();
@@ -783,6 +794,16 @@ export class ChatController implements vscode.Disposable {
     this.queue = snapshot.items;
     this.queuePaused = snapshot.paused;
     this.pendingForce = snapshot.pendingForce;
+  }
+
+  /** Park the current session's dismissed rows so switching back can restore them. */
+  private stashDismissed(sessionID: string | undefined = this.sessionId): void {
+    this.sessionDismissed.stash(sessionID, this.dismissed);
+  }
+
+  /** Load a session's parked dismissed rows into the live map. */
+  private loadDismissed(sessionID: string | undefined): void {
+    this.dismissed = this.sessionDismissed.take(sessionID);
   }
 
   /**
@@ -1115,6 +1136,9 @@ export class ChatController implements vscode.Disposable {
       await this.safeCall(() => this.client()?.deleteSession(id));
       if (this.sessionId === id) {
         this.resetQueue(id);
+        // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
+        this.sessionDismissed.drop(id);
+        this.dismissed.clear();
         this.sessionId = undefined;
         this.messages = [];
         this.pending = [];
@@ -1128,6 +1152,7 @@ export class ChatController implements vscode.Disposable {
         if (saved) {
           this.discardSnapshot(saved);
         }
+        this.sessionDismissed.drop(id);
       }
     }
   }
@@ -1408,12 +1433,15 @@ export class ChatController implements vscode.Disposable {
       case "session.deleted":
         if (eventSession === this.sessionId) {
           this.resetQueue(eventSession);
+          // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
+          this.sessionDismissed.drop(eventSession);
           this.sessionId = undefined;
           this.messages = [];
           this.resetStreams();
           this.pending = [];
           this.diffs = [];
           this.turnCache = undefined;
+          this.dismissed.clear();
           this.busy = false;
           this.clearSubagents();
           this.cacheHitRate = undefined;
@@ -1426,6 +1454,7 @@ export class ChatController implements vscode.Disposable {
           if (saved) {
             this.discardSnapshot(saved);
           }
+          this.sessionDismissed.drop(eventSession);
         }
         break;
       default:
@@ -1839,13 +1868,14 @@ export class ChatController implements vscode.Disposable {
 
   /** Stop showing a file, remembering which round of changes was dismissed. */
   private dismiss(file: string): void {
-    const diff = this.diffs.find((entry) => entry.file === file);
-    this.dismissed.set(file, diff ? diffKey(diff) : "");
+    const key = diffFileKey(file);
+    const diff = this.diffs.find((entry) => diffFileKey(entry.file) === key);
+    this.dismissed.set(key, diff ? diffKey(diff) : "");
   }
 
   /** The diffs the user has not dismissed, or has dismissed in an older round. */
   private visibleDiffs(): FileDiffInfo[] {
-    return this.diffs.filter((diff) => this.dismissed.get(diff.file) !== diffKey(diff));
+    return this.diffs.filter((diff) => this.dismissed.get(diffFileKey(diff.file)) !== diffKey(diff));
   }
 
   private broadcastDiffs(): void {
