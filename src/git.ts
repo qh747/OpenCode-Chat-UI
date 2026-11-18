@@ -178,7 +178,7 @@ function normalizePath(value: string): string {
  * Branch name of the repository containing `folder`, read from `.git/HEAD`.
  * Returns undefined when the folder is not inside a git repository.
  */
-function readGitHead(folder: string): string | undefined {
+export function readGitHead(folder: string): string | undefined {
   let dir = folder;
   for (;;) {
     const head = readHead(nodePath.join(dir, ".git"));
@@ -218,4 +218,65 @@ function parseHead(content: string): string | undefined {
     return ref[1];
   }
   return value ? value.slice(0, 7) : undefined;
+}
+
+/**
+ * "Is this directory a worktree of the workspace repository?" — the local
+ * half of the event-filter rule (ADR-0013): opencode tags branch-change
+ * events with the directory they happened in, and the workspace's own
+ * worktrees must reach the panel. Resolution never consults the server: a
+ * worktree checkout's `.git` is a file whose `gitdir:` target lives under
+ * `<workspaceRoot>/.git/worktrees/`. Hits are cached for the panel's
+ * lifetime (a directory does not change its worktree identity); misses are
+ * re-checked every time, because the agent creates worktrees mid-session.
+ */
+export class WorkspaceWorktrees {
+  private readonly hits = new Map<string, string>();
+
+  constructor(private readonly workspaceRoot: string) {}
+
+  isWorkspaceWorktree(directory: string): boolean {
+    const key = normalizePath(directory);
+    if (this.hits.has(key)) {
+      return true;
+    }
+    const gitDir = resolveWorktreeGitDir(directory);
+    if (gitDir === undefined) {
+      return false;
+    }
+    const root = normalizePath(this.workspaceRoot);
+    const marker = normalizePath(nodePath.join(root, ".git", "worktrees")) + "/";
+    if (normalizePath(gitDir).startsWith(marker)) {
+      this.hits.set(key, gitDir);
+      return true;
+    }
+    return false;
+  }
+}
+
+/** The resolved git directory behind a worktree `.git` pointer file, or
+ *  undefined when `directory` is not a worktree checkout. */
+function resolveWorktreeGitDir(directory: string): string | undefined {
+  let dir = directory;
+  for (;;) {
+    try {
+      const gitPath = nodePath.join(dir, ".git");
+      if (fs.statSync(gitPath).isDirectory()) {
+        return undefined; // a plain repository, not a worktree checkout
+      }
+      const pointer = fs.readFileSync(gitPath, "utf8").trim();
+      const target = /^gitdir:\s*(.+)$/.exec(pointer)?.[1];
+      if (target) {
+        return nodePath.resolve(nodePath.dirname(gitPath), target.trim());
+      }
+      return undefined;
+    } catch {
+      // `.git` absent here: keep walking up (nested checkout layouts).
+    }
+    const parent = nodePath.dirname(dir);
+    if (parent === dir) {
+      return undefined;
+    }
+    dir = parent;
+  }
 }

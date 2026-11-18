@@ -4,9 +4,9 @@ import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as nodePath from "node:path";
-import { test } from "node:test";
+import test, { describe } from "node:test";
 import type * as vscode from "vscode";
-import { GitStatusProvider } from "../src/git";
+import { GitStatusProvider, WorkspaceWorktrees, readGitHead } from "../src/git";
 
 /** 测试用工作区文件夹（只需 uri.fsPath）。 */
 function folderOf(dir: string): vscode.WorkspaceFolder {
@@ -120,4 +120,95 @@ test("git provider keeps the .git/HEAD branch when the repository state has no H
     slots.__vscodeGitExtensionForTest = undefined;
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/**
+ * 本仓 worktree 判定(spec 工票 02):agent 经 opencode worktree 机制在
+ * 工作区外工作时,事件流的分支信号要以"这个目录是本仓 worktree"为放行
+ * 依据。规则是纯本地的:`.git` 文件指针解析出的 gitdir 落在
+ * `<workspaceRoot>/.git/worktrees/` 下。夹具手工伪造指针文件,不需要 git
+ * 二进制——判据本身就是指针指向,不是真实 git 布局。
+ */
+describe("workspace worktree rule", () => {
+  /** `dir/.git` 文件指向 `target`(gitdir 绝对路径)。 */
+  function pointerTo(dir: string, target: string): void {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(nodePath.join(dir, ".git"), `gitdir: ${target}\n`);
+  }
+
+  test("a pointer into the workspace's .git/worktrees is this repo's worktree", () => {
+    const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "wt-"));
+    const ws = nodePath.join(root, "ws");
+    const wt = nodePath.join(root, "wt");
+    fs.mkdirSync(nodePath.join(ws, ".git", "worktrees", "wt-feature"), { recursive: true });
+    pointerTo(wt, nodePath.join(ws, ".git", "worktrees", "wt-feature"));
+    try {
+      assert.equal(new WorkspaceWorktrees(ws).isWorkspaceWorktree(wt), true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a pointer elsewhere is not", () => {
+    const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "wt-"));
+    const ws = nodePath.join(root, "ws");
+    const ext = nodePath.join(root, "ext");
+    fs.mkdirSync(ws, { recursive: true });
+    pointerTo(ext, nodePath.join(root, "unrelated", "gitdir"));
+    try {
+      assert.equal(new WorkspaceWorktrees(ws).isWorkspaceWorktree(ext), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a plain repository and an unrelated directory are not worktrees", () => {
+    const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "wt-"));
+    const ws = nodePath.join(root, "ws");
+    const plain = nodePath.join(root, "plain");
+    const outside = nodePath.join(root, "outside");
+    fs.mkdirSync(nodePath.join(ws, ".git"), { recursive: true });
+    fs.mkdirSync(nodePath.join(plain, ".git"), { recursive: true });
+    try {
+      const rule = new WorkspaceWorktrees(ws);
+      assert.equal(rule.isWorkspaceWorktree(plain), false);
+      assert.equal(rule.isWorkspaceWorktree(outside), false);
+      // 工作区自身不是自己的 worktree。
+      assert.equal(rule.isWorkspaceWorktree(ws), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a directory that becomes a worktree later is accepted — misses are not cached", () => {
+    const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "wt-"));
+    const ws = nodePath.join(root, "ws");
+    const wt = nodePath.join(root, "wt");
+    fs.mkdirSync(ws, { recursive: true });
+    try {
+      const rule = new WorkspaceWorktrees(ws);
+      assert.equal(rule.isWorkspaceWorktree(wt), false);
+      // agent 中途创建 worktree:同一目录稍后获得指针文件。
+      pointerTo(wt, nodePath.join(ws, ".git", "worktrees", "late"));
+      fs.mkdirSync(nodePath.join(ws, ".git", "worktrees", "late"), { recursive: true });
+      assert.equal(rule.isWorkspaceWorktree(wt), true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("readGitHead resolves a worktree's branch through the pointer", () => {
+    const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "wt-"));
+    const ws = nodePath.join(root, "ws");
+    const wt = nodePath.join(root, "wt");
+    const gitdir = nodePath.join(ws, ".git", "worktrees", "wt-feature");
+    fs.mkdirSync(gitdir, { recursive: true });
+    pointerTo(wt, gitdir);
+    fs.writeFileSync(nodePath.join(gitdir, "HEAD"), "ref: refs/heads/ticket/fix-review\n");
+    try {
+      assert.equal(readGitHead(wt), "ticket/fix-review");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
