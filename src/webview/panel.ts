@@ -2119,13 +2119,15 @@ export class ChatController implements vscode.Disposable {
     return vscode.Uri.joinPath(this.folder.uri, file);
   }
 
-  /** 盘上是否存在此文件：与 `revertFile` 走同一 URI 解析路径，避免形态分歧。 */
+  /** 盘上是否存在此文件：与 `revertFile` 走同一 URI 解析路径，避免形态分歧。
+   * 只有「确实不存在」（not-found）才报没有；其余报错一律开放失败当「有」
+   * 处理——一个意外报错不是盘的真相，不能拿它隐藏一行。 */
   private async fileOnDisk(file: string): Promise<boolean> {
     try {
       await vscode.workspace.fs.stat(this.resolveFileUri(file));
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      return !statNotFound(error);
     }
   }
 
@@ -2296,6 +2298,19 @@ export class ChatController implements vscode.Disposable {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * 「盘上确实没有此文件」的报错判定：真实 API 以 `FileSystemError` 实例的
+ * `code`（"FileNotFound"）表达，测试替身以 ENOENT 前缀的普通 Error 表达。
+ * 其余一切报错（权限、不可用、类型意外）都不算不存在——报错不等于缺席。
+ */
+function statNotFound(error: unknown): boolean {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  if (typeof code === "string") {
+    return code === "FileNotFound";
+  }
+  return error instanceof Error && error.message.startsWith("ENOENT");
 }
 
 /** The diff status as a localized word for the diff editor's title. */

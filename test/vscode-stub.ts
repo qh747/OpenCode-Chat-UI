@@ -53,17 +53,30 @@ export const trashedPaths: string[] = [];
 /** 记录 createDirectory 的目录路径。 */
 export const createdDirectories: string[] = [];
 
+/** stat 注入的异常（测试用）：设置后 workspace.fs.stat 一律抛它；resetFs 清除。 */
+export let statError: Error | undefined = undefined;
+
+/** 注入/清除 stat 异常，供「stat 报错 ≠ 文件不存在」的用例使用。 */
+export function throwOnStat(error: Error | undefined): void {
+  statError = error;
+}
+
 /** 每个测试自行清空内存文件系统与记录。 */
 export function resetFs(): void {
   memoryFiles.clear();
   trashedPaths.length = 0;
   createdDirectories.length = 0;
+  statError = undefined;
 }
 
 /** 与 vscode.workspace.fs 行为一致的最小实现（内存版）。 */
 export const fs = {
-  /** 文件在内存文件系统里即存在；否则与真实实现一致地抛错（ENOENT）。 */
+  /** 文件在内存文件系统里即存在；否则与真实实现一致地抛错（ENOENT）。
+   * statError 注入后一律抛它，用于验证非 not-found 报错的处理路径。 */
   async stat(uri: { fsPath: string }): Promise<{ type: number }> {
+    if (statError) {
+      throw statError;
+    }
     if (!memoryFiles.has(uri.fsPath)) {
       throw new Error(`ENOENT: ${uri.fsPath}`);
     }
