@@ -46,9 +46,10 @@ function switchController(from: string, queue: QueuedMessage[]) {
     pendingAgent: undefined,
     pendingModel: undefined,
     busy: true,
-    queue: [] as QueuedMessage[],
-    queuePaused: false,
-    pendingForce: undefined,
+    // 与真类一致:queue 是当前会话键控状态的只读视图(不是自有数组)。
+    get queue(): QueuedMessage[] {
+      return controller.sessionQueues.state(controller.sessionId).items;
+    },
     sessionQueues: new SessionQueues(),
     sessionDismissed: new SessionDismissed(),
     messages: [],
@@ -67,10 +68,8 @@ function switchController(from: string, queue: QueuedMessage[]) {
       // 真实 fullResync 收口时 post 权威快照；stub 保持同一契约。
       controller.postSnapshot();
     },
-    drainRestoredQueue: proto.drainRestoredQueue,
+    drainSwitchedQueue: proto.drainSwitchedQueue,
     drainQueue: proto.drainQueue,
-    stashQueue: proto.stashQueue,
-    loadQueue: proto.loadQueue,
     startQueued(item: QueuedMessage) {
       sent.push(item);
     },
@@ -82,11 +81,10 @@ function switchController(from: string, queue: QueuedMessage[]) {
       recorded.push({ sessionId: controller.sessionId, queue: controller.queue });
     },
   };
-  // 复现别名根因路径(issue 05):A 的活队列先经 loadQueue 的空泊位分支
-  // 取得 EMPTY 别名,随后的排队 push 写进模块级共享数组本体。
-  (proto.loadQueue as (this: unknown, id: string) => void).call(controller, from);
+  // A 排队:消息进入其会话键下的队列状态(spec Q19)——状态按会话隔离,
+  // 排队 push 写进 A 自己的条目,不再有任何模块级共享数组。
   for (const item of queue) {
-    controller.queue.push(item);
+    controller.sessionQueues.push(from, item);
   }
   return { controller, recorded, sent, blocked, resyncStarted: () => resyncStarted };
 }
@@ -123,7 +121,7 @@ describe("session switch early snapshot", () => {
     assert.equal(recorded[1]?.sessionId, "ses_b");
   });
 
-  test("the outgoing session's queue is parked before the flip", async () => {
+  test("the outgoing session's queue stays in its own keyed state across the flip", async () => {
     const { controller, blocked } = switchController("ses_a", [message("msg1")]);
 
     const switching = switchSession.call(
@@ -134,7 +132,9 @@ describe("session switch early snapshot", () => {
     blocked.resolve();
     await switching;
 
-    assert.deepEqual(controller.sessionQueues.take("ses_a").items, [message("msg1")]);
+    // A 的排队消息原位保留在其会话键下;B 的状态为空——无需 stash/take。
+    assert.deepEqual(controller.sessionQueues.state("ses_a").items, [message("msg1")]);
+    assert.deepEqual(controller.sessionQueues.state("ses_b").items, []);
   });
 });
 
@@ -159,7 +159,7 @@ describe("queue does not leak across sessions", () => {
     }
     // 不向 B 发送任何消息:B 空闲时的恢复排水无事可做。
     assert.deepEqual(sent, []);
-    // A 的消息仍驻留在 A 名下,切回即可恢复。
-    assert.deepEqual(controller.sessionQueues.take("ses_a").items, [message("msg1")]);
+    // A 的消息仍驻留在 A 名下的会话状态里,切回即可见。
+    assert.deepEqual(controller.sessionQueues.state("ses_a").items, [message("msg1")]);
   });
 });
