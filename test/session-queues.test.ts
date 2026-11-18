@@ -63,4 +63,30 @@ describe("session queues", () => {
 
     assert.deepEqual(queues.take("ses_a").items, [message("m1")]);
   });
+
+  test("two empty-berth takes hand out independent fresh arrays", () => {
+    // 空泊位分支不得返回模块级共享数组(issue 05):两次 take 的空快照
+    // 必须相互独立。
+    const queues = new SessionQueues();
+
+    const first = queues.take("ses_a");
+    const second = queues.take("ses_b");
+
+    first.items.push(message("m1"));
+
+    // push 之后各自独立:写进 first 的新数组不影响 second。
+    assert.deepEqual(first, { items: [message("m1")], paused: false });
+    assert.deepEqual(second, { items: [], paused: false });
+  });
+
+  test("pushing into a returned empty snapshot never affects later takes", () => {
+    // 向 take 返回的空数组 push 不得影响后续 take(EMPTY 别名回归钉)。
+    const queues = new SessionQueues();
+
+    const handed = queues.take("ses_a");
+    handed.items.push(message("m1"));
+
+    assert.deepEqual(queues.take("ses_a").items, []);
+    assert.deepEqual(queues.take("ses_b").items, []);
+  });
 });

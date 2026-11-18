@@ -6,8 +6,6 @@ export interface QueueSnapshot {
   pendingForce?: QueuedMessage;
 }
 
-const EMPTY: QueueSnapshot = { items: [], paused: false };
-
 /** 深拷贝快照（items/pendingForce 各自克隆），无 pendingForce 时省略该键。 */
 function cloneSnapshot(snapshot: QueueSnapshot): QueueSnapshot {
   return snapshot.pendingForce
@@ -44,11 +42,13 @@ export class SessionQueues {
 
   take(sessionID: string | undefined): QueueSnapshot {
     if (!sessionID) {
-      return { ...EMPTY };
+      // 空泊位必须返回全新字面量:模块级 EMPTY 的 items 是共享数组,
+      // 原样返回会让 live 队列别名它,排队 push 写进所有"空"队列(issue 05)。
+      return { items: [], paused: false };
     }
     const snapshot = this.saved.get(sessionID);
     if (!snapshot) {
-      return { ...EMPTY };
+      return { items: [], paused: false };
     }
     // 取出即删除 + 克隆：驻留条目只消费一次，live 队列与驻留快照不再别名。
     this.saved.delete(sessionID);

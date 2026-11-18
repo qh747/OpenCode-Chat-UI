@@ -33,6 +33,8 @@ interface RecordedSnapshot {
 
 function switchController(from: string, queue: QueuedMessage[]) {
   const recorded: RecordedSnapshot[] = [];
+  /** 排水启动的排队消息:「已发送」的测试缝。 */
+  const sent: QueuedMessage[] = [];
   let resyncStarted = false;
   const blocked = { resolve: () => {} };
   const resyncGate = new Promise<void>((resolve) => {
@@ -44,7 +46,7 @@ function switchController(from: string, queue: QueuedMessage[]) {
     pendingAgent: undefined,
     pendingModel: undefined,
     busy: true,
-    queue,
+    queue: [] as QueuedMessage[],
     queuePaused: false,
     pendingForce: undefined,
     sessionQueues: new SessionQueues(),
@@ -65,9 +67,14 @@ function switchController(from: string, queue: QueuedMessage[]) {
       // 真实 fullResync 收口时 post 权威快照；stub 保持同一契约。
       controller.postSnapshot();
     },
-    drainRestoredQueue: () => {},
+    drainRestoredQueue: proto.drainRestoredQueue,
+    drainQueue: proto.drainQueue,
     stashQueue: proto.stashQueue,
     loadQueue: proto.loadQueue,
+    startQueued(item: QueuedMessage) {
+      sent.push(item);
+    },
+    postQueue: () => {},
     stashDismissed: proto.stashDismissed,
     loadDismissed: proto.loadDismissed,
     storageKey: () => "test-key",
@@ -75,7 +82,13 @@ function switchController(from: string, queue: QueuedMessage[]) {
       recorded.push({ sessionId: controller.sessionId, queue: controller.queue });
     },
   };
-  return { controller, recorded, blocked, resyncStarted: () => resyncStarted };
+  // 复现别名根因路径(issue 05):A 的活队列先经 loadQueue 的空泊位分支
+  // 取得 EMPTY 别名,随后的排队 push 写进模块级共享数组本体。
+  (proto.loadQueue as (this: unknown, id: string) => void).call(controller, from);
+  for (const item of queue) {
+    controller.queue.push(item);
+  }
+  return { controller, recorded, sent, blocked, resyncStarted: () => resyncStarted };
 }
 
 async function settleIntoSwitch(started: () => boolean): Promise<void> {
@@ -121,6 +134,32 @@ describe("session switch early snapshot", () => {
     blocked.resolve();
     await switching;
 
+    assert.deepEqual(controller.sessionQueues.take("ses_a").items, [message("msg1")]);
+  });
+});
+
+describe("queue does not leak across sessions", () => {
+  test("a queue typed in A stays out of B: B's strip is empty and nothing is sent to B", async () => {
+    const { controller, recorded, sent, blocked } = switchController("ses_a", [
+      message("msg1"),
+    ]);
+
+    const switching = switchSession.call(
+      controller as unknown as ChatController,
+      "ses_b",
+    );
+    blocked.resolve();
+    await switching;
+
+    // B 的队列条为空:早快照与权威快照都不带 A 的消息。
+    assert.equal(recorded.length, 2);
+    for (const snapshot of recorded) {
+      assert.equal(snapshot.sessionId, "ses_b");
+      assert.deepEqual(snapshot.queue, []);
+    }
+    // 不向 B 发送任何消息:B 空闲时的恢复排水无事可做。
+    assert.deepEqual(sent, []);
+    // A 的消息仍驻留在 A 名下,切回即可恢复。
     assert.deepEqual(controller.sessionQueues.take("ses_a").items, [message("msg1")]);
   });
 });
