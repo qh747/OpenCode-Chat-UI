@@ -2,7 +2,7 @@ import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import { ChatController } from "../src/webview/panel";
 import type { FileDiffInfo, MessageInfo } from "../src/opencode/types";
-import { memoryFiles, resetFs } from "./vscode-stub";
+import { memoryFiles, resetFs, throwOnStat } from "./vscode-stub";
 
 /**
  * Disk truth for `added` rows (spec decision Q8): the range diff is computed
@@ -95,6 +95,19 @@ describe("added rows disk truth", () => {
   test("an added row whose file is on disk still shows", async () => {
     resetFs();
     memoryFiles.set("/ws/kept.md", "created by the session");
+    const controller = controllerWith([added("kept.md")], ["kept.md"]);
+
+    await run(controller);
+
+    assert.deepEqual(controller.diffs, [added("kept.md")]);
+  });
+
+  test("a stat error that is not not-found keeps the attributed added row", async () => {
+    // 报错不等于缺席:只有「确实不存在」才隐藏 added 行;权限之类的意外
+    // 报错按开放失败处理,行保留(盘的真相此时未知,不能装作已验证)。
+    resetFs();
+    memoryFiles.set("/ws/kept.md", "created by the session");
+    throwOnStat(new Error("EACCES: permission denied, stat '/ws/kept.md'"));
     const controller = controllerWith([added("kept.md")], ["kept.md"]);
 
     await run(controller);

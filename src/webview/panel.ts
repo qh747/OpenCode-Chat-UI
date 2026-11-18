@@ -643,14 +643,22 @@ export class ChatController implements vscode.Disposable {
     const promptAttachments: PromptFileAttachment[] = staged.map((attachment) =>
       this.toPromptAttachment(attachment),
     );
-    const autoAttach = vscode.workspace
-      .getConfiguration("opencode")
-      .get<boolean>("context.autoAttachSelection", true);
-    if (autoAttach) {
-      const selection = this.activeSelection();
-      const alreadyAttached = staged.some((a) => a.ref === selection?.path);
-      if (selection && !alreadyAttached) {
-        promptAttachments.push(this.selectionAttachment(selection));
+    // 显示态边界(spec Q17-A):目标会话就是当前显示的会话,才允许触碰显示
+    // 态。后台排水(B 显示、A 的队列在后台启动回合)若无条件置位宿主 busy,
+    // B 的下一条消息会被 send() 扣进队列——而 B 没有回合在跑、永远等不到
+    // 排水;A 的气泡也会混进 B 的转录。队列/回合机制本身(prompt、在跑
+    // latch、排水簿记)对任意会话生效。
+    const displayed = sessionID === this.sessionId;
+    if (displayed) {
+      const autoAttach = vscode.workspace
+        .getConfiguration("opencode")
+        .get<boolean>("context.autoAttachSelection", true);
+      if (autoAttach) {
+        const selection = this.activeSelection();
+        const alreadyAttached = staged.some((a) => a.ref === selection?.path);
+        if (selection && !alreadyAttached) {
+          promptAttachments.push(this.selectionAttachment(selection));
+        }
       }
     }
     for (const attachment of staged) {
@@ -660,29 +668,33 @@ export class ChatController implements vscode.Disposable {
       text,
       links.map((link) => link.ref),
     );
-    // The rows the user reverted stay dismissed across turns: the signature
-    // memory is self-sufficient, only a changed signature revives a row
-    // (spec 决策 Q6/Q9).
-    this.busy = true;
-    this.turnFailed = false;
-    this.post({ kind: "busy", sessionID, busy: true });
-    this.startPermissionPolling();
-    this.startSubagentPolling();
-    // Optimistic local bubble: the user sees their message instantly instead
-    // of waiting for the server round-trip; the authoritative refresh replaces
-    // it with the real user message (with attachment metadata) moments later.
-    const localMessage: MessageInfo = {
-      type: "user",
-      id: `local-${Date.now()}`,
-      time: { created: Date.now() },
-      text,
-    };
-    this.messages.push(localMessage);
-    this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
-    // Remember the model actually in use for the picker's Recent section.
-    const usedModel = this.model ?? this.host.catalog.defaultModel;
-    if (usedModel) {
-      this.host.recordModelUsed(usedModel);
+    if (displayed) {
+      // The rows the user reverted stay dismissed across turns: the signature
+      // memory is self-sufficient, only a changed signature revives a row
+      // (spec 决策 Q6/Q9).
+      this.busy = true;
+      this.turnFailed = false;
+      this.post({ kind: "busy", sessionID, busy: true });
+      this.startPermissionPolling();
+      this.startSubagentPolling();
+      // Optimistic local bubble: the user sees their message instantly instead
+      // of waiting for the server round-trip; the authoritative refresh replaces
+      // it with the real user message (with attachment metadata) moments later.
+      const localMessage: MessageInfo = {
+        type: "user",
+        id: `local-${Date.now()}`,
+        time: { created: Date.now() },
+        text,
+      };
+      this.messages.push(localMessage);
+      this.post({ kind: "messages", sessionID, messages: this.mergedMessages() });
+      // Remember the model actually in use for the picker's Recent section.
+      // 只在显示会话的发送里记录:后台回合动不了显示会话 picker 的状态,
+      // 记下 this.model 会把 B 的 picker 选择记到 A 的回合头上。
+      const usedModel = this.model ?? this.host.catalog.defaultModel;
+      if (usedModel) {
+        this.host.recordModelUsed(usedModel);
+      }
     }
     try {
       // prompt 以显式所属会话为目标:不再使用裸 this.sessionId(spec Q19)。
@@ -818,6 +830,19 @@ export class ChatController implements vscode.Disposable {
     if (dropped) {
       this.discardSnapshot(dropped);
     }
+  }
+
+  /**
+   * 会话删除即丢弃其会话侧状态(spec Q10/Q19):队列(未发送消息不再有效,
+   * 暂存附件一并释放)与驻留记忆(删除的会话不得留下幽灵记忆)。删除的若
+   * 正是显示会话,连表单一起清——表单属于显示态;别的会话的表单不能动。
+   */
+  private dropSessionState(id: string | undefined): void {
+    this.dropQueueState(id);
+    if (id === this.sessionId) {
+      this.clearForms();
+    }
+    this.sessionDismissed.drop(id);
   }
 
   /** Park the current session's dismissed rows so switching back can restore them. */
@@ -1173,11 +1198,8 @@ export class ChatController implements vscode.Disposable {
     if (confirm === t("deleteButton")) {
       await this.safeCall(() => this.client()?.deleteSession(id));
       if (this.sessionId === id) {
-        // 删除即丢弃该会话的队列状态(未发送消息不再有效,附件一并释放)。
-        this.dropQueueState(id);
-        this.clearForms();
-        // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
-        this.sessionDismissed.drop(id);
+        // 删除即丢弃该会话的队列状态、驻留记忆与表单(spec Q10/Q19)。
+        this.dropSessionState(id);
         this.dismissed.clear();
         this.sessionId = undefined;
         this.messages = [];
@@ -1188,8 +1210,7 @@ export class ChatController implements vscode.Disposable {
         void this.context.workspaceState.update(this.storageKey(), undefined);
         this.postSnapshot();
       } else {
-        this.dropQueueState(id);
-        this.sessionDismissed.drop(id);
+        this.dropSessionState(id);
       }
     }
   }
@@ -1477,11 +1498,8 @@ export class ChatController implements vscode.Disposable {
         break;
       case "session.deleted":
         if (eventSession === this.sessionId) {
-          // 删除即丢弃该会话的队列状态(未发送消息不再有效,附件一并释放)。
-          this.dropQueueState(eventSession);
-          this.clearForms();
-          // 该会话的驻留记忆一并清掉：删除的会话不得留下幽灵记忆（spec Q10）。
-          this.sessionDismissed.drop(eventSession);
+          // 删除即丢弃该会话的队列状态、驻留记忆与表单(spec Q10/Q19)。
+          this.dropSessionState(eventSession);
           this.sessionId = undefined;
           this.messages = [];
           this.resetStreams();
@@ -1497,8 +1515,7 @@ export class ChatController implements vscode.Disposable {
           void this.context.workspaceState.update(this.storageKey(), undefined);
           this.postSnapshot();
         } else if (eventSession) {
-          this.dropQueueState(eventSession);
-          this.sessionDismissed.drop(eventSession);
+          this.dropSessionState(eventSession);
         }
         break;
       default:
@@ -2107,13 +2124,15 @@ export class ChatController implements vscode.Disposable {
     return vscode.Uri.joinPath(this.folder.uri, file);
   }
 
-  /** 盘上是否存在此文件：与 `revertFile` 走同一 URI 解析路径，避免形态分歧。 */
+  /** 盘上是否存在此文件：与 `revertFile` 走同一 URI 解析路径，避免形态分歧。
+   * 只有「确实不存在」（not-found）才报没有；其余报错一律开放失败当「有」
+   * 处理——一个意外报错不是盘的真相，不能拿它隐藏一行。 */
   private async fileOnDisk(file: string): Promise<boolean> {
     try {
       await vscode.workspace.fs.stat(this.resolveFileUri(file));
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      return !statNotFound(error);
     }
   }
 
@@ -2284,6 +2303,19 @@ export class ChatController implements vscode.Disposable {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * 「盘上确实没有此文件」的报错判定：真实 API 以 `FileSystemError` 实例的
+ * `code`（"FileNotFound"）表达，测试替身以 ENOENT 前缀的普通 Error 表达。
+ * 其余一切报错（权限、不可用、类型意外）都不算不存在——报错不等于缺席。
+ */
+function statNotFound(error: unknown): boolean {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  if (typeof code === "string") {
+    return code === "FileNotFound";
+  }
+  return error instanceof Error && error.message.startsWith("ENOENT");
 }
 
 /** The diff status as a localized word for the diff editor's title. */

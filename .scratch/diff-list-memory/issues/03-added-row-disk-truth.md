@@ -37,3 +37,8 @@ Type: task
     - `the disk truth check runs after the attribution filter`
   - 计数:`npm test` 322 tests / 321 pass / 0 fail / 1 skipped(基线 318/317/0/1);`npm run typecheck`、`npm run lint` 通过。
   - 未触碰 dismissed map 与 switchSession 队列代码(01/02 票区域)。
+
+- 2026-11-19 (code-review 修复轮,ticket/fix-review): `fileOnDisk` 原先吞掉**一切** stat 报错当「盘上没有」。修复:只有 not-found 报错才算缺席(真实 API:`FileSystemError` 实例 `code === "FileNotFound"`;测试替身:ENOENT 前缀普通 Error),**其余一切报错开放失败保留行**——一个意外报错不是盘的真相,不能拿它隐藏一行。新增模块级助手 `statNotFound`(panel.ts)承载判定。
+  - 新增测试(`added rows disk truth` 套件,红→绿):`a stat error that is not not-found keeps the attributed added row`(注入 EACCES,合法归因的 added 行仍显示)。
+  - 测试替身:`test/vscode-stub.ts` 增加 `throwOnStat`/`statError` 注入位(resetFs 一并清除),`fs.stat` 注入后一律抛它。
+  - 既有四条 disk-truth 用例(ENOENT 路径)不回归。计数同轮:358/357/0/1(typecheck、lint 通过)。

@@ -195,6 +195,17 @@ function ensureAssistant(state: ChatState, messageID: string): ChatState {
   return { ...state, messages: [...state.messages, synthetic] };
 }
 
+/**
+ * 会话归属守卫:消息盖的章必须就是显示会话的章,否则丢弃(严格比对——
+ * 空 `?? ""` 兜底标签永不匹配任何真实会话 ID)。此前十一个 case 的守卫
+ * 逐字重复,收进这一个入口;可选 sessionID 的请求/响应类消息
+ * (sessionMeta/fileResults/pickedPaths/imageStaged)语义不同(undefined
+ * 表示「无会话时的合法落点」),不走这里。
+ */
+function sameSession(state: ChatState, sessionID: string): boolean {
+  return sessionID === state.sessionID;
+}
+
 export function reducer(state: ChatState, message: HostToWeb): ChatState {
   switch (message.kind) {
     case "state": {
@@ -245,7 +256,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
     }
     case "textStarted":
     case "reasoningStarted": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       const kind: SegmentKind = message.kind === "textStarted" ? "text" : "reasoning";
@@ -257,7 +268,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
     }
     case "textDelta":
     case "reasoningDelta": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       const kind: SegmentKind = message.kind === "textDelta" ? "text" : "reasoning";
@@ -269,7 +280,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
     }
     case "textEnded":
     case "reasoningEnded": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       const kind: SegmentKind = message.kind === "textEnded" ? "text" : "reasoning";
@@ -280,7 +291,7 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       }));
     }
     case "messageContent": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       // The server's own content array wins over anything assembled locally.
@@ -291,14 +302,14 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       }));
     }
     case "messages": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       return { ...state, messages: message.messages };
     }
     case "busy": {
       // 广播消息的 sessionID 由类型保证必填,守卫只做严格归属比对。
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       // Inline failures belong to the turn that produced them: once a new turn
@@ -306,31 +317,31 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       return { ...state, busy: message.busy, errors: message.busy ? [] : state.errors };
     }
     case "queue": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       return { ...state, queue: message.queue, queuePaused: message.paused };
     }
     case "forms": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       return { ...state, forms: message.forms };
     }
     case "subagents": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       return { ...state, subagents: message.jobs };
     }
     case "permissions": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       return { ...state, pending: message.pending };
     }
     case "diffs": {
-      if (message.sessionID !== state.sessionID) {
+      if (!sameSession(state, message.sessionID)) {
         return state;
       }
       return { ...state, diffs: message.diffs };

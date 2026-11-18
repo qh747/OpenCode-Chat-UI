@@ -84,3 +84,17 @@
 ### 2026-11-18(二轮 grilling:分支 5 立项)
 
 - 用户在新构建上复现队列跨会话发送(分支 5);排错期两次审计(subagent 腿干净;队列腿定根因为 EMPTY 别名)。统一原则与三条腿结论见上方新增小节。工票:issues/05。diff 列表腿另立 `.scratch/diff-list-memory/`;服务器归因调查另立 `.scratch/server-snapshot-attribution/`。ADR-0012 记 Diff list 信任边界。
+
+### 2026-11-19 code-review 修复轮(ticket/fix-review,已接受的取舍记录)
+
+code-review 四条发现:sendNow 缺显示态守卫(ssl-05 issues/05 追记)、fileOnDisk 吞一切报错(dl-03 issues/03 追记)、webview reducer 会话守卫重复、panel.ts 会话删除清理重复——前三类已修,TDD 先红后绿(机械去重除外),358/357/0/1。**以下为明确不做的评审建议,记录在案**:
+
+- **无会话 post 的 `?? ""` 广播标签**:不做。守卫行为已安全——webview 严格比对,空串永不匹配任何真实会话 ID,外章一律丢弃;为此重敲协议类型是无收益的 churn。
+- **sendNow/startQueued 的 Data Clump**:不做。本轮刚以 `(text, attachments, sessionID)` 三参稳定下来,再裹对象属于评审期美学,不是缺陷。
+- **单用途 `queue` getter**:不做。当前会话队列读视图就一个读者位,抽 getter 只是把一行代码搬个地方。
+- **ChatController 多关注点 watch item**:不做(立项级建议)。拆分 ChatController 是独立大工程,不在修复轮动手;如需推进另立工票。
+
+本轮审计中两个边界判定(与上述守卫同族,记录依据):
+
+- **选区 auto-attach 与 `recordModelUsed` 随显示闸门收拢**:二者读/写的都是显示会话的用户上下文(此刻的编辑器选区、picker 的模型选择),后台回合(A 的队列、B 在显示)不应把它们记到 A 头上,故归入 `displayed = sessionID === this.sessionId` 闸门内。
+- **`postQueue`/`setPaused` 广播保持无条件**:带所属会话标签的队列簿记,外来 webview 守卫丢弃;是队列/回合机制的一部分,不是显示态。

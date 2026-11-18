@@ -82,3 +82,17 @@ Type: task
 2. 显示会话回合结束的队列排水门槛从 `wasBusy` 改为 latch 消费:服务器侧发起且 `step.started` 事件丢失的回合结束时不再排水(旧行为会)——超低概率、事件流有损场景,取舍记录在案。
 3. 阶段 1 的红暴露过一批"碰巧绿"的既有用例(EMPTY 全局污染跨用例),均已随修复转绿,无删用例。
 4. `switchSession` 的早快照后不再有任何排水调用;若日后出现"切回即想立即送"的新诉求,请在 Q17-A 的事件驱动模型上立项,不要恢复泊位机制。
+
+### 2026-11-19(code-review 修复轮:ticket/fix-review)
+
+**发现(sendNow 缺显示态守卫)**:`sendNow` 无条件置位 `this.busy`、复位 `turnFailed`、把乐观气泡推进 `this.messages`(显示会话的转录)、启动权限/子代理轮询——后台排水(B 显示且空闲,A 的队列在后台启动回合)因此锁死宿主 busy:B 的下一条消息被 `send()` 扣进 B 的队列,而 B 没有回合在跑、没有恢复入口,消息永久滞留;A 的气泡同时污染 B 的转录。
+
+**修复(commit 9bfd56d)**:sendNow 以 `displayed = sessionID === this.sessionId`(目标 === 显示)一道闸门收拢全部显示态副作用:busy/turnFailed/busy 广播、轮询启动、乐观气泡、messages 广播、`recordModelUsed`(喂显示会话 picker 的 Recent,后台回合记 `this.model` 会把 B 的 picker 选择记到 A 头上)、以及选区 auto-attach(选区属于显示会话的用户上下文,不得随后台回合捎带)。队列/回合机制对任意会话无条件:`client.prompt`、`runningTurns` latch、staged 附件释放。`failTurn` 的既有守卫(队列簿记无条件、显示态按 `sessionID !== this.sessionId` 早退)与该形状一致,未动。审计延伸:`drainQueue`/`handleTurnEndQueue` 里的 `postQueue`/`setPaused` 广播保留无条件——它们带所属会话标签,外来 webview 守卫丢弃,是队列簿记而非显示态。
+
+**测试重缝(空洞性修复,必做项)**:原测试缝 stub `startQueued`,sendNow 从未在后台路径跑过,`assert.equal(controller.busy, false)` 空转通过。现缝移到 `client.prompt`(发送归属的真边界):test/queue-turn-end.test.ts 的 fake 携带真 `sendNow/startQueued/drainQueue/handleTurnEndQueue/postQueue`,只 stub client(prompt 记录目标会话/正文/附件)与显示侧定时器依赖(轮询为 spy)。新增用例(describe `a background delivery leaves the displayed session alone`):
+- `a background delivery while another session is displayed leaves the displayed session idle and clean`(红→绿:busy 保持 false、B 转录不进气泡、轮询不被拉起、picker Recent 不被写、A 的 prompt 正文不带 B 的选区);
+- `the user can still send immediately in the displayed session after a background delivery`(红→绿:B 的消息直接成为回合而非入队——锁死后果的钉子;修后 B 自己的回合正常置位 busy)。
+
+既有断言随缝迁移转真: `A's turn ends while B is displayed: the message goes to A, B stays quiet` 的 `busy === false` 与「发送归属」不再空转;前台钉 `the foreground FIFO chain survives` 新增选区 auto-attach 与 recordModelUsed 的前台存活断言。修复前红 3 条(全部命中泄漏本身),修复后全绿。
+
+**计数**:`npm test` 358 tests / 357 pass / 0 fail / 1 skipped(基线 355/354/1;+2 新用例 +1 dl-03 用例);`npm run typecheck`、`npm run lint` 通过。
