@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { WorkspaceWorktrees } from "./git";
 import { OpencodeClient } from "./opencode/client";
 import { OpencodeEventStream, type EventStreamState } from "./opencode/events";
 import type { AgentInfo, CommandInfo, ModelInfo, ModelRef, OEvent, SkillInfo } from "./opencode/types";
@@ -21,6 +22,9 @@ export class OpencodeHost {
   private manager: ServerManager;
   private eventStream: OpencodeEventStream | undefined;
   private clientInstance: OpencodeClient | undefined;
+  /** Worktrees of the workspace repository, for the event-filter rule and
+   *  the chat panel's branch context (ADR-0013). */
+  private readonly worktrees: WorkspaceWorktrees;
   private catalogCache: Catalog = {
     agents: [],
     models: [],
@@ -46,6 +50,7 @@ export class OpencodeHost {
 
   constructor(private readonly options: HostOptions) {
     this.folderPath = toServerPath(options.folder.uri.fsPath);
+    this.worktrees = new WorkspaceWorktrees(options.folder.uri.fsPath);
     this.manager = this.buildManager();
     this.catalogCache.recentModels = this.options.context.workspaceState.get<ModelRef[]>(
       this.recentKey(),
@@ -93,6 +98,11 @@ export class OpencodeHost {
 
   client(): OpencodeClient | undefined {
     return this.clientInstance;
+  }
+
+  /** True when the directory is a git worktree of the workspace repository. */
+  isWorkspaceWorktree(directory: string): boolean {
+    return this.worktrees.isWorkspaceWorktree(directory);
   }
 
   /** Last connection failure detail (cleared once connected again). */
@@ -150,6 +160,9 @@ export class OpencodeHost {
         baseUrl: server.url,
         password: server.password,
         directory: this.folderPath,
+        // Worktrees of this repository emit events under their own
+        // directories; the panel consumes their branch updates (ADR-0013).
+        acceptsDirectory: (directory) => this.worktrees.isWorkspaceWorktree(directory),
         onEvent: (event) => {
           this.eventEmitter.fire(event);
           // The server loads its agent/model registries asynchronously —

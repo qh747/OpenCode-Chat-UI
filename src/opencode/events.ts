@@ -11,6 +11,13 @@ export interface EventStreamOptions {
   onState: (state: EventStreamState, error?: Error) => void;
   /** Only deliver events under this directory (when present on the event). */
   directory?: string;
+  /**
+   * Extra admission for events from other directories — the host passes its
+   * "is this one of the workspace's worktrees" rule here (ADR-0013), so
+   * branch updates and moved sessions working inside a worktree still reach
+   * the panel. Only consulted for events that failed the `directory` match.
+   */
+  acceptsDirectory?: (directory: string) => boolean;
   /** Reconnect backoff base in ms. */
   baseBackoffMs?: number;
   maxBackoffMs?: number;
@@ -135,7 +142,13 @@ export class OpencodeEventStream {
       return;
     }
     const directory = this.options.directory;
-    if (directory && event.location?.directory && !pathsEqual(event.location.directory, directory)) {
+    const eventDirectory = event.location?.directory;
+    if (
+      directory &&
+      eventDirectory &&
+      !pathsEqual(eventDirectory, directory) &&
+      !this.options.acceptsDirectory?.(eventDirectory)
+    ) {
       return;
     }
     this.options.onEvent(event);
