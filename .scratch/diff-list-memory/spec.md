@@ -27,6 +27,14 @@
 - **Q10**:`dismissed` 改**按会话 park**(与 `sessionQueues` 同款模式):`switchSession` 用存/取替代 clear;`createSession` 的 clear 改为「泊出旧会话、新会话载入空表」;`rewindTo:1048` **保留** clear(倒带动了会话历史基准,重新开始合理);`deleteSessionById` 顺带清该会话 parked 记忆。
 - **Q12**:ADR-0012「Diff list 的信任边界」。
 
+## 增补(2026-11-19,研究结论并入):归因 credibility 校验(Q21 = 并入本批)
+
+`server-snapshot-attribution/01` 已 resolved,实证(详见其 Answer):`snapshot.files` 的真实语义是**该 assistant 消息自身窗口内共享工作树的内容变化**,不是「本会话 agent 碰过的文件」——扩展自己的 revertFile 写盘、别的会话的写,只要落进 B 某条消息的窗口,就被记进 B(`tools:[]`);B 行实际形态钉死为 `deleted +0 -4`(并发创建变体 `modified +1 -1`)。
+
+- **决策 Q21(2026-11-19,与用户确认)**:归因加固**并入本批**(issue 04),与 `session-switch-leaks` issue 05 并行(区域不相交)。
+- **规则(窄校验,零漏报风险)**:`attributionSet` 跳过 **`tools` 为空**的 assistant 消息声称的文件——没调用过任何工具的消息无权认领文件;`tools` 非空的消息照旧全量归因(真写必经 tool)。已知二阶局限:某条 tools 非空的消息窗口恰好框住外来写 → 仍可能串行;观测到再升级为 tool-input 逐文件交叉(那才有「bash 变量路径写法漏归因」的代价,本批不付)。
+- 顺带:`src/opencode/types.ts:168-173` 的服务器契约注释按研究结论改写(原「files names the files the turn touched」不成立);ADR-0008 追加修订节;GLOSSARY「Attribution set」词条修订。
+
 ## What was implemented
 
 (0.4.22 批次,与 `session-switch-leaks` issue 05 同批;三票独立分支 TDD 落地,合入集成分支 `batch/0.4.22-session-bound-state`。)
@@ -40,4 +48,4 @@
 ## Open
 
 - 窗口重载后已撤销的 modified/deleted 行可复活(内存记忆边界)。
-- B 侧串行根因(服务器 `snapshot.files` 写宽)待 `.scratch/server-snapshot-attribution/` 调查结论。
+- 二阶串行形状(tools 非空的消息窗口框住外来写)未防,观测到再升级为 tool-input 逐文件交叉(见增补节);服务器归因边界事实已钉死,见 `.scratch/server-snapshot-attribution/issues/01-investigate-attribution-boundary.md`。
