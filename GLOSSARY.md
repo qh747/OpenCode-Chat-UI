@@ -26,7 +26,10 @@ One user prompt plus everything the agent produces until the session goes idle. 
 The share of a turn's prompt tokens that the provider served from its prompt cache rather than re-processing. Reported per assistant reply; a high rate means the ongoing conversation is reusing cached context.
 
 **Diff list**
-The collapsed-by-default strip listing the files this session's agent changes are still pending on: one quiet count row that expands into one row per file with a Revert action. The rows are filtered to the session's attribution set; an empty attribution set shows an empty list. Distinct from a file's diff view, which shows the actual edits.
+The collapsed-by-default strip listing the files this session's agent changes are still pending on: one quiet count row that expands into one row per file with a Revert action. The rows are filtered to the session's attribution set; an empty attribution set shows an empty list. A row the user has processed stays hidden by its processed signature until the file's changes change again, and an added row whose file is absent from disk is never shown — nothing is pending on it. Distinct from a file's diff view, which shows the actual edits.
+
+**Processed signature**
+The user's decision that one round of a file's changes is handled, recorded at Revert time as the file plus its change signature (status plus additions plus deletions). Kept per session; it hides the row across refreshes, session switches and new turns. The row returns only when the file's changes change again — a new signature is news, an old one is not. Distinct from Revert's disk effect, which the server's message history never sees.
 
 **Attribution set**
 The union of the files a session's own assistant snapshots list — the only per-session file attribution the server exposes. The diff list is filtered to it; an empty attribution set yields an empty diff list, never another session's changes.
@@ -35,7 +38,7 @@ The union of the files a session's own assistant snapshots list — the only per
 One ordered block inside an assistant reply: a passage of text, a passage of reasoning, or a tool call. Tool calls carry an identity of their own; text and reasoning parts are known by their position within the reply.
 
 **Queued message**
-A user message sent while the model is still working. The host holds it in FIFO order and sends it when the turn ends; it can be deleted or force-sent (interrupting the current turn). A failed or stopped turn holds the queue until it is resumed.
+A user message sent while the model is still working. The host holds it in FIFO order and sends it when the turn ends — to the session it was typed in, even if the user is elsewhere; delivery follows the owning session, not the one on screen. It can be deleted or force-sent (interrupting the current turn). A failed or stopped turn holds the queue, for its own session, until it is resumed.
 
 **Subagent job**
 A running subagent, reported by the server's job listing for a session and its descendants. Only jobs of kind `subagent` that are still running are shown: one row with the agent, its description and the elapsed time, plus a Stop action that interrupts the child session. The listing has no events, so the host polls it while a turn runs. Distinct from an agent in the catalog, which is a definition, not a running job.
@@ -62,6 +65,9 @@ The session ID the webview attaches to an action message, naming the session the
 
 **Split-brain window**
 The interval during a session switch in which the host has already flipped to the incoming session while the webview still renders the outgoing one. Closed from the UI side by posting a snapshot immediately after the host's synchronous clears, and defended in protocol by session stamps.
+
+**Session-bound state**
+The rule that per-session state — the diff list, the message queue, subagent jobs — belongs to its session, not to the session currently displayed. Memory, delivery and visibility follow the owning session: A's queued messages go to A even while B is on screen, A's processed rows stay hidden when the user returns to A, and A's running jobs never leak into B's strip. Display is a viewport, never an owner.
 
 **Event stream**
 The server's volatile SSE feed (`/api/event`). Lossy by design; consumers resync authoritative state on reconnect instead of trusting it alone.

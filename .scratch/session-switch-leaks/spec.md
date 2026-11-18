@@ -6,6 +6,14 @@
 
 三个跨会话状态泄漏 bug，全部在带 0.4.20/0.4.21 未提交改动的构建上复现，且都落在这批新机制的缝隙上。修复叠加在当前未提交工作上，同批并入 0.4.21 收口。
 
+## 统一原则(2026-11-18 二轮 grilling 后确立,批次 0.4.22)
+
+**会话绑定状态(Session-bound state)**:会话态只属于会话,与当前显示的会话解耦。diff 列表、消息队列、subagent 作业同规——即使正在显示 B,A 的排队消息仍发给 A,A 的已处理记忆仍对 A 生效,A 的作业条既不串入 B 也不被 B 清掉。三条腿核查结论:
+
+- **subagent 腿:已达标,无需修**(2026-11-18 审计:`pollStale` 双重守卫 `panel.ts:1686-1688` + 切换同步清空 `:568` + 广播带会话标签 + reducer 守卫 `state.ts:319-324` + stop 指向该行自己的 `childSessionID` `:1747`;`test/subagent-refresh.test.ts` 钉住)。潜在弱点:广播类消息 `sessionID?` 可选,守卫对 `undefined` 不设防——协议类型改必填,随 issue 05 顺手硬化。
+- **diff 列表腿:有泄漏**(切换清记忆),见 `.scratch/diff-list-memory/`。
+- **队列腿:有泄漏**,见下分支 5。
+
 ## 分支 1：diff 列表严格归因（Bug 1a）
 
 - 现象：A 会话点改动列表某文件的 ×（revert）后，切到 B，B 的列表出现 `deleted a.md +0 -4`。复现事实：a.md 为 agent 新建、只有 A 碰过、× 后 A 正常消失、文件确实没了；**B 从没跑过回合（或只有纯聊天回合）**。
@@ -43,6 +51,22 @@
   3. **take() 删除 + 克隆**：`SessionQueues.take()`（`session-queues.ts:32-35`）不删除不克隆，驻留数组被别名共享；改为取出即删除 + 浅克隆（items 复制、pendingForce 复制）。
 - 决策 Q10：**handleMessage 全局串行化暂不做**（三件套已覆盖已知竞态；真再撞上再立项）。
 
+## 分支 5:队列状态归会话所有(Bug 4,0.4.22)
+
+- 现象(0.4.21 构建上复现):A 忙时排队消息 → 切到 B → 消息被发到 B。
+- **排错记录修正**:初判「后台回合结束的自动排水用了当前会话」**不成立**——回合结束排水整块被 `eventSession === this.sessionId` 守卫(`panel.ts:1292`),后台回合结束什么都不发(排错期的 Q13/Q14 是用户按预期答的,非亲见;审计给出确定性机制,以此为准)。真凶是**数组别名**:
+  1. `SessionQueues.take()` 无泊位分支返回 `{ ...EMPTY }`——浅展开,`items` 引用模块级共享数组(`session-queues.ts:9,47,51`);
+  2. `loadQueue` 原样赋给活队列(`panel.ts:781`)→ 活队列别名 `EMPTY.items`;
+  3. A 首次进入(createSession/首访 switch)即别名;排队消息 `push` 进 `EMPTY.items` 本体(`panel.ts:597`);
+  4. 切到无泊位的 B:`take(B)` 又是空分支 → B 的活队列拿到**同一数组**(还躺着 A 的消息);
+  5. 早快照(`:574`)把它画进 B 的条;`fullResync` 后 `drainRestoredQueue()`(`:576`,`:786-805`)见 B 空闲 → `drainQueue` → `sendNow` → **`prompt(this.sessionId=B, msg)`**。
+  6. 且消息是**复制不是搬家**:`stash(A)` 泊的是克隆,错误发送只 shift 别名数组;切回 A 会**再发一次**,两条 transcript 都有。
+- 三个被标记的点:🚩 EMPTY 别名(根因);🚩 全部发送路径只靠位置所有权(`this.queue` 属于 `this.sessionId`,`prompt(this.sessionId)` 无从校验归属,`panel.ts:658`);🚩 切换 `await` 窗口竞态(`:551/:558/:559` 与 `:566` 之间,`sessionId` 已是 B 而活队列还是 A 的——分支 4 Q10 缓决的串行化问题)。
+- 决策:
+  - **Q17**:队列属于会话,送达跟随会话——A 的回合结束时宿主把 A 的队列发给 **A**,不管用户此刻在哪个会话、B 是否在跑。取代 `session-queues.ts:22-28` 的 park-and-return-on-return 设计注释。
+  - **Q19**:方案二**键控化**——队列状态(items/paused/pendingForce)只活在 `SessionQueues` 按会话键存;`this.queue` 退化为当前会话的读视图;全部发送点带**显式所属会话参数**;后台/前台排水统一为按会话参数化的同一条路径;`stash/load/drainRestoredQueue` 泊位机制删除。EMPTY 别名类 bug 与 await 窗口竞态结构性消失(盖章 B 的动作按键解析到 B 的空队列,A 的状态碰不到),无需全局串行化。
+  - **Q20**:单一 issue 05,分阶段 TDD;顺手硬化广播消息 `sessionID` 必填、会话删除清队列状态。
+
 ## 验证
 
 - `npm run typecheck` 随改随跑；单测文件随分支跑（TDD：先失败用例后实现）；`npm test` 全量收尾。
@@ -56,3 +80,7 @@
 - Review-stage 重构（均小、机械）：三处重复的驻留丢弃形状抽为 `discardSnapshot()`；三处 poll 过期守卫抽为 `pollStale()` / `pollSessionCurrent()`；`{from?, to?}` 具型为 `DiffRange`（session-diff 导出，client 与测试共用）；`turnMessages` 的 1_500 TTL 具名为 `TURN_CACHE_TTL_MS`。`stampSession` 的十臂 switch 保留不抽——类型安全要求逐 kind 窄化，Set + 展开会失去穷尽检查（judgement call，记录在案）。
 - Spec 轴缺口：补"deleted + stale patch 拒绝重建"用例（issue 02 验收点名）；spec 分支 4 的 busy 表述与 removeQueued 纳入同步修正（见上）。
 - 两轴复核后全量验证：typecheck / lint OK，316 通过 0 失败 1 跳过。
+
+### 2026-11-18(二轮 grilling:分支 5 立项)
+
+- 用户在新构建上复现队列跨会话发送(分支 5);排错期两次审计(subagent 腿干净;队列腿定根因为 EMPTY 别名)。统一原则与三条腿结论见上方新增小节。工票:issues/05。diff 列表腿另立 `.scratch/diff-list-memory/`;服务器归因调查另立 `.scratch/server-snapshot-attribution/`。ADR-0012 记 Diff list 信任边界。
