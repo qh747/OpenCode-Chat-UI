@@ -62,6 +62,13 @@ export function resetFs(): void {
 
 /** 与 vscode.workspace.fs 行为一致的最小实现（内存版）。 */
 export const fs = {
+  /** 文件在内存文件系统里即存在；否则与真实实现一致地抛错（ENOENT）。 */
+  async stat(uri: { fsPath: string }): Promise<{ type: number }> {
+    if (!memoryFiles.has(uri.fsPath)) {
+      throw new Error(`ENOENT: ${uri.fsPath}`);
+    }
+    return { type: 0 };
+  },
   async readFile(uri: { fsPath: string }): Promise<Buffer> {
     const content = memoryFiles.get(uri.fsPath);
     if (content === undefined) {
