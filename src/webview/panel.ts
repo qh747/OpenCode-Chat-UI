@@ -101,6 +101,14 @@ export class ChatController implements vscode.Disposable {
   /** Set when the running turn failed, so the completion notice stays quiet. */
   private turnFailed = false;
   /**
+   * 会话 → 在跑回合 latch(Q17-A 队列排水的事实来源,与显示 busy 解耦):
+   * sendNow 在 prompt 被服务器接受后登记、step.started 事件登记、回合结束
+   * 事件消费一次。回合结束事件成簇到达(idle + execution.*),消费一次即
+   * 挡住同簇的重复排水;新回合(prompt 再发)重新登记后,其结束事件才会
+   * 再次放行。
+   */
+  private readonly runningTurns = new Set<string>();
+  /**
    * 当前会话队列的只读视图(items):队列状态只活在 SessionQueues、按会话
    * 键存(spec Q19),变更一律走 sessionQueues 的方法。
    */
@@ -582,7 +590,6 @@ export class ChatController implements vscode.Disposable {
     // 往返内纠正。
     this.postSnapshot();
     await this.fullResync();
-    this.drainSwitchedQueue(id);
     await vscode.commands.executeCommand("opencode.chat.focus");
   }
 
@@ -680,6 +687,9 @@ export class ChatController implements vscode.Disposable {
     try {
       // prompt 以显式所属会话为目标:不再使用裸 this.sessionId(spec Q19)。
       await client.prompt(sessionID, { text: promptText, files: promptAttachments });
+      // 回合已被服务器接受并运行:登记在跑 latch,该会话的回合结束事件据此
+      // 排水其队列(Q17-A)。prompt 拒绝时不登记,失败的发送不排水。
+      this.runningTurns.add(sessionID);
     } catch (error) {
       // The server never accepted the turn, so nothing will emit session.idle:
       // end it here or the send button stays in its stop state forever.
@@ -780,7 +790,13 @@ export class ChatController implements vscode.Disposable {
   /** Start the queue head if the turn is over. Returns whether it did. */
   private drainQueue(sessionID: string): boolean {
     const state = this.sessionQueues.state(sessionID);
-    if (state.paused || this.busy || state.items.length === 0) {
+    if (state.paused || state.items.length === 0) {
+      return false;
+    }
+    // 在跑判定跟随目标会话:显示会话用 busy,后台会话用在跑 latch
+    // (Q17-A:排水只认所属会话自己的回合状态,与显示会话无关)。
+    const busy = sessionID === this.sessionId ? this.busy : this.runningTurns.has(sessionID);
+    if (busy) {
       return false;
     }
     const head = this.sessionQueues.shift(sessionID);
@@ -815,26 +831,33 @@ export class ChatController implements vscode.Disposable {
   }
 
   /**
-   * 阶段 2 过渡(spec Q19→Q17):切回时若目标会话空闲则排水其队列——旧
-   * drainRestoredQueue 的职责,改为按键解析的会话状态读写。阶段 3 的回合
-   * 结束按会话排水落地后,此切换时排水删除。
+   * 回合结束的队列处理,按所属会话参数化(spec Q17-A):前台与后台共用这
+   * 一条路径。pendingForce → 以该会话为目标启动;失败/中断 → 该会话队列
+   * 置 paused(规则与前台一致);成功 → 队头以该会话为目标启动(FIFO 链
+   * 不变)。返回是否启动了新回合——显示侧据此决定是否补一次消息刷新。
+   * 调用方以 runningTurns latch 消费判定"该会话确有回合在跑",同簇的
+   * 重复结束事件不会二次排水。
    */
-  private drainSwitchedQueue(sessionID: string): void {
+  private handleTurnEndQueue(
+    sessionID: string,
+    outcome: "succeeded" | "failed" | "interrupted",
+  ): boolean {
     const state = this.sessionQueues.state(sessionID);
-    if (state.pendingForce) {
-      const forced = state.pendingForce;
+    const forced = state.pendingForce;
+    if (forced) {
+      // 被打断的回合终于结束:强制消息以所属会话为目标启动(优先于暂停规则)。
       this.sessionQueues.setPendingForce(sessionID, undefined);
-      if (this.busy) {
-        this.sessionQueues.unshift(sessionID, forced);
-      } else {
-        this.startQueued(forced, sessionID);
-        return;
+      this.startQueued(forced, sessionID);
+      return true;
+    }
+    if (outcome !== "succeeded") {
+      if (state.items.length > 0) {
+        this.sessionQueues.setPaused(sessionID, true);
+        this.postQueue(sessionID);
       }
+      return false;
     }
-    if (!this.busy) {
-      this.drainQueue(sessionID);
-    }
-    this.postQueue(sessionID);
+    return this.drainQueue(sessionID);
   }
 
   private clearForms(): void {
@@ -1316,6 +1339,11 @@ export class ChatController implements vscode.Disposable {
       }
       case "session.step.started":
       case "session.execution.started":
+        // 后台会话的回合同样登记在跑 latch(Q17-A):它的回合结束事件要据此
+        // 排水其队列。显示效果(busy 置位、轮询、strip)仍只属于当前会话。
+        if (eventSession) {
+          this.runningTurns.add(eventSession);
+        }
         if (eventSession === this.sessionId) {
           this.busy = true;
           this.post({ kind: "busy", sessionID: this.sessionId, busy: true });
@@ -1329,7 +1357,13 @@ export class ChatController implements vscode.Disposable {
       case "session.idle":
       case "session.execution.succeeded":
       case "session.execution.failed":
-      case "session.execution.interrupted":
+      case "session.execution.interrupted": {
+        const outcome =
+          event.type === "session.execution.failed"
+            ? "failed"
+            : event.type === "session.execution.interrupted"
+              ? "interrupted"
+              : "succeeded";
         if (eventSession === this.sessionId) {
           const wasBusy = this.busy;
           this.busy = false;
@@ -1351,31 +1385,27 @@ export class ChatController implements vscode.Disposable {
               );
             }
           }
-          const sessionId = this.sessionId ?? "";
-          const forced = this.sessionQueues.state(sessionId).pendingForce;
-          if (wasBusy && forced) {
-            // The interrupted turn is finally over — start the forced message.
-            this.sessionQueues.setPendingForce(sessionId, undefined);
-            this.startQueued(forced, sessionId);
-          } else if (
-            wasBusy &&
-            (event.type === "session.execution.failed" ||
-              event.type === "session.execution.interrupted")
-          ) {
-            if (this.queue.length > 0) {
-              this.sessionQueues.setPaused(sessionId, true);
-              this.postQueue(sessionId);
-            }
-            this.scheduleMessagesRefresh(0);
-          } else if (wasBusy && !this.drainQueue(sessionId)) {
-            this.scheduleMessagesRefresh(0);
-          } else if (!wasBusy) {
+          // 队列随所属会话排水(spec Q17-A):以在跑 latch 消费为准,与显示
+          // busy 解耦——本会话的回合结束同样推进它自己的队列;队列排水可能
+          // 以本会话为目标启动新回合。
+          const startedTurn =
+            eventSession !== undefined && this.runningTurns.delete(eventSession)
+              ? this.handleTurnEndQueue(eventSession, outcome)
+              : false;
+          if (!startedTurn) {
             this.scheduleMessagesRefresh(0);
           }
           this.scheduleSessionMetaRefresh();
           void this.refreshDiffs();
+        } else if (eventSession) {
+          // 后台回合结束(spec Q17-A):只推进该会话的队列,不触碰任何显示态
+          // ——消息发给 A,哪怕用户正在看 B、B 自己也在跑。
+          if (this.runningTurns.delete(eventSession)) {
+            this.handleTurnEndQueue(eventSession, outcome);
+          }
         }
         break;
+      }
       case "session.tool.called":
       case "session.tool.success":
       case "session.tool.failed":

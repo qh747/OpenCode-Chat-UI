@@ -19,11 +19,14 @@ function cloneSnapshot(snapshot: QueueSnapshot): QueueSnapshot {
 
 /**
  * Queue state belongs to the session it was typed in and lives only here,
- * keyed by session (spec Q19). The panel's live queue is a read-view of the
- * current session; every send path carries its owning session explicitly, so
- * a message queued while A was busy is delivered to A even when the user is
- * looking at B. Methods hand out copies — callers mutate only through the
- * API, never by holding an internal array reference.
+ * keyed by session (spec Q19). Delivery follows the owning session (Q17-A):
+ * when A's turn ends — in the foreground or in the background, no matter
+ * which session the user is looking at or whether that one is busy — A's
+ * queue head starts against A. Switching sessions neither moves a queue
+ * into the incoming conversation nor drops it; the panel keeps no berth
+ * mechanics (no stash/load/take), the keyed state just stays put. Methods
+ * hand out copies — callers mutate only through the API, never by holding
+ * an internal array reference.
  */
 export class SessionQueues {
   private readonly states = new Map<string, QueueSnapshot>();

@@ -19,6 +19,12 @@ const switchSession = (
   }
 ).switchSession;
 
+const handleMessage = (
+  ChatController.prototype as unknown as {
+    handleMessage: (message: unknown) => Promise<void>;
+  }
+).handleMessage;
+
 /** The prototype methods the real `switchSession` delegates to. */
 const proto = ChatController.prototype as unknown as Record<string, unknown>;
 
@@ -70,6 +76,7 @@ function switchController(from: string, queue: QueuedMessage[]) {
     },
     drainSwitchedQueue: proto.drainSwitchedQueue,
     drainQueue: proto.drainQueue,
+    forceQueued: proto.forceQueued,
     startQueued(item: QueuedMessage) {
       sent.push(item);
     },
@@ -160,6 +167,37 @@ describe("queue does not leak across sessions", () => {
     // 不向 B 发送任何消息:B 空闲时的恢复排水无事可做。
     assert.deepEqual(sent, []);
     // A 的消息仍驻留在 A 名下的会话状态里,切回即可见。
+    assert.deepEqual(controller.sessionQueues.state("ses_a").items, [message("msg1")]);
+  });
+
+  test("a queue action stamped B inside the switch window resolves against B's queue; A is untouched", async () => {
+    // 竞态钉(issue 05 验收 6):切换 await 窗口内宿主已翻到 B,盖章 B 的
+    // 队列动作按键解析到 B 的(空)队列,够不着 A 的状态。
+    const { controller, blocked, resyncStarted } = switchController("ses_a", [
+      message("msg1"),
+    ]);
+
+    const switching = switchSession.call(
+      controller as unknown as ChatController,
+      "ses_b",
+    );
+    await settleIntoSwitch(resyncStarted);
+    assert.equal(controller.sessionId, "ses_b");
+
+    // 窗口内的点击,带 webview 当前会话戳 B。
+    await handleMessage.call(controller as unknown as ChatController, {
+      kind: "forceQueued",
+      id: "msg1",
+      sessionID: "ses_b",
+    });
+
+    // 解析到 B 的队列:B 没有这条消息,无事可做;A 的队列原封不动。
+    assert.deepEqual(controller.sessionQueues.state("ses_a").items, [message("msg1")]);
+    assert.deepEqual(controller.sessionQueues.state("ses_b").items, []);
+
+    blocked.resolve();
+    await switching;
+    // fullResync 收口后依旧:A 不受影响。
     assert.deepEqual(controller.sessionQueues.state("ses_a").items, [message("msg1")]);
   });
 });
