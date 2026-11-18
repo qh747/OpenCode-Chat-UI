@@ -15,10 +15,9 @@ import { SubagentStrip } from "../webview-ui/SubagentStrip";
 import { App } from "../webview-ui/app";
 import { initialState, reducer } from "../webview-ui/state";
 import type { ChatState } from "../webview-ui/state";
-import type { Snapshot, WebToHost } from "../src/webview/protocol";
+import type { Catalog, Snapshot, WebToHost } from "../src/webview/protocol";
 import type { SubagentJob } from "../src/util/subagents";
 import type { FileDiffInfo } from "../src/opencode/types";
-import type { Catalog } from "../src/webview/protocol";
 
 const DIFFS: FileDiffInfo[] = [
   { file: "h:\\proj\\TEST.md", status: "added", additions: 14, deletions: 0, patch: "" },
@@ -317,13 +316,13 @@ describe("parentSessionID in the webview state", () => {
     assert.equal(state.parentSessionID, "ses_parent");
   });
 
-  test("a meta without the field keeps the known parent", () => {
+  test("a meta without the field clears the parent (host always ships it)", () => {
     const first = reducer(
       { ...initialState, sessionID: "ses_child" },
       { kind: "sessionMeta", sessionID: "ses_child", isSubagentSession: true, parentSessionID: "ses_parent" },
     );
     const second = reducer(first, { kind: "sessionMeta", sessionID: "ses_child", title: "renamed" });
-    assert.equal(second.parentSessionID, "ses_parent");
+    assert.equal(second.parentSessionID, undefined);
   });
 
   test("a meta for another session is ignored", () => {

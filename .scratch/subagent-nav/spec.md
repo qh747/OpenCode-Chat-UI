@@ -37,6 +37,12 @@
 
 子代理行 title/aria 需要自己的 tooltip：zh「查看子代理会话」/ en "Open subagent session"（实现时按 Q5 同款 i18n 路径新增，属 Q4 的自然组成部分）。
 
+## 增补（2026-11-19，评审后并入）
+
+- **Q2 谓词精化**：实现按 `isSubagentSession && parentSessionID` 双重门控渲染返回按钮（host 两者同源于 `result.data.parentID`，实际不可分歧）；在 parentSessionID 尚未到达的瞬窗显示 logo 比显示一个无目标按钮更稳。spec 的 Q2 谓词在实践中由双重门控等效承载。
+- **meta 显式语义（评审修正）**：`sessionMeta` 的 `parentSessionID` 改为缺席即清除（host 每条 meta 均整体下发该字段，`??` 保留模式会在切回根会话时留下脏 id，与双重门控构成隐性耦合）。测试同步翻转。
+- **延后项（Standards 轴判断性意见，不在本批）**：三个条的头部可收敛为共享 `StripHead`（QueueStrip 因行内 Resume 不能 button 套 button 而形状略异）；真实 DOM 测试脚手架（mount/click）可提取共享 helper；`isSubagentSession` 与 `parentSessionID` 为一事实两字段，bool 有独立消费方（composer 隐藏），保留两字段。
+
 ## What was implemented
 
 （master 分支，2026-11-19；基点 edd6224，与 history backfill 提交共存，panel.ts 两处 3-way 合并：`previousRevert` 与 `parentSessionID` 双保留、`renderableTranscript/hasEarlier/loadingEarlier` 与 `parentSessionID` 双保留。）

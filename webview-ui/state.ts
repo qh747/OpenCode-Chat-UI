@@ -259,7 +259,10 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
         contextTokens: message.contextTokens ?? state.contextTokens,
         cacheHitRate: message.cacheHitRate ?? state.cacheHitRate,
         isSubagentSession: message.isSubagentSession ?? state.isSubagentSession,
-        parentSessionID: message.parentSessionID ?? state.parentSessionID,
+        // parentSessionID 不是可独立缺省的属性：host 每条 meta 都整体下发，
+        // 缺席即清除，不保留上一个子会话的父 id（评审修正：脏 id 与返回
+        // 按钮的双重门控曾构成隐性耦合）。
+        parentSessionID: message.parentSessionID,
         created: message.created ?? state.created,
         updated: message.updated ?? state.updated,
         cost: message.cost ?? state.cost,
