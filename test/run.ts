@@ -23,6 +23,7 @@ import "./session-meta.test";
 import "./session-switch.test";
 import "./session-diff.test";
 import "./session-queues.test";
+import "./dismissed-memory.test";
 import "./subagent-refresh.test";
 import "./diffapply.test";
 import "./first-paint.test";

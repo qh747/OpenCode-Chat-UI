@@ -2,6 +2,7 @@ import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import { ChatController } from "../src/webview/panel";
 import { SessionQueues } from "../src/webview/session-queues";
+import { SessionDismissed } from "../src/webview/session-dismissed";
 import type { QueuedMessage } from "../src/webview/protocol";
 
 /**
@@ -47,6 +48,7 @@ function switchController(from: string, queue: QueuedMessage[]) {
     queuePaused: false,
     pendingForce: undefined,
     sessionQueues: new SessionQueues(),
+    sessionDismissed: new SessionDismissed(),
     messages: [],
     pending: [],
     diffs: [],
@@ -66,6 +68,8 @@ function switchController(from: string, queue: QueuedMessage[]) {
     drainRestoredQueue: () => {},
     stashQueue: proto.stashQueue,
     loadQueue: proto.loadQueue,
+    stashDismissed: proto.stashDismissed,
+    loadDismissed: proto.loadDismissed,
     storageKey: () => "test-key",
     postSnapshot() {
       recorded.push({ sessionId: controller.sessionId, queue: controller.queue });
