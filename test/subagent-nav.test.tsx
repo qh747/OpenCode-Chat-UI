@@ -137,17 +137,18 @@ describe("strip heads are full-row hot zones", () => {
     try {
       const head = container.querySelector(".queue-head");
       assert.ok(head, "queue head must render");
-      assert.equal(container.querySelector(".queue-row"), null, "collapsed at first");
+      // 挂载即自动展开（新消息入队自动展开的既有语义），从这里开始双向切换。
+      assert.ok(container.querySelector(".queue-row"), "auto-expanded on mount");
 
       click(head);
-      assert.ok(container.querySelector(".queue-row"), "head click expands");
+      assert.equal(container.querySelector(".queue-row"), null, "head click collapses");
 
       // 点在 toggle 按钮上：事件冒泡到整行，只能切换一次——
-      // 若行与按钮各 toggle 一次，这里会回到展开态。
+      // 若行与按钮各 toggle 一次，这里会回到收起态。
       const toggle = container.querySelector(".queue-toggle");
       assert.ok(toggle);
       click(toggle);
-      assert.equal(container.querySelector(".queue-row"), null, "toggle click collapses once");
+      assert.ok(container.querySelector(".queue-row"), "toggle click expands once");
     } finally {
       unmount();
     }
@@ -166,11 +167,13 @@ describe("strip heads are full-row hot zones", () => {
       }),
     );
     try {
+      // 挂载即自动展开；Resume 点击不得改变展开态。
+      assert.ok(container.querySelector(".queue-row"), "auto-expanded on mount");
       const resume = container.querySelector(".queue-head-btn");
       assert.ok(resume, "paused strip shows the Resume button");
       click(resume);
       assert.deepEqual(resumed, [true], "Resume fires its own action");
-      assert.equal(container.querySelector(".queue-row"), null, "Resume never toggles the strip");
+      assert.ok(container.querySelector(".queue-row"), "Resume never toggles the strip");
     } finally {
       unmount();
     }
