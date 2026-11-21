@@ -24,4 +24,4 @@ Diff list 的行来自 `GET /api/session/{id}/diff` 的区间 diff,反映的是*
 ## 后果
 
 - 「待处理改动」语义在扩展侧闭环,不依赖服务器对扩展侧写盘的感知;列表与磁盘状态对 added 行永不离谱(盘上没有就不显示)。
-- 服务器 `snapshot.files` 归因若被写宽(`.scratch/server-snapshot-attribution/` 调查中),added 形态由磁盘真相兜底;其余形态待调查结论再定加固方式。
+- 服务器 `snapshot.files` 归因被写宽的形态已由 `.scratch/server-snapshot-attribution/` 调查定案,并经 ADR-0008 两级修订收窄(per-message credibility → per-file tool-input cross-check);本 ADR 的磁盘真相兜底(added 形态)仍保留为收窄之后的最后防线。

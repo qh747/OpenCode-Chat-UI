@@ -12,9 +12,10 @@ import type {
   MessageInfo,
   PermissionRequest,
   PromptFileAttachment,
+  StoredFileAttachment,
   UserMessage,
 } from "../opencode/types";
-import { promptAttachment, rangeAttachment, type StagedImage } from "../util/attachments";
+import { attachmentUri, promptAttachment, rangeAttachment, type StagedImage } from "../util/attachments";
 import { appendLinks } from "../util/message-attachments";
 import { getLocale, t, type MessageKey } from "../util/i18n";
 import { reverseApply } from "../util/diffapply";
@@ -747,6 +748,11 @@ export class ChatController implements vscode.Disposable {
         }
       }
     }
+    // 占位气泡自带附件(问题 1):必须在下方 stagedImages.delete 之前拼装,
+    // 暂存的图片数据一旦删除就取不到了。
+    const storedAttachments: StoredFileAttachment[] = staged.map((attachment) =>
+      this.toStoredAttachment(attachment),
+    );
     for (const attachment of staged) {
       this.stagedImages.delete(attachment.ref);
     }
@@ -771,6 +777,9 @@ export class ChatController implements vscode.Disposable {
         id: `local-${Date.now()}`,
         time: { created: Date.now() },
         text,
+        // 占位气泡自带附件(问题 1):files 在暂存删除前拼装完毕,发送瞬间
+        // 就渲染附件行,不再等权威刷新。
+        files: storedAttachments,
       };
       this.messages.push(localMessage);
       this.post({ kind: "messages", sessionID, messages: this.renderableTranscript() });
@@ -788,6 +797,13 @@ export class ChatController implements vscode.Disposable {
       // 回合已被服务器接受并运行:登记在跑 latch,该会话的回合结束事件据此
       // 排水其队列(Q17-A)。prompt 拒绝时不登记,失败的发送不排水。
       this.runningTurns.add(sessionID);
+      if (displayed) {
+        // 实测(2026-11-21): 服务器在 /prompt 周期内已把 user 消息连同 files
+        // 入库,但面板刷新只挂在模型响应侧事件上——附件行要等很久才被权威
+        // 消息替换。resolve 后立即调度一次刷新,占位气泡即刻替换且不闪变。
+        // 仅显示会话需要它:后台路径没有占位气泡,刷新由事件驱动。
+        this.scheduleMessagesRefresh(0);
+      }
     } catch (error) {
       // The server never accepted the turn, so nothing will emit session.idle:
       // end it here or the send button stays in its stop state forever.
@@ -995,6 +1011,44 @@ export class ChatController implements vscode.Disposable {
       );
     }
     return promptAttachment(attachment.ref);
+  }
+
+  /**
+   * 占位气泡自带附件(问题 1 修复):发送瞬间就渲染附件行,不再干等权威
+   * 刷新。形状与服务器存储对齐(实捕样本见 attachment-rows.test.ts):
+   * 图片 inline、选区/文件走 `file:` URI,权威消息替换上来时不闪变。
+   */
+  private toStoredAttachment(attachment: AttachmentRef): StoredFileAttachment {
+    const staged = this.stagedImages.get(attachment.ref);
+    if (staged) {
+      return {
+        data: staged.data,
+        mime: staged.mime,
+        source: { type: "inline" },
+        name: staged.name ?? attachment.name,
+      };
+    }
+    if (attachment.kind === "selection" && attachment.range) {
+      const prompt = rangeAttachment(
+        attachment.ref,
+        attachment.name,
+        attachment.range.start,
+        attachment.range.end,
+      );
+      return {
+        data: "",
+        mime: "",
+        source: { type: "uri", uri: prompt.uri },
+        name: attachment.name,
+        description: prompt.description,
+      };
+    }
+    return {
+      data: "",
+      mime: "",
+      source: { type: "uri", uri: attachmentUri(attachment.ref) },
+      name: attachment.name,
+    };
   }
 
   private selectionAttachment(selection: {
@@ -2174,8 +2228,9 @@ export class ChatController implements vscode.Disposable {
       }
       // 空归因即空列表（ADR-0008）：范围 diff 在共享工作树上计算，
       // 无条件过滤——放行会把其他会话（或本面板自己的 revert）造成的
-      // 树变化灌进这个会话的列表。
-      const attribution = attributionSet(messages);
+      // 树变化灌进这个会话的列表。workspace 路径用于把写工具输入里的
+      // 绝对路径相对化后再比对（per-file cross-check）。
+      const attribution = attributionSet(messages, this.folder?.uri.fsPath);
       const rows: FileDiffInfo[] = [];
       for (const diff of result.data) {
         if (!attribution.has(diffFileKey(diff.file))) {

@@ -76,4 +76,21 @@ describe("attachment rows", () => {
     assert.match(html, /h:\/MyCode\/opencode-plugin\/CHANGELOG\.md/);
     assert.doesNotMatch(html, /start=1/);
   });
+
+  test("an optimistic local bubble with files renders its attachment rows too", () => {
+    // 问题 1 验收:占位气泡(id local-*)自带 files 时,附件行在权威消息
+    // 替换上来之前就得渲染(乐观→权威替换前后附件行都在)。
+    const html = render([
+      userMessage({
+        id: "local-1730000000000",
+        files: [
+          STORED_IMAGE,
+          { ...STORED_SELECTION, data: "", mime: "" },
+        ],
+      } as never),
+    ]);
+
+    assert.match(html, /data:image\/png;base64,/);
+    assert.match(html, /L1-L5/);
+  });
 });

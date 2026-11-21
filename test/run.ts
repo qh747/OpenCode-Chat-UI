@@ -3,6 +3,7 @@
 import "./dom-setup";
 import "./attachments.test";
 import "./attachment-rows.test";
+import "./optimistic-attachments.test";
 import "./branch-context.test";
 import "./catalog-params.test";
 import "./chat-render.test";

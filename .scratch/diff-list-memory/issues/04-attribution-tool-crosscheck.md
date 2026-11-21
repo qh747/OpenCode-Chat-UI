@@ -30,7 +30,10 @@ Type: task
 
 ## Comments
 
-- 2026-11-19(agent):resolved。先红后绿(两红 → 一实现 → 一防误伤),与 issue 05 并行,未触碰队列路径。
+- 2026-11-21(agent):升级条件触发,per-file tool-input cross-check 已实施(ADR-0008 第三修订节「Revision (2026-11-21)」)。用户在实践中多次观察到二阶泄漏(附截图:B 会话改动列表串入 A 会话写的文件:03-rename-opencode-sidebar.md、spec.md、CHANGELOG.md、package-lock.json、package.json;全部为 modified 且盘上存在——added 磁盘兜底无效)。
+  - **规则**:`attributionSet` 每条 tool-using 消息贡献 = `snapshot.files ∩ 该消息写类工具输入路径集`(write/edit 的 `input.path`;顶层 `tools[].input` ∪ content tool parts `state.input` 双通道并集);无法廉价提取路径的调用(shell/patch/execute/未知名)→ 该消息全量豁免;tools 缺失 → unknown 全量保留;tools:[] → 丢弃(前修订语义不变);旧名归一(bash→shell/apply_patch→patch/task→subagent);绝对路径在 workspace 内先相对化再比对(`attributionSet` 新增可选 workspacePath 参数,panel 调用点传 `this.folder?.uri.fsPath`)。
+  - **测试**(TDD 先红后绿,`test/session-diff.test.ts` 归因组 13 用例):改写防误伤用例为交集语义「keeps only the files its write tools touched」;新增 read-only 消息丢弃、shell/patch 豁免、旧名归一、双通道并集、tools:[]+content parts 分类、tools 缺失+parts 在场仍按 parts 分类(Q5 定案:两通道都拿不到才回退 unknown)、workspace 相对化(含盘符大小写不敏感)、tools 缺失保留(锁定)。既有「a foreign deleted row attributed via a tool-less message is dropped」端到端与 tools:[] fixture 全保持绿。最终全量 484 pass / 0 fail,`npx tsc --noEmit` 干净。
+  - **已知假阴性方向(有意为之)**:shell 重定向不可见 → 宁可漏显示一条真实行,不串一条外来行;subagent 父会话 raw range 泄露仍由不拉 diffs 挡(工票原结论 3 不变)。
   - **字段偏差(实证优先)**:工票假设的 `tools` 字段**成立**——研究者实录里它就是 assistant 消息**顶层**的 `"tools":[]`(非 `content` tool part);但扩展的 `AssistantMessage` 此前**未建模**该字段,故在 `types.ts` 新增 `tools?: AssistantToolCall[]`(shape 按 v2.3.0 消息原文:`{name,status,input}`),契约注释按研究结论改写(`files` = 该消息自身 `[start,end]` 窗口内共享工作树内容差,`tools:[]` 即外来变化)。这是对「只改注释」范围的最小超出,为实现所必需。
   - **代码**:`src/util/session-diff.ts` `attributionSet` — `tools` 存在且为空数组 → 跳过该消息的 `snapshot.files`(per-message credibility);二阶局限(tools 非空消息窗口框住外来写)写入 JSDoc,注明观测到再升级 tool-input 逐文件交叉。**缺失 ≠ 空**:老 server 不发 `tools` 时保持旧行为(零漏报);v2.3.0 实测每条 assistant 消息都带 `tools`。
   - **测试**(3 条,均按工票命名):`test/session-diff.test.ts` — `a message with no tool calls cannot attribute its snapshot files`(红)、`a message with tool calls still attributes its files`(防误伤,write 工具消息全量归因);`test/diff-refresh.test.ts` — `a foreign deleted row attributed via a tool-less message is dropped`(端到端贴研究者复现 exp3:`tools:[]` 消息 + `deleted a.md +0 -4` → 列表空,deleted 行不触发盘上检查)。既有归因用例未改 fixture 全保持绿(缺失 `tools` 按旧语义)。

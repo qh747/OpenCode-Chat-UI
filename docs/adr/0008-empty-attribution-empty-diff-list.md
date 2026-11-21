@@ -84,3 +84,43 @@ not apply at this width. Known second-order limitation: a tool-using
 message whose window happens to frame a foreign write still serializes; if
 that is ever observed, the next step is the per-file tool-input
 cross-check.
+
+## Revision (2026-11-21): per-file tool-input cross-check
+
+The pre-registered upgrade condition fired: the user observed the
+second-order leak repeatedly in practice — files the agent modified in
+session A showed up in session B's diff list. Every observed row was
+`modified` with the file present on disk, so the added-rows disk-truth
+fallback never applied; the foreign write had landed inside a tool-using
+message's snapshot window, and per-message credibility kept that
+message's full `snapshot.files`.
+
+`attributionSet` therefore narrows from per-message credibility to a
+**per-file cross-check**. A tool-using assistant message now contributes
+only the intersection of its `snapshot.files` with the write paths that
+can be extracted cheaply from its own tool inputs: the `input.path` of
+`write`/`edit` calls, read from the top-level `tools[]` list and from the
+message's tool parts (`state.input`) — the two places a call's input
+lives, united. Paths are compared through `diffFileKey` normalization
+plus workspace relativization (an absolute `input.path` inside the
+workspace matches the relative diff key). Legacy tool names (`bash`,
+`apply_patch`, `task`) are normalized before classification.
+
+The trade is deliberate and one-directional:
+
+- A call whose input yields no cheap path — `shell`, `patch`,
+  `execute`, or an unrecognized tool name — makes the message keep its
+  full `snapshot.files`. A shell redirect is invisible to this check;
+  the list may hide a true row, but never fabricates a foreign one.
+- When both channels yield no calls at all (`tools` absent and no tool
+  parts in the content), the message is unknown and keeps full
+  attribution: missing means unknown, and unknown is trusted. An older
+  server's messages have no `tools` field, so this covers them; if a
+  `tools`-less message did carry tool parts, the parts still speak for
+  the message and the cross-check applies.
+- A message with `tools: []` remains dropped, as in the 2026-11-19
+  revision.
+
+Subagent parent sessions still pull no diffs at all; the cross-check
+governs root sessions only. The failure mode is unchanged in kind:
+missing information, never wrong information.
