@@ -44,8 +44,15 @@ rmSync(outFile, { force: true });
 mkdirSync(outDir, { recursive: true });
 
 console.log("\n▶ vsce package");
-execFileSync(
+// vsce 在 devDependencies 里，从本地 .bin 解析——不要求全局安装。
+const vsceBin = path.join(
+  root,
+  "node_modules",
+  ".bin",
   process.platform === "win32" ? "vsce.cmd" : "vsce",
+);
+execFileSync(
+  vsceBin,
   ["package", "--no-dependencies", "-o", outFile],
   { stdio: "inherit", shell: process.platform === "win32" },
 );
