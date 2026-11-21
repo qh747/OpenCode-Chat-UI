@@ -40,6 +40,9 @@ if (!existsSync(path.join(root, "icons", "marketplace.png"))) {
   process.exit(1);
 }
 
+// DisplayName 预筛（实证出处见脚本头注释）：publish 被拒不返工整条管线。
+step("check display name", "node", ["scripts/check-display-name.mjs"]);
+
 rmSync(outFile, { force: true });
 mkdirSync(outDir, { recursive: true });
 
