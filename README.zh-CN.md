@@ -40,10 +40,10 @@
 npm run release      # 类型检查 + lint + 测试 + 编译 + VSIX
 ```
 
-产物在 `dist/opencode-panel-<version>.vsix`，安装：
+产物在 `dist/opencode-sidebar-<version>.vsix`，安装：
 
 ```bash
-code --install-extension dist/opencode-panel-0.2.0.vsix
+code --install-extension dist/opencode-sidebar-0.2.0.vsix
 ```
 
 ## 设置

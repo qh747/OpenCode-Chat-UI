@@ -29,3 +29,4 @@ VSIX 文件名沿用 `pkg.name`（opencode-panel），不变。README 既有 "Co
 ## Comments
 
 - 2026-11-21 实施完成（bca895e）。双轴评审：无缺陷；全仓 grep `Side Panel` 仅剩 .scratch 历史记录。
+- 2026-11-21 增补（ff226d6 之后的产物名补充）：用户要求打包文件名也随新名——`release.mjs` 产物名改由 displayName 派生（`opencode-sidebar-<version>.vsix`），README 双语安装路径同步。**扩展 ID 仍是 `quhan.opencode-panel`**（`pkg.name` 是市场身份，动了等于分叉新条目）；文件名只是给人看的。0.4.23 已按新名重打并验包（displayName=OpenCode Sidebar）。
