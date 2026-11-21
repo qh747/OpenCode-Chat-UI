@@ -1,4 +1,4 @@
-# OpenCode Sidebar
+# OpenCode Chat UI
 
 [English](README.md) | 简体中文
 
@@ -42,10 +42,10 @@
 npm run release      # 类型检查 + lint + 测试 + 编译 + VSIX
 ```
 
-产物在 `dist/opencode-sidebar-<version>.vsix`，安装：
+产物在 `dist/opencode-chat-ui-<version>.vsix`，安装：
 
 ```bash
-code --install-extension dist/opencode-sidebar-<version>.vsix
+code --install-extension dist/opencode-chat-ui-<version>.vsix
 ```
 
 ## 设置

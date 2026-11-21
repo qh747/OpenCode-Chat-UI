@@ -1,4 +1,4 @@
-# OpenCode Sidebar
+# OpenCode Chat UI
 
 English | [简体中文](README.zh-CN.md)
 
@@ -42,10 +42,10 @@ A [VS Code](https://code.visualstudio.com) extension that puts a full [opencode]
 npm run release      # typecheck + lint + tests + compile + VSIX
 ```
 
-The artifact lands at `dist/opencode-sidebar-<version>.vsix`. Install it with:
+The artifact lands at `dist/opencode-chat-ui-<version>.vsix`. Install it with:
 
 ```bash
-code --install-extension dist/opencode-sidebar-<version>.vsix
+code --install-extension dist/opencode-chat-ui-<version>.vsix
 ```
 
 ## Settings

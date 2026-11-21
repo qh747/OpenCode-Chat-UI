@@ -1,6 +1,6 @@
 # Glossary
 
-Canonical terms for the OpenCode Sidebar extension. Terms are domain concepts, not implementation details.
+Canonical terms for the OpenCode Chat UI extension. Terms are domain concepts, not implementation details.
 
 ## Chat domain
 
