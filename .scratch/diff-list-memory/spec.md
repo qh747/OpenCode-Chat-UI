@@ -45,7 +45,17 @@
 - 支撑:`test/vscode-stub.ts` 扩 `workspace.fs.stat`、可注入 `showWarningMessage`、`getConfiguration`;新测试文件均注册进 `test/run.ts`。
 - 全量:337 通过 0 失败 1 跳过(既有跳过:Windows 盘符路径用例);typecheck / lint 过。
 
+## 增补(2026-11-22,归属反转:同族 2 收尾)
+
+per-file cross-check(2026-11-21)落地后用户仍复现 B 串入 A 的文件:豁免通道(shell/patch/execute 全量、tools 缺失全量、write 缺 path 全量)正是最后入口,per-file 收窄收不到它。决策(用户拍板 Q1/Q2):
+
+- **归属反转**:`attributionSet` 只认本会话 write/edit 的 `input.path`(双通道并集),`snapshot.files` 整体退出归属判定,豁免机器全删——B 没发过写调用 → B 列表必空,同族 2 结构性关闭而非过滤修补。
+- **竞态封堵**:`refreshDiffs` 在 added 行磁盘校验 await 之后、赋值之前补第三次 pollStale 复查(切换落进该窗口时,迟到的 poll 曾污染 host 状态并经快照以 B 的身份扇出)。
+- **拍板代价**:shell 重定向等不可见写盘的改动漏显示(以假阴性换零串扰,验收口径里不算回归)。
+
+TDD 先红后绿(用户场景端到端 + 竞态窗口两条新锁定测试,4 处旧豁免契约反转,7 处主题无关 fixture 仅补 write 调用),code-review 两轴评审后修正修订计数引用与陈旧注释。全量 489 pass / 0 fail,typecheck / lint 过。详见 issue 04 追记(2026-11-22)与 ADR-0008「Revision (2026-11-22): ownership inversion」。
+
 ## Open
 
 - 窗口重载后已撤销的 modified/deleted 行可复活(内存记忆边界)。
-- 二阶串行形状(tools 非空的消息窗口框住外来写)未防,观测到再升级为 tool-input 逐文件交叉(见增补节);服务器归因边界事实已钉死,见 `.scratch/server-snapshot-attribution/issues/01-investigate-attribution-boundary.md`。
+- ~~二阶串行形状(tools 非空的消息窗口框住外来写)未防~~ **已关闭(2026-11-22)**:tool-input 逐文件交叉后用户仍复现,升级为归属反转,豁免通道全删,同族 2(B 显示 A 的文件)随之结构性关闭——见「增补(2026-11-22)」节与 issue 04 当日追记。

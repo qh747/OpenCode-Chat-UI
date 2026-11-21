@@ -7,7 +7,8 @@ function assistant(files: string[]): MessageInfo {
   return { type: "assistant", id: `a_${files.join("_")}`, time: { created: 1 }, content: [], snapshot: { files } };
 }
 
-/** 带 tools 的 assistant 消息：per-file 交叉校验的输入形状（v2.3.0 live 形状）。 */
+/** 带 tools 的 assistant 消息：归属反转后过滤器认的输入形状——write/edit
+ *  的 input.path 参与归属，其余调用不认领（v2.3.0 live 形状）。 */
 function assistantWithTools(files: string[], tools: AssistantToolCall[]): MessageInfo {
   return {
     type: "assistant",
@@ -44,12 +45,15 @@ describe("session diff range", () => {
 });
 
 describe("session diff file attribution", () => {
-  test("unions the files named by assistant snapshots", () => {
+  test("a snapshot claim without write calls attributes nothing", () => {
+    // 归属反转（ADR-0008 2026-11-22 修订）：`snapshot.files` 是共享树窗口差
+    // （server-snapshot-attribution/01 实证），声明本身不再参与归属。
+    // 没有 write/edit 调用的消息无论声明什么都一无所获。
     const files = attributionSet([
       assistant(["a.ts", "src\\b.ts"]),
       assistant(["src/b.ts", "./c.ts"]),
     ]);
-    assert.deepEqual([...files].sort(), ["a.ts", "c.ts", "src/b.ts"]);
+    assert.deepEqual([...files], []);
   });
 
   test("a message with no tool calls cannot attribute its snapshot files", () => {
@@ -70,15 +74,24 @@ describe("session diff file attribution", () => {
   });
 
   test("keeps only the files its write tools touched", () => {
-    // Per-file cross-check (diff-list-memory/04): a tool-using message's
-    // snapshot window can still frame foreign writes (another session's
-    // turn landing inside it); only the paths its own write-class tool
-    // inputs name are credible, the rest are foreign.
+    // 归属反转（ADR-0008 2026-11-22 修订）：带工具调用的消息里，只有它
+    // 自己 write/edit 输入命中的路径才被认领——快照窗口框住的外来写
+    // （他会话回合落进窗口）不因声明而获得归属。
     const message = assistantWithTools(
       ["a.md", "src/b.ts"],
       [{ name: "write", status: "completed", input: { path: "a.md" } }],
     );
     assert.deepEqual([...attributionSet([message])], ["a.md"]);
+  });
+
+  test("a write call without a path contributes nothing", () => {
+    // 零豁免：write/edit 缺 input.path 的调用不可校验 → 不认领该调用。
+    // 旧语义在此全量豁免整条消息，随归属反转关闭。
+    const message = assistantWithTools(
+      ["a.md"],
+      [{ name: "write", status: "completed", input: { content: "x" } }],
+    );
+    assert.deepEqual([...attributionSet([message])], []);
   });
 
   test("drops snapshot files a read-only message cannot have written", () => {
@@ -92,10 +105,10 @@ describe("session diff file attribution", () => {
     assert.deepEqual([...attributionSet([message])], []);
   });
 
-  test("keeps full attribution when a call has no cheaply extractable path", () => {
-    // shell/patch/execute can write anywhere (redirection, patch text) but
-    // their inputs carry no path to cross-check — filtering would drop real
-    // writes, so the message keeps full attribution (zero false negatives).
+  test("shell and patch calls attribute nothing by themselves", () => {
+    // 归属反转：shell/patch/execute 能写盘但无法廉价提取路径——旧语义在
+    // 此全量豁免（正是串扰入口），新语义一律不认领。shell 重定向写的
+    // 真实改动会漏显示（已拍板的代价），外来文件则无通道可进。
     const shelled = assistantWithTools(
       ["a.md", "src/b.ts"],
       [{ name: "shell", status: "completed", input: { command: "echo hi > a.md" } }],
@@ -104,15 +117,14 @@ describe("session diff file attribution", () => {
       ["a.md"],
       [{ name: "patch", status: "completed", input: { patchText: "*** Update File: a.md" } }],
     );
-    assert.deepEqual([...attributionSet([shelled])], ["a.md", "src/b.ts"]);
-    assert.deepEqual([...attributionSet([patched])], ["a.md"]);
+    assert.deepEqual([...attributionSet([shelled])], []);
+    assert.deepEqual([...attributionSet([patched])], []);
   });
 
-  test("normalizes legacy tool names before classifying", () => {
-    // V1 servers sent the old names; classification must run on the v2.3.0
-    // name. bash/apply_patch map to exempt channels; task maps to subagent,
-    // which is a known non-write tool, so the parent's snapshot rows (the
-    // child's writes) are foreign (子归子，父 raw 泄露被过滤挡).
+  test("legacy tool names attribute nothing either", () => {
+    // V1 名（bash/apply_patch/task）与新名（shell/patch/subagent）结果一致：
+    // 都不在 write/edit 集合内，不认领。旧语义靠归一把 bash/apply_patch
+    // 送进豁免通道，随归属反转一并关闭。
     const bash = assistantWithTools(["a.md"], [{ name: "bash", status: "completed", input: { command: "ls" } }]);
     const legacyPatch = assistantWithTools(["a.md"], [
       { name: "apply_patch", status: "completed", input: { patchText: "*** Add File: a.md" } },
@@ -120,15 +132,15 @@ describe("session diff file attribution", () => {
     const legacyTask = assistantWithTools(["child.md"], [
       { name: "task", status: "completed", input: { description: "do things" } },
     ]);
-    assert.deepEqual([...attributionSet([bash])], ["a.md"]);
-    assert.deepEqual([...attributionSet([legacyPatch])], ["a.md"]);
+    assert.deepEqual([...attributionSet([bash])], []);
+    assert.deepEqual([...attributionSet([legacyPatch])], []);
     assert.deepEqual([...attributionSet([legacyTask])], []);
   });
 
-  test("keeps full attribution when the tools field is absent", () => {
-    // Unknown credibility (spec 增补 Q21): an absent tools field (older
-    // server shapes) carries no verdict — keep full attribution rather
-    // than risk dropping real writes.
+  test("a tools-less legacy message with no tool parts attributes nothing", () => {
+    // 老服务器消息缺 tools 字段、content 也无 tool parts：没有任何
+    // write/edit 调用记录 → 不认领。旧语义的 "missing = unknown =
+    // trusted" 是最后一个豁免通道，随归属反转一并关闭。
     const message: MessageInfo = {
       type: "assistant",
       id: "msg_legacy",
@@ -136,7 +148,7 @@ describe("session diff file attribution", () => {
       content: [],
       snapshot: { files: ["a.md"] },
     };
-    assert.deepEqual([...attributionSet([message])], ["a.md"]);
+    assert.deepEqual([...attributionSet([message])], []);
   });
 
   test("unions write paths from top-level tools and content tool parts", () => {

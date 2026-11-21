@@ -41,7 +41,8 @@ function modified(file: string, additions: number): FileDiffInfo {
   return { file, status: "modified", additions, deletions: 0, patch: "" };
 }
 
-/** User turn + assistant snapshot, the shape the attribution filter reads. */
+/** User turn + assistant that wrote these files（归属反转后归因过滤器认的
+ *  形态：会话自己 write 过的文件；快照声明只是服务器数据，不再参与归属）。 */
 function turn(files: string[]): MessageInfo[] {
   return [
     { type: "user", id: "msg_u1", time: { created: 1 }, text: "go" },
@@ -51,6 +52,11 @@ function turn(files: string[]): MessageInfo[] {
       time: { created: 2 },
       content: [],
       snapshot: { files },
+      tools: files.map((file) => ({
+        name: "write",
+        status: "completed",
+        input: { path: file },
+      })),
     },
   ];
 }

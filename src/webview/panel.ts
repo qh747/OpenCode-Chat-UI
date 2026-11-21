@@ -2226,10 +2226,11 @@ export class ChatController implements vscode.Disposable {
       if (this.pollStale(request, this.diffRequest, sessionID)) {
         return;
       }
-      // 空归因即空列表（ADR-0008）：范围 diff 在共享工作树上计算，
-      // 无条件过滤——放行会把其他会话（或本面板自己的 revert）造成的
-      // 树变化灌进这个会话的列表。workspace 路径用于把写工具输入里的
-      // 绝对路径相对化后再比对（per-file cross-check）。
+      // 空归因即空列表（ADR-0008 2026-11-22 修订：归属反转）：范围 diff 在
+      // 共享工作树上计算，归属只认本会话自己的 write/edit 输入路径——
+      // 快照声明（共享树窗口差）不参与归属。放行外来行会把其他会话
+      // （或本面板自己的 revert）造成的树变化灌进这个会话的列表。
+      // workspace 路径用于把写工具输入里的绝对路径相对化后再比对。
       const attribution = attributionSet(messages, this.folder?.uri.fsPath);
       const rows: FileDiffInfo[] = [];
       for (const diff of result.data) {
@@ -2243,6 +2244,13 @@ export class ChatController implements vscode.Disposable {
           continue;
         }
         rows.push(diff);
+      }
+      // added 行的磁盘校验是 await 窗口：A 的 poll 在此挂起期间用户可能
+      // 已切到 B（switchSession 不递增 diffRequest，令牌不响），醒来后
+      // 无条件赋值会把 A 的行灌进 B 的 this.diffs，再经 postSnapshot 以
+      // B 的合法快照扇出。赋值前最后一次复查，窗口即闭合。
+      if (this.pollStale(request, this.diffRequest, sessionID)) {
+        return;
       }
       this.diffs = rows;
       this.broadcastDiffs(sessionID);

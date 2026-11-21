@@ -124,3 +124,46 @@ The trade is deliberate and one-directional:
 Subagent parent sessions still pull no diffs at all; the cross-check
 governs root sessions only. The failure mode is unchanged in kind:
 missing information, never wrong information.
+
+## Revision (2026-11-22): ownership inversion — write/edit paths only
+
+The pre-registered escalation fired again: the user kept observing
+session A's generated files in session B's diff list after the per-file
+cross-check shipped. Every remaining leak walked one of the exemption
+channels the 2026-11-21 revision had kept open by design: B's chat turn
+calling one `shell`/`patch`/`execute` (a probe like `ls` or `git status`
+is enough) granted that message's whole snapshot window full
+attribution, so A's writes landing inside it passed through; the
+`tools`-absent and no-path shapes did the same.
+
+The exemption channels were the bug, not its guard. Attribution is
+therefore inverted from "trust the snapshot claim, discount what tools
+contradict" to "own only what the session's own write-class tool calls
+name". `attributionSet` now returns the union of `write`/`edit`
+`input.path` values across the session's assistant messages (both
+channels: top-level `tools[]` and content tool parts), normalized and
+workspace-relativized. `snapshot.files` — the shared working tree's
+window delta, proven unrelated to who wrote what by
+`server-snapshot-attribution/01` — exits attribution entirely.
+
+Every exemption is gone, deliberately:
+
+- `shell`/`patch`/`execute`, unknown or missing tool names contribute
+  nothing. A shell redirect's real write will be missing from the list
+  (a false negative accepted by product decision: session binding
+  outranks zero false negatives).
+- A `tools`-less legacy message with no tool parts attributes nothing;
+  missing is no longer trusted.
+- A `write`/`edit` call without `input.path` contributes nothing.
+
+A session that wrote nothing owns nothing, so another session's files
+have no path into its list: the user's scenario (A generates five files,
+B chats, B's list stays empty) is structurally impossible, not filtered
+into correctness. The failure mode stays "missing information, never
+wrong information" — it just gets more likely to be missing.
+
+Shipped with a poll-discipline fix in the same batch:
+`refreshDiffs` re-checks staleness after the per-`added`-row disk-truth
+awaits and before writing `this.diffs`, closing the last await window in
+which a late poll from the session the user just left could stamp A's
+rows onto B's state and fan out through the next snapshot.
