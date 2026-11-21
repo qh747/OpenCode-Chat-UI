@@ -1,5 +1,5 @@
 {
-  "name": "opencode-sidebar",
+  "name": "opencode-plugin",
   "displayName": "OpenCode Sidebar",
   "description": "A chat panel for your local opencode CLI: streaming replies, sessions tree, native diffs and permission prompts. Reuses your existing opencode login (including OpenCode Go subscriptions).",
   "version": "0.4.23",
