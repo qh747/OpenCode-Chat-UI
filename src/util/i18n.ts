@@ -228,6 +228,9 @@ const en = {
     "Applies to new sessions. A session that already picked a model keeps it.",
   "settings.default_agent.label": "Default agent",
   "settings.default_agent.hint": "Applies to new sessions.",
+  "settings.subagent_depth.label": "Subagent depth",
+  "settings.subagent_depth.hint":
+    "1 (the default) forbids a subagent from starting its own subagents; raise it to allow nesting. Experimental key — the server may rename it.",
   "settings.compaction.auto.label": "Compact the context automatically",
   "settings.compaction.keep.tokens.label": "Tokens kept after compaction",
   "settings.tool_output.max_lines.label": "Tool output line limit",
@@ -461,6 +464,9 @@ const zhCn: Record<MessageKey, string> = {
   "settings.model.hint": "对新建会话生效。已选择模型的会话保持不变。",
   "settings.default_agent.label": "默认 Agent",
   "settings.default_agent.hint": "对新建会话生效。",
+  "settings.subagent_depth.label": "子代理派生深度",
+  "settings.subagent_depth.hint":
+    "1（默认）禁止子代理再派生子代理；调大即允许嵌套。实验性键，服务器后续版本可能改名。",
   "settings.compaction.auto.label": "自动压缩上下文",
   "settings.compaction.keep.tokens.label": "压缩后保留的 token 数",
   "settings.tool_output.max_lines.label": "工具输出行数上限",

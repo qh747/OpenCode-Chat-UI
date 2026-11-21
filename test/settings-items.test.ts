@@ -5,7 +5,7 @@ import { messages } from "../src/util/i18n";
 
 describe("settings catalogue", () => {
   test("every item is a server config path with a localizable label", () => {
-    assert.equal(SERVER_SETTINGS.length, 10);
+    assert.equal(SERVER_SETTINGS.length, 11);
     for (const item of SERVER_SETTINGS) {
       assert.ok(item.id.length > 0);
       assert.ok(item.configPath.length > 0, `${item.id} needs a config path`);
@@ -23,6 +23,19 @@ describe("settings catalogue", () => {
   test("only the shell is global-only", () => {
     const globalOnly = SERVER_SETTINGS.filter((item) => item.globalOnly === true);
     assert.deepEqual(globalOnly.map((item) => item.id), ["shell"]);
+  });
+});
+
+describe("subagent depth row (opencode-sidebar 工票02)", () => {
+  test("the depth row writes the experimental key with fallback 1", () => {
+    const item = findSettingsItem("subagent_depth");
+    assert.ok(item, "the row exists");
+    assert.deepEqual(item.configPath, ["experimental", "subagent_depth"]);
+    assert.equal(item.control, "number");
+    // 官方默认 1：子代理不能再派生。显式写 1 把这个事实钉在配置文件里，
+    // 面板同时显示 explicit value 与缺省回落值（GLOSSARY「Explicit value」）。
+    assert.equal(item.defaultValue, 1);
+    assert.equal(item.defaultText, "1");
   });
 });
 

@@ -46,6 +46,18 @@ export const SERVER_SETTINGS: SettingsItem[] = [
     hintKey: "settings.default_agent.hint",
   },
   {
+    // 工票02（opencode-sidebar）：显式锁死/调整嵌套派生。官方缺省即 1
+    // （子代理不能再派生）；键在 experimental 下，官方后续可能改名——
+    // 写错/被无视无害，失败软着陆。
+    id: "subagent_depth",
+    labelKey: "settings.subagent_depth.label",
+    control: "number",
+    configPath: ["experimental", "subagent_depth"],
+    defaultValue: 1,
+    defaultText: "1",
+    hintKey: "settings.subagent_depth.hint",
+  },
+  {
     id: "compaction.auto",
     labelKey: "settings.compaction.auto.label",
     control: "boolean",
