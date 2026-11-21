@@ -433,7 +433,10 @@ export function App({ state, send, composerHandleRef }: Props) {
         />
       ))}
 
-      {hasMessages && (
+      {/* 工票01（opencode-sidebar）：子代理视图三条列表结构性不渲染——
+          有数据也不渲染（Q2）；主会话视图不变。改动列表连数据都不拉
+          （host 侧 refreshDiffs 同步早退，Q1c）。 */}
+      {!state.isSubagentSession && hasMessages && (
         <DiffList
           diffs={state.diffs}
           maxVisibleRows={state.maxVisibleDiffRows}
@@ -442,12 +445,14 @@ export function App({ state, send, composerHandleRef }: Props) {
         />
       )}
 
-      <SubagentStrip
-        jobs={state.subagents}
-        currentSessionId={state.sessionID}
-        onOpen={(childSessionID) => send({ kind: "switchSession", id: childSessionID })}
-        onStop={(childSessionID) => send({ kind: "stopSubagent", childSessionID })}
-      />
+      {!state.isSubagentSession && (
+        <SubagentStrip
+          jobs={state.subagents}
+          currentSessionId={state.sessionID}
+          onOpen={(childSessionID) => send({ kind: "switchSession", id: childSessionID })}
+          onStop={(childSessionID) => send({ kind: "stopSubagent", childSessionID })}
+        />
+      )}
 
       {!state.isSubagentSession && (
         <QueueStrip

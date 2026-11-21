@@ -1994,6 +1994,14 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return;
     }
+    // 工票01（opencode-sidebar）：子代理视图不显示子代理条。默认
+    // subagent_depth=1 下该会话本就无 job；这里连 jobs 端点都不访问，
+    // 也不动 this.subagents（主会话视图的数据原样保留，切回时重取）。
+    // 先作废在途轮询再退。
+    if (this.isSubagentSession) {
+      ++this.subagentRequest;
+      return;
+    }
     const sessionID = this.sessionId;
     const request = ++this.subagentRequest;
     await this.safeCall(async () => {
@@ -2045,6 +2053,11 @@ export class ChatController implements vscode.Disposable {
   }
 
   private startSubagentPolling(): void {
+    // 工票01（opencode-sidebar）：子代理视图不显示条，也就不为它起表；
+    // 切回主会话时 switchSession → clearSubagents → fullResync 重新起表。
+    if (this.isSubagentSession) {
+      return;
+    }
     if (this.subagentTimer) {
       return;
     }
@@ -2133,6 +2146,13 @@ export class ChatController implements vscode.Disposable {
     }
     const client = this.client();
     if (!client) {
+      return;
+    }
+    // 工票01（opencode-sidebar）：子代理视图不显示改动列表——连数据都不拉
+    // （grilling Q1c：归因集小、列表闪现，语义本就不对）。先作废在途的
+    // 同会话轮询再退，迟到的答案不会再落进 this.diffs。
+    if (this.isSubagentSession) {
+      ++this.diffRequest;
       return;
     }
     const sessionID = this.sessionId;

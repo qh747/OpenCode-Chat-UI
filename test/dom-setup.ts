@@ -26,5 +26,12 @@ globalAny.TextEvent = dom.window.TextEvent;
 globalAny.IS_REACT_ACT_ENVIRONMENT = true;
 // jsdom 没有 scrollIntoView（Composer 的高亮行滚动 effect 会用到）。
 dom.window.Element.prototype.scrollIntoView = (() => {}) as never;
+// jsdom 没有 ResizeObserver（transcript 贴底跟随 effect 会用到，仅在有消息时
+// 挂监听）。测试不需要真实观察，能构造/能注销即可。
+globalAny.ResizeObserver = class {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+};
 
 export { dom };

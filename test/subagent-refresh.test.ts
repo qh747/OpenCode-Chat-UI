@@ -14,6 +14,12 @@ const refreshSubagents = (
   ChatController.prototype as unknown as { refreshSubagents: RefreshSubagents }
 ).refreshSubagents;
 
+type StartSubagentPolling = () => void;
+
+const startSubagentPolling = (
+  ChatController.prototype as unknown as { startSubagentPolling: StartSubagentPolling }
+).startSubagentPolling;
+
 const proto = ChatController.prototype as unknown as Record<string, unknown>;
 
 interface JobsClient {
@@ -56,6 +62,7 @@ function controllerWith(sessionID: string, client: JobsClient) {
     posted,
     subagentRequest: 0,
     busy: false,
+    isSubagentSession: false,
     subagentTimer: 1 as unknown as ReturnType<typeof setInterval>,
     client: () => client,
     host: { folderPath: "/w" },
@@ -116,5 +123,61 @@ describe("subagent refresh scoping", () => {
     await refreshSubagents.call(controller as unknown as ChatController);
 
     assert.equal(controller.subagents[0]?.status, "blocked");
+  });
+});
+
+describe("subagent view pulls no job data (opencode-sidebar 工票01)", () => {
+  test("a subagent session never fetches jobs nor posts", async () => {
+    let calls = 0;
+    const controller = controllerWith("ses_child", {
+      jobs: async () => {
+        calls += 1;
+        return { data: [job("ses_child")] };
+      },
+      pendingPermissions: async () => ({ data: [] }),
+    });
+    controller.isSubagentSession = true;
+
+    await refreshSubagents.call(controller as unknown as ChatController);
+
+    assert.equal(calls, 0, "the jobs endpoint is never called");
+    assert.deepEqual(controller.posted, [], "nothing is posted");
+    assert.deepEqual(controller.subagents, [], "the strip memory is untouched");
+  });
+});
+
+describe("subagent poll timer (opencode-sidebar 工票01)", () => {
+  test("polling never starts for a subagent session", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    let refreshes = 0;
+    const controller = {
+      subagentTimer: undefined as unknown as ReturnType<typeof setInterval>,
+      isSubagentSession: true,
+      refreshSubagents: async () => {
+        refreshes += 1;
+      },
+    };
+
+    startSubagentPolling.call(controller as unknown as ChatController);
+
+    assert.equal(controller.subagentTimer, undefined, "no timer is created");
+    assert.equal(refreshes, 0, "no immediate refresh either");
+  });
+
+  test("a root session still starts polling", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    let refreshes = 0;
+    const controller = {
+      subagentTimer: undefined as unknown as ReturnType<typeof setInterval>,
+      isSubagentSession: false,
+      refreshSubagents: async () => {
+        refreshes += 1;
+      },
+    };
+
+    startSubagentPolling.call(controller as unknown as ChatController);
+
+    assert.ok(controller.subagentTimer, "the timer is created");
+    assert.equal(refreshes, 1, "one immediate refresh");
   });
 });

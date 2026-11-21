@@ -67,6 +67,7 @@ function controllerWith(
     diffs: [] as FileDiffInfo[],
     diffRequest: 0,
     posted,
+    isSubagentSession: false,
     client: () => client,
     turnMessages: async () => messages,
     safeCall: async (fn: () => unknown) => {
@@ -235,5 +236,28 @@ describe("diff refresh scoping", () => {
       controller.posted.map((entry) => entry.diffs),
       [[]],
     );
+  });
+
+  test("a subagent session pulls no diffs at all (opencode-sidebar 工票01)", async () => {
+    // 动机 Q1c：子代理视图不显示改动列表——连数据也不拉。门必须在
+    // sessionDiff 之前，且作废在途的同会话轮询。
+    let calls = 0;
+    const controller = controllerWith(
+      "ses_child",
+      {
+        sessionDiff: async () => {
+          calls += 1;
+          return { data: [diff("x.ts")] };
+        },
+      },
+      turn(["x.ts"]),
+    );
+    controller.isSubagentSession = true;
+
+    await run(controller);
+
+    assert.equal(calls, 0, "the diff endpoint is never called");
+    assert.deepEqual(controller.posted, [], "nothing is broadcast");
+    assert.deepEqual(controller.diffs, [], "the memory is untouched");
   });
 });

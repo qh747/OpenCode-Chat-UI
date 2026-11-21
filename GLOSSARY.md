@@ -52,6 +52,9 @@ A subagent, reported by the server's job listing for a session and its descendan
 **Parent session**
 The session a session was spawned from, identified by the server's `parentID`. A session without one is a root session. The chat panel's back button (shown while a child session is on screen) returns to the parent session, one level up; nesting means walking to the root one step at a time. Distinct from the root session, which is the top of the parent chain, not necessarily the previous one viewed.
 
+**Subagent view**
+The display mode while a session with a parent is on screen: the header's decorative logo gives way to the back button, the composer and the queued-message strip stay hidden, and the diff list and the subagent strip are never rendered — not even when their data exists. The view is a watch window for that session's transcript alone; session-bound state still belongs to its owning session and is back on screen the moment a root session is. Distinct from the root view, which keeps all three strips.
+
 **Row status**
 A history row's status is the status of the session on that row alone: blocked (yellow, waiting on the user), working (green), failed (red), idle (uncolored). Subagent sessions never appear in the history menu, and their states never paint a root row — a delegating session reads uncolored while its subagent works. Delegation activity lives in the chat's subagent strip instead. Pinned by ADR-0016, which supersedes the aggregated rule of ADR-0010.
 
