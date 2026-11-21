@@ -205,6 +205,8 @@
     "prototype:diffs": "node prototype/diff-visibility/build.mjs",
     "prototype:labels": "node prototype/labels/build.mjs",
     "prototype:strips": "node prototype/strips/build.mjs",
+    "prototype:enter-keys": "node prototype/enter-keys/build.mjs",
+    "prototype:loading-screen": "node prototype/loading-screen/build.mjs",
     "prototype:send-stop": "node prototype/send-stop/build.mjs",
     "vscode:prepublish": "npm run typecheck && npm run lint && npm run compile",
     "package": "node scripts/release.mjs",
