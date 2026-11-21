@@ -2,6 +2,7 @@ import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import { ChatController } from "../src/webview/panel";
 import type { JobInfo } from "../src/opencode/types";
+import type { SubagentJob } from "../src/util/subagents";
 
 /**
  * Subagent polling restarts on every session switch. A late answer from the
@@ -17,6 +18,8 @@ const proto = ChatController.prototype as unknown as Record<string, unknown>;
 
 interface JobsClient {
   jobs: (id: string) => Promise<{ data: JobInfo[] }>;
+  /** spec D4：有 job 时附带拉取全服务器权限，供阻塞判定。 */
+  pendingPermissions: (directory?: string) => Promise<{ data: { sessionID: string }[] }>;
 }
 
 interface Posted {
@@ -49,12 +52,13 @@ function controllerWith(sessionID: string, client: JobsClient) {
   const posted: Posted[] = [];
   const controller = {
     sessionId: sessionID,
-    subagents: [],
+    subagents: [] as SubagentJob[],
     posted,
     subagentRequest: 0,
     busy: false,
     subagentTimer: 1 as unknown as ReturnType<typeof setInterval>,
     client: () => client,
+    host: { folderPath: "/w" },
     safeCall: async (fn: () => unknown) => {
       await fn();
     },
@@ -72,7 +76,10 @@ function controllerWith(sessionID: string, client: JobsClient) {
 describe("subagent refresh scoping", () => {
   test("a jobs response that lands after a session switch is discarded", async () => {
     const pending = deferred<{ data: JobInfo[] }>();
-    const controller = controllerWith("ses_a", { jobs: () => pending.promise });
+    const controller = controllerWith("ses_a", {
+      jobs: () => pending.promise,
+      pendingPermissions: async () => ({ data: [] }),
+    });
 
     const request = refreshSubagents.call(controller as unknown as ChatController);
     controller.sessionId = "ses_b";
@@ -86,6 +93,7 @@ describe("subagent refresh scoping", () => {
   test("the current session's running jobs still populate the strip", async () => {
     const controller = controllerWith("ses_a", {
       jobs: async () => ({ data: [job("ses_a")] }),
+      pendingPermissions: async () => ({ data: [] }),
     });
 
     await refreshSubagents.call(controller as unknown as ChatController);
@@ -94,5 +102,19 @@ describe("subagent refresh scoping", () => {
     assert.deepEqual(controller.posted, [
       { kind: "subagents", sessionID: "ses_a", jobs: controller.subagents },
     ]);
+  });
+
+  test("a child session's pending permission marks its job blocked (spec D4)", async () => {
+    const controller = controllerWith("ses_a", {
+      jobs: async () => ({ data: [job("ses_a")] }),
+      // 权限端点返回全服务器的请求；只有挂在 childSessionID 名下的才命中。
+      pendingPermissions: async () => ({
+        data: [{ sessionID: "ses_other" }, { sessionID: "ses_child" }],
+      }),
+    });
+
+    await refreshSubagents.call(controller as unknown as ChatController);
+
+    assert.equal(controller.subagents[0]?.status, "blocked");
   });
 });

@@ -36,124 +36,29 @@ export function deriveSessionStatus(
   return "idle";
 }
 
-/**
- * A root row's color aggregates over itself and its folded subagent children
- * (ADR-0010): red when anything is blocked or failed, green when anything is
- * working, else the root's own state. Supersedes the 2026-11-17 rule that
- * painted folded rows red for merely-running children — red is reserved for
- * "needs you". Both attention states map to the `failed` class, whose color
- * is the single red; the root's own `blocked` (yellow) only applies to rows
- * without children, which are out of this aggregation's scope.
- */
-export function aggregateRowStatus(
-  root: HistoryRow,
-  children: readonly HistoryRow[],
-): SessionRunStatus {
-  const statuses = [root.status, ...children.map((child) => child.status)];
-  if (statuses.some((status) => status === "blocked" || status === "failed")) {
-    return "failed";
-  }
-  if (statuses.some((status) => status === "working")) {
-    return "working";
-  }
-  return root.status;
-}
-
-/**
- * Fold subagent sessions under their root session. One level only: every
- * descendant is flattened into the nearest root's `children`.
- */
-export function foldSubagentSessions(rows: HistoryRow[]): FoldedHistoryRow[] {
-  const byId = new Map(rows.map((session) => [session.id, session]));
-  const folds = new Map<string, FoldedHistoryRow>();
-  for (const session of rows) {
-    folds.set(session.id, { root: session, children: [], runningChildren: 0 });
-  }
-  const foldedInto = new Set<string>();
-  for (const session of rows) {
-    if (session.parentID === undefined) {
-      continue;
-    }
-    const root = rootFoldOf(session, byId, folds);
-    if (!root || root.root.id === session.id) {
-      // The root is outside the fetched page or has no parent link: keep the
-      // session visible as a root rather than dropping it (Q19).
-      continue;
-    }
-    root.children.push(session);
-    foldedInto.add(session.id);
-  }
-  return rows
-    .filter((session) => !foldedInto.has(session.id))
-    .map((session) => folds.get(session.id) as FoldedHistoryRow)
-    .sort((left, right) => right.root.updated - left.root.updated)
-    .map((fold) => {
-      const children = [...fold.children].sort((left, right) => left.created - right.created);
-      return {
-        root: fold.root,
-        children,
-        runningChildren: children.filter((child) => child.status === "working").length,
-      };
-    });
-}
-
-/** Walk parent links to the topmost session; undefined when the chain is broken or cyclic. */
-function rootFoldOf(
-  session: HistoryRow,
-  byId: ReadonlyMap<string, HistoryRow>,
-  folds: ReadonlyMap<string, FoldedHistoryRow>,
-): FoldedHistoryRow | undefined {
-  let current = session;
-  const seen = new Set<string>();
-  while (current.parentID !== undefined) {
-    if (seen.has(current.id)) {
-      return undefined;
-    }
-    seen.add(current.id);
-    const parent = byId.get(current.parentID);
-    if (!parent) {
-      // The chain ends outside the page: the session we stopped on is the
-      // nearest root, so its own descendants still fold under it (Q19).
-      return folds.get(current.id);
-    }
-    current = parent;
-  }
-  return folds.get(current.id);
-}
-
-/**
- * The root a collapsed menu must open on its own: the parent of the session the
- * user is currently in, so the menu never hides where they are (Q23).
- */
-export function rootToExpand(
-  folded: FoldedHistoryRow[],
-  currentID: string | undefined,
-): string | undefined {
-  if (currentID === undefined) {
-    return undefined;
-  }
-  for (const fold of folded) {
-    if (fold.children.some((child) => child.id === currentID)) {
-      return fold.root.id;
-    }
-  }
-  return undefined;
-}
-
-/** Fold first, group second: a child must follow its root even across days. */
-export function groupFoldedByDate(folded: FoldedHistoryRow[]): {
-  label: string;
-  sessions: FoldedHistoryRow[];
-}[] {
-  return groupByDate(folded, (fold) => fold.root.updated);
-}
-
 /** Date-group a session list (newest first within groups). */
 export function groupSessionsByDate(sessions: SessionInfo[]): {
   label: string;
   sessions: SessionInfo[];
 }[] {
   return groupByDate(sessions, (session) => session.time.updated);
+}
+
+/**
+ * 本地兜底（spec D1.2）：历史菜单只显示根会话。服务端 `parentID=null`
+ * 过滤正常时子会话不会出现在页面里；参数被旧服务器忽略时在这里滤除。
+ * 语义统一：parentID 非空 = 非 root = 隐藏（含根在页外的孤儿）。
+ */
+export function rootSessions(rows: HistoryRow[]): HistoryRow[] {
+  return rows.filter((row) => row.parentID === undefined);
+}
+
+/** Date-group history rows by their own updated time（无折叠——ADR-0016）。 */
+export function groupHistoryRowsByDate(rows: HistoryRow[]): {
+  label: string;
+  sessions: HistoryRow[];
+}[] {
+  return groupByDate(rows, (row) => row.updated);
 }
 
 function groupByDate<T>(
@@ -204,25 +109,18 @@ function groupByDate<T>(
   return result;
 }
 
-/** One row of the history menu, before subagent sessions are folded under their parent. */
+/** One row of the history menu. Root sessions only — the server filters
+ *  children out via `parentID=null` and `rootSessions` is the local fallback
+ *  (spec D1); the field stays so the fallback can tell them apart. */
 export interface HistoryRow {
   id: string;
   title?: string;
   /** Set on subagent sessions; absent on root sessions. */
   parentID?: string;
-  /** Epoch ms, creation time — orders siblings under a root. */
+  /** Epoch ms, creation time. */
   created: number;
   updated: number;
   status: SessionRunStatus;
-}
-
-/** A root session plus the subagent sessions folded beneath it. */
-export interface FoldedHistoryRow {
-  root: HistoryRow;
-  /** Descendants, one level deep, oldest first. */
-  children: HistoryRow[];
-  /** Children still working; drives the running badge on the collapsed row. */
-  runningChildren: number;
 }
 
 export function relativeSessionTime(timestamp: number): string {

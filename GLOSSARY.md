@@ -47,13 +47,13 @@ One ordered block inside an assistant reply: a passage of text, a passage of rea
 A user message sent while the model is still working. The host holds it in FIFO order and sends it when the turn ends — to the session it was typed in, even if the user is elsewhere; delivery follows the owning session, not the one on screen. It can be deleted or force-sent (interrupting the current turn). A failed or stopped turn holds the queue, for its own session, until it is resumed.
 
 **Subagent job**
-A running subagent, reported by the server's job listing for a session and its descendants. Only jobs of kind `subagent` that are still running are shown: one row with the agent, its description and the elapsed time; the row itself opens the child session in the chat (the same session switch the history menu performs), plus a Stop action that interrupts the child session. The listing has no events, so the host polls it while a turn runs. Distinct from an agent in the catalog, which is a definition, not a running job.
+A subagent, reported by the server's job listing for a session and its descendants. Jobs of kind `subagent` that are running or failed are shown: one row with the agent, its description and the elapsed time; the row itself opens the child session in the chat (the same session switch the history menu performs). Running rows carry a Stop action that interrupts the child session; failed rows keep none (nothing left to stop) and stay pinned for 30s after the server's list drops them. A running job whose child session has a pending permission reply is shown blocked (yellow). The listing has no events, so the host polls it. Distinct from an agent in the catalog, which is a definition, not a running job.
 
 **Parent session**
 The session a session was spawned from, identified by the server's `parentID`. A session without one is a root session. The chat panel's back button (shown while a child session is on screen) returns to the parent session, one level up; nesting means walking to the root one step at a time. Distinct from the root session, which is the top of the parent chain, not necessarily the previous one viewed.
 
-**Aggregate row status**
-A history row's status derived from the root session and its folded subagent children together: red when anything is blocked or failed, green when anything is working, else the root's own state. Applied identically to folded and expanded rows.
+**Row status**
+A history row's status is the status of the session on that row alone: blocked (yellow, waiting on the user), working (green), failed (red), idle (uncolored). Subagent sessions never appear in the history menu, and their states never paint a root row — a delegating session reads uncolored while its subagent works. Delegation activity lives in the chat's subagent strip instead. Pinned by ADR-0016, which supersedes the aggregated rule of ADR-0010.
 
 **Rewind point**
 A user message used as the boundary for a revert: everything after it (messages and their file changes) is rolled back via the server's staged revert.

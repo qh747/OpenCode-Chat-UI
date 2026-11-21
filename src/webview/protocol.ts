@@ -1,4 +1,4 @@
-import type { FoldedHistoryRow } from "../util/sessions";
+import type { HistoryRow } from "../util/sessions";
 import type { Locale } from "../util/i18n";
 import type { SubmitKey } from "../util/composer-keys";
 import type { SubagentJob } from "../util/subagents";
@@ -84,7 +84,8 @@ export interface Snapshot {
 
 export interface HistoryGroup {
   label: string;
-  sessions: FoldedHistoryRow[];
+  /** Root sessions only — subagent sessions never appear in the menu (spec D1). */
+  sessions: HistoryRow[];
 }
 
 /** What the user attached to a message. */

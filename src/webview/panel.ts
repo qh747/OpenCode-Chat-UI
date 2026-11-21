@@ -22,13 +22,13 @@ import { LiveStream, mergeLiveContent, type SegmentKind } from "../util/live-seg
 import { collectAllMessages, mergeMessages, olderCursorOf, orderMessages } from "../util/messages";
 import { stripTrailingMarkers } from "../util/dcp-markers";
 import { cacheHitRateOf, contextTokensOf } from "../util/tokens";
-import { toSubagentJobs, type SubagentJob } from "../util/subagents";
+import { toSubagentJobs, withBlocked, type SubagentJob } from "../util/subagents";
 import { resolveCommandAction, findSkillByCommand } from "../util/commands";
 import { diffFileKey, diffRange, attributionSet } from "../util/session-diff";
 import {
   deriveSessionStatus,
-  foldSubagentSessions,
-  groupFoldedByDate,
+  groupHistoryRowsByDate,
+  rootSessions,
 } from "../util/sessions";
 import type { HistoryRow } from "../util/sessions";
 import { GitStatusProvider, readGitHead } from "../git";
@@ -1243,6 +1243,9 @@ export class ChatController implements vscode.Disposable {
           limit: 100,
           order: "desc",
           archived: false,
+          // 只取根会话（spec D1.1）：子会话不进历史菜单，也不占
+          // limit 名额。本地 rootSessions 兜底防旧服务器忽略该参数。
+          parentID: "null",
         }),
         // Older servers may not expose the active-session map; a missing dot
         // state is better than a history menu that refuses to open.
@@ -1264,7 +1267,10 @@ export class ChatController implements vscode.Disposable {
         updated: session.time.updated,
         status: deriveSessionStatus(session, activeIDs, blockedIDs),
       }));
-      this.post({ kind: "history", groups: groupFoldedByDate(foldSubagentSessions(rows)) });
+      // 行颜色只由主会话自身状态决定（ADR-0016）：子会话已从菜单消失，
+      // 不再聚合折叠子代理的状态。
+      const rootRows = rootSessions(rows);
+      this.post({ kind: "history", groups: groupHistoryRowsByDate(rootRows) });
     });
   }
 
@@ -1997,7 +2003,23 @@ export class ChatController implements vscode.Disposable {
       if (this.pollStale(request, this.subagentRequest, sessionID)) {
         return;
       }
-      this.subagents = toSubagentJobs(result.data);
+      // 阻塞判定（spec D4）：子代理等权限 → 行标黄。权限端点返回全服务器的
+      // 请求，但 refreshPermissions 只留当前会话的；这里按 childSessionID
+      // 匹配子会话自己的。仅在有 job 时附带拉取——空 strip 不需要判定。
+      // 待活体观察：若子代理的权限请求挂在主会话名下，这里匹配不到，
+      // per-row 黄退化（届时与用户确认退化方案）。
+      const rows = toSubagentJobs(result.data);
+      let blockedIDs: ReadonlySet<string> = new Set();
+      if (rows.length > 0) {
+        const permissions = await client
+          .pendingPermissions(this.host.folderPath)
+          .catch(() => ({ data: [] }));
+        if (this.pollStale(request, this.subagentRequest, sessionID)) {
+          return;
+        }
+        blockedIDs = new Set(permissions.data.map((entry) => entry.sessionID));
+      }
+      this.subagents = withBlocked(rows, blockedIDs);
       this.post({ kind: "subagents", sessionID, jobs: this.subagents });
       if (this.subagents.length === 0 && this.subagentTimer && !this.busy) {
         // 轮询发现已无运行中的子代理：收尾停轮询（strip 由上面的空列表更新关闭）。

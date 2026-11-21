@@ -1269,6 +1269,29 @@ body {
   border-radius: 3px;
 }
 
+/* 状态行（spec D4）：running 保持蓝色脉冲；blocked 黄 = 等权限；
+   failed 红 = 任务失败——dot 停脉冲、agent 文字着色、无 Stop。 */
+.subagent-row.is-blocked .subagent-dot {
+  background: var(--warn);
+}
+.subagent-row.is-failed .subagent-dot {
+  background: var(--danger);
+  animation: none;
+}
+.subagent-row.is-blocked .subagent-agent {
+  color: var(--warn);
+}
+.subagent-row.is-failed .subagent-agent {
+  color: var(--danger);
+}
+/* 折叠头的计数随状态着色（不强制展开）：红优先于黄。 */
+.subagent-head.is-blocked .subagent-count {
+  color: var(--warn);
+}
+.subagent-head.is-failed .subagent-count {
+  color: var(--danger);
+}
+
 /* composer */
 /* Composer 的挂载槽位：查看子代理会话时组件仅隐藏不卸载，
    保住主会话的草稿与已上传附件（issue 12）。 */
@@ -2071,45 +2094,12 @@ body {
 .history-row:hover {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
-/* Caret slot: subagent roots get a clickable triangle, roots without children
-   keep the same width so titles stay aligned down the column. The slot is
-   wider and taller than the glyph itself — the click target must reach the
-   whole row height, not just the 10px glyph (用户反馈热区太小). */
-.history-caret {
-  flex: none;
-  width: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: stretch;
-  margin: -6px 0;
-  color: var(--muted);
-  font-size: 10px;
-  cursor: pointer;
-  user-select: none;
-}
-.history-caret.is-empty {
-  cursor: default;
-}
-/* Child rows indent under their root; the wrap owns the background so the
-   hover actions still line up. */
-.history-child .history-row {
-  padding-left: 34px;
-}
 .history-row.is-current {
   background: var(--vscode-list-activeSelectionBackground, rgba(128, 128, 128, 0.24));
 }
-.history-subagents {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-  color: var(--muted);
-  font-size: 11px;
-}
-/* 状态点已移除，运行状态改由标题颜色表达（spec 分支 1）：
+/* 行状态就是该会话自身的状态（ADR-0016，取代 ADR-0010 的聚合规则）：
    绿 = 模型运行中，黄 = 等待用户，红 = 上回合失败；
-   空闲/未运行会话标题保持默认前景色。 */
+   空闲/未运行会话标题保持默认前景色。子会话已从菜单消失，没有聚合对象。 */
 .history-title.status-working {
   color: var(--ok);
 }

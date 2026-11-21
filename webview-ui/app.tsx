@@ -344,7 +344,9 @@ export function App({ state, send, composerHandleRef }: Props) {
         <HistoryMenu
           dispatch={send}
           groups={state.historyGroups}
-          currentSessionId={state.sessionID}
+          /* 高亮折算（spec D3）：子会话在屏时高亮其直接父级的行；深层嵌套
+             父级非根时无行可匹配，自然退化。 */
+          currentSessionId={state.isSubagentSession ? state.parentSessionID : state.sessionID}
           onOpen={() => send({ kind: "showHistory" })}
         />
         <button className="icon-btn" onClick={() => send({ kind: "newSession" })} title={t("newSession")}>

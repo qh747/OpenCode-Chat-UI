@@ -1,6 +1,11 @@
 # Spec: fold subagent sessions under their root in the history menu
 
-Status: in progress — slice 1 implemented, slice 2 not started
+Status: **overturned (2026-11-21)** — the fold was removed by
+`.scratch/history-hide-subagents/`: the history menu now lists root sessions
+only, fetched with the server's `parentID=null` filter (wire format
+live-verified on 2.3.2; the local-filter deviation below is now the fallback).
+Slice 2's approved 30s mechanism lives on as the subagent strip's failed-row
+hold. The record below is preserved as decision history.
 
 ## Problem
 

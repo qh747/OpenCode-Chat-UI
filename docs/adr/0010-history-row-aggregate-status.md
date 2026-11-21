@@ -1,6 +1,8 @@
 # ADR-0010: History rows aggregate status over the root and its subagent children
 
-- Status: accepted
+- Status: superseded by 0016 (2026-11-21 — the menu no longer shows subagent
+  sessions, so there is nothing to aggregate; a root row shows only its own
+  status)
 - Date: 2026-11-18
 - Supersedes: the 2026-11-17 diagnostic decision "running children paint the
   folded row red" (recorded in the `HistoryMenu.tsx` comment and the

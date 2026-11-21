@@ -30,6 +30,7 @@ const JOB: SubagentJob = {
   agent: "General",
   description: "Run sleep 45",
   started: 1_000,
+  status: "running",
 };
 
 const QUEUE_ITEM = { id: "q1", text: "继续跑测试", attachments: [] };

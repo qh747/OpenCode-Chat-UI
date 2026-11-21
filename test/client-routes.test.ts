@@ -91,6 +91,26 @@ describe("session-scoped client routes", () => {
     );
   });
 
+  test("session listing can ask for roots only via the parentID filter", async () => {
+    const calls: string[] = [];
+    const client = makeClient(calls);
+    // 线格式（2026-11-21 活体验证，opencode 2.3.2）：字面量 "null" = 只回根会话；
+    // 空串/裸参数/undefined 均被服务器 400 拒绝。
+    await client.listSessions({
+      directory: "/w",
+      limit: 100,
+      order: "desc",
+      archived: false,
+      parentID: "null",
+    });
+    assert.deepEqual(calls, [
+      "http://127.0.0.1:1/api/session?directory=%2Fw&limit=100&order=desc&archived=false&parentID=null",
+    ]);
+    calls.length = 0;
+    await client.listSessions({ limit: 10 });
+    assert.equal(calls[0]?.includes("parentID"), false);
+  });
+
   test("message pages: limit/order on the first page, cursor alone afterwards", async () => {
     const calls: string[] = [];
     const client = makeClient(calls);

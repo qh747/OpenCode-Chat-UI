@@ -142,6 +142,12 @@ export class OpencodeClient {
     archived?: boolean;
     search?: string;
     cursor?: string;
+    /**
+     * 根会话过滤（2026-11-21 活体验证，opencode 2.3.2）：传字面量 `"null"`
+     * 只回根会话（OpenAPI `anyOf[Session.ID, enum["null"]]`）；空串、裸参数
+     * 或 `undefined` 值都会被服务器 400 拒绝，不要用它们表达「不过滤」。
+     */
+    parentID?: string;
   }): Promise<ListPage<SessionInfo>> {
     const params = new URLSearchParams();
     if (query.directory) {
@@ -161,6 +167,9 @@ export class OpencodeClient {
     }
     if (query.cursor) {
       params.set("cursor", query.cursor);
+    }
+    if (query.parentID !== undefined) {
+      params.set("parentID", query.parentID);
     }
     const qs = params.toString();
     return this.request<ListPage<SessionInfo>>("GET", `/api/session${qs ? `?${qs}` : ""}`);

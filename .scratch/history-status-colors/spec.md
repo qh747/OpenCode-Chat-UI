@@ -44,3 +44,10 @@
 - `test/history-menu.test.ts` 旧断言（折叠行红）按 ADR-0010 翻转并收紧为按父行 span 断言：折叠/展开两态父行均为 `status-working`；blocked 子代理 → 父行 `status-failed`。
 - `HistoryMenu.tsx`：`has-running-children` class 逻辑删除，行状态改为聚合；106-108 注释重写为新规则与推翻记录。`styles.css` 删除 `.history-title.has-running-children` 规则。`runningChildren` 字段保留（`· N running` 计数仍用）。
 - typecheck / lint / 全量测试通过（315 通过 0 失败）。
+
+### 2026-11-21 推翻记录
+
+本 spec 确立的聚合规则被 `.scratch/history-hide-subagents/` 推翻：历史菜单不再显示
+subagent 会话（服务端 `parentID=null` 过滤 + 本地兜底），行状态只由主会话自身决定，
+`aggregateRowStatus` 及其用例删除。对应 ADR-0016 取代 ADR-0010；子代理的阻塞/失败
+信号改在聊天流 SubagentStrip 上表达（黄=等权限、红=失败钉 30s）。

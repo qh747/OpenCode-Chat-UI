@@ -3,78 +3,80 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { HistoryMenu } from "../webview-ui/HistoryMenu";
-import { foldSubagentSessions } from "../src/util/sessions";
 import type { HistoryRow } from "../src/util/sessions";
-import type { HistoryGroup } from "../src/webview/protocol";
 import type { Dispatch } from "../webview-ui/state";
 
 const dispatch: Dispatch = () => {};
 const onOpen = () => {};
 
-const parent: HistoryRow = {
-  id: "ses_parent",
-  title: "父会话",
+const working: HistoryRow = {
+  id: "ses_working",
+  title: "跑着的会话",
   created: 1_000,
   updated: 2_000,
-  status: "idle",
-};
-
-const runningChild: HistoryRow = {
-  id: "ses_child",
-  title: "子代理",
-  parentID: "ses_parent",
-  created: 1_500,
-  updated: 1_600,
   status: "working",
 };
 
-function groups(): HistoryGroup[] {
-  return [{ label: "今天", sessions: foldSubagentSessions([parent, runningChild]) }];
-}
+const idle: HistoryRow = {
+  id: "ses_idle",
+  title: "闲会话",
+  created: 1,
+  updated: 2,
+  status: "idle",
+};
 
-function renderMenu(expanded: ReadonlySet<string>): string {
+function renderMenu(currentSessionId?: string, rows: HistoryRow[] = [working, idle]): string {
   return renderToStaticMarkup(
     createElement(HistoryMenu, {
       dispatch,
-      groups: groups(),
-      currentSessionId: undefined,
+      groups: [{ label: "今天", sessions: rows }],
+      currentSessionId,
       onOpen,
-      initialExpanded: expanded,
       initialOpen: true,
     }),
   );
 }
 
-describe("history row aggregate status (ADR-0010)", () => {
-  const parentTitle = (html: string): string =>
-    (html.match(/<span class="history-title[^"]*">父会话<\/span>/) ?? [""])[0] ?? "";
+const spanOf = (html: string, title: string): string =>
+  (html.match(new RegExp(`<span class="history-title[^"]*">${title}</span>`)) ?? [""])[0];
 
-  test("a folded row with a working child is green, not the old red warning", () => {
-    const html = renderMenu(new Set());
-    // 折叠行聚合自己与子代理：working → 绿（推翻 2026-11-17 的红色警示）。
-    assert.doesNotMatch(html, /has-running-children/);
-    assert.match(parentTitle(html), /status-working/);
+describe("history rows paint their own status (ADR-0016)", () => {
+  test("a working session is green on its own row", () => {
+    assert.match(spanOf(renderMenu(), "跑着的会话"), /status-working/);
   });
 
-  test("an expanded root row aggregates the same way", () => {
-    const html = renderMenu(new Set(["ses_parent"]));
-    assert.doesNotMatch(html, /has-running-children/);
-    // 父会话行自身（不是子代理行）也聚合出 working 绿。
-    assert.match(parentTitle(html), /status-working/);
+  test("an idle session carries only the neutral status-idle class", () => {
+    // status-idle 无 CSS 规则 → 默认前景色；这是既有行为（ADR-0010 时代亦然）。
+    assert.match(spanOf(renderMenu(), "闲会话"), /^<span class="history-title status-idle">/);
   });
 
-  test("a blocked child paints the root red", () => {
-    const blockedChild: HistoryRow = { ...runningChild, status: "blocked" };
-    const html = renderToStaticMarkup(
-      createElement(HistoryMenu, {
-        dispatch,
-        groups: [{ label: "今天", sessions: foldSubagentSessions([parent, blockedChild]) }],
-        currentSessionId: undefined,
-        onOpen,
-        initialExpanded: new Set<string>(),
-        initialOpen: true,
-      }),
-    );
-    assert.match(parentTitle(html), /status-failed/);
+  test("a failed session is red", () => {
+    const html = renderMenu(undefined, [{ ...idle, status: "failed" }]);
+    assert.match(spanOf(html, "闲会话"), /status-failed/);
+  });
+
+  test("a blocked session is yellow", () => {
+    const html = renderMenu(undefined, [{ ...idle, status: "blocked" }]);
+    assert.match(spanOf(html, "闲会话"), /status-blocked/);
+  });
+});
+
+describe("the menu has no folding affordances (spec D1)", () => {
+  test("no caret and no subagent-count markup anywhere", () => {
+    // 过滤本身在 host 层（rootSessions + 服务端 parentID，工票 01）；
+    // 组件层锁定：折叠机构（caret/子行缩进/计数徽章）不再存在于标记里。
+    const html = renderMenu();
+    assert.doesNotMatch(html, /history-caret/);
+    assert.doesNotMatch(html, /history-subagents/);
+  });
+});
+
+describe("current-session highlight walks up to the parent (spec D3)", () => {
+  test("the parent row is highlighted while its child session is on screen", () => {
+    assert.match(renderMenu("ses_working"), /history-row is-current/);
+  });
+
+  test("no row is highlighted for an id the menu does not list", () => {
+    assert.doesNotMatch(renderMenu("ses_missing"), /is-current/);
   });
 });
