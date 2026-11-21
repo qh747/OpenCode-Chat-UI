@@ -1,4 +1,4 @@
-# OpenCode Side Panel
+# OpenCode Sidebar
 
 [English](README.md) | 简体中文
 
