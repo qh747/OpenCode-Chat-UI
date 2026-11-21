@@ -1,5 +1,6 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
 import { ChatController } from "../src/webview/panel";
 import { SessionQueues } from "../src/webview/session-queues";
 import { SessionDismissed } from "../src/webview/session-dismissed";
@@ -39,6 +40,9 @@ const send = (
 function message(id: string): QueuedMessage {
   return { id, text: id, attachments: [] };
 }
+
+/** activeSelection 的 stub 路径;期望 URI 由同一输入经 pathToFileURL 推导。 */
+const SELECTION_PATH = "/ws/b.md";
 
 /** The methods the turn-end → queue → send chain touches, plus the prompt seam. */
 function turnEndController(displayed: string | undefined, busy = false) {
@@ -97,7 +101,7 @@ function turnEndController(displayed: string | undefined, busy = false) {
       },
     }),
     // 用户此刻的编辑器选区属于显示会话的上下文(真实实现读 activeTextEditor)。
-    activeSelection: () => ({ path: "/ws/b.md", start: 1, end: 2 }),
+    activeSelection: () => ({ path: SELECTION_PATH, start: 1, end: 2 }),
     toPromptAttachment: proto.toPromptAttachment,
     selectionAttachment: proto.selectionAttachment,
     renderableTranscript: proto.renderableTranscript,
@@ -292,7 +296,15 @@ describe("the displayed session's turn end still drives its own queue", () => {
       {
         sessionID: "ses_a",
         text: "m1",
-        files: [{ uri: "file:///ws/b.md?start=1&end=2", name: "b.md", description: "L1-L2" }],
+        files: [
+          {
+            // /ws/b.md 在 Windows 上按当前盘符解析(pathToFileURL 语义),
+            // 期望值与 attachmentUri 用同一转换推导,两种平台一致。
+            uri: `${pathToFileURL(SELECTION_PATH).href}?start=1&end=2`,
+            name: "b.md",
+            description: "L1-L2",
+          },
+        ],
       },
     ]);
     assert.deepEqual(controller.sessionQueues.state("ses_a").items, [message("m2")]);
