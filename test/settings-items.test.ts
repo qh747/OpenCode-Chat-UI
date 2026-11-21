@@ -26,7 +26,9 @@ describe("settings catalogue", () => {
   });
 });
 
-describe("subagent depth row (opencode-sidebar 工票02)", () => {
+// 工票02（.scratch/opencode-sidebar）：experimental.subagent_depth，
+// 缺省回落 1（官方默认即禁止嵌套）。
+describe("subagent depth row", () => {
   test("the depth row writes the experimental key with fallback 1", () => {
     const item = findSettingsItem("subagent_depth");
     assert.ok(item, "the row exists");

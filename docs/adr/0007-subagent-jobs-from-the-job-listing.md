@@ -67,3 +67,16 @@ call into a background one, i.e. it detaches a job rather than ending it.
   no requests.
 - Elapsed time is derived from `time.started` against the webview clock; a
   clock skew between host and webview shows in the seconds, not in the state.
+
+## Revision (2026-11-21): subagent views do not poll
+
+The core decision stands: the job listing is the subagent strip's only data
+source, and stopping one job means interrupting its child session. The
+opencode-sidebar change (`.scratch/opencode-sidebar/`) narrows decision 1:
+while the session on screen is itself a subagent session, the strip is never
+rendered there, so the host neither polls the listing for it nor starts a
+timer — `refreshSubagents` and `startSubagentPolling` early-return, and
+`refreshDiffs` skips the diff pull for the same reason. Polling resumes for a
+root session through the existing switch → clear → resync flow, so decision 1
+now reads "poll the job listing for the current session **when that session is
+a root session**".

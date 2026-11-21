@@ -27,3 +27,5 @@ VSIX 文件名沿用 `pkg.name`（opencode-panel），不变。README 既有 "Co
 - `repository.url` 指向 `qh747/opencode-vscode-plugin.git`，与用户所述仓库名不符；用户未要求修正，保持原样。
 
 ## Comments
+
+- 2026-11-21 实施完成（bca895e）。双轴评审：无缺陷；全仓 grep `Side Panel` 仅剩 .scratch 历史记录。

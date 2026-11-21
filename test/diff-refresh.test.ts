@@ -238,9 +238,9 @@ describe("diff refresh scoping", () => {
     );
   });
 
-  test("a subagent session pulls no diffs at all (opencode-sidebar 工票01)", async () => {
-    // 动机 Q1c：子代理视图不显示改动列表——连数据也不拉。门必须在
-    // sessionDiff 之前，且作废在途的同会话轮询。
+  // 工票01（opencode-sidebar）：子代理视图不显示改动列表——连数据也不拉。
+  // 门必须在 sessionDiff 之前，且作废在途的同会话轮询。
+  test("a subagent session pulls no diffs at all", async () => {
     let calls = 0;
     const controller = controllerWith(
       "ses_child",

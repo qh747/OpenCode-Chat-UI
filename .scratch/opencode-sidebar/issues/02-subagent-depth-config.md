@@ -18,3 +18,5 @@ Status: ready-for-agent
 - `test/settings-items.test.ts`：`SERVER_SETTINGS.length` 10 → 11；`findSettingsItem("subagent_depth")` 的 configPath/defaultValue/control 断言；label 双语在案（既有循环已覆盖）。
 
 ## Comments
+
+- 2026-11-21 实施完成（305e9a6）。双轴评审：无缺陷。走 SERVER_SETTINGS 既有通道贴合 ADR-0006，不新开 ADR。

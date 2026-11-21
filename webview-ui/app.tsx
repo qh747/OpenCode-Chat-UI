@@ -141,6 +141,9 @@ export function App({ state, send, composerHandleRef }: Props) {
   }, [state.messages, state.hasEarlier, state.loadingEarlier, send]);
 
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
+  // 子代理视图（GLOSSARY「Subagent view」）：三条列表的显示规则共用这一个
+  // 判定——评审收敛（Duplicated Code），规则只表达一次。
+  const inSubagentView = state.isSubagentSession;
 
   // New content does not always arrive through React state (an expanded card,
   // a late image, a font reflow), so keep following the bottom while it grows.
@@ -436,7 +439,7 @@ export function App({ state, send, composerHandleRef }: Props) {
       {/* 工票01（opencode-sidebar）：子代理视图三条列表结构性不渲染——
           有数据也不渲染（Q2）；主会话视图不变。改动列表连数据都不拉
           （host 侧 refreshDiffs 同步早退，Q1c）。 */}
-      {!state.isSubagentSession && hasMessages && (
+      {!inSubagentView && hasMessages && (
         <DiffList
           diffs={state.diffs}
           maxVisibleRows={state.maxVisibleDiffRows}
@@ -445,7 +448,7 @@ export function App({ state, send, composerHandleRef }: Props) {
         />
       )}
 
-      {!state.isSubagentSession && (
+      {!inSubagentView && (
         <SubagentStrip
           jobs={state.subagents}
           currentSessionId={state.sessionID}
@@ -454,7 +457,7 @@ export function App({ state, send, composerHandleRef }: Props) {
         />
       )}
 
-      {!state.isSubagentSession && (
+      {!inSubagentView && (
         <QueueStrip
           queue={state.queue}
           paused={state.queuePaused}

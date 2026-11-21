@@ -126,7 +126,9 @@ describe("subagent refresh scoping", () => {
   });
 });
 
-describe("subagent view pulls no job data (opencode-sidebar 工票01)", () => {
+// 工票01（.scratch/opencode-sidebar）：子代理视图连 jobs 端点都不访问，
+// 也不清 strip 记忆（显示面由 webview 门控，切回主会话时重取）。
+describe("subagent view pulls no job data", () => {
   test("a subagent session never fetches jobs nor posts", async () => {
     let calls = 0;
     const controller = controllerWith("ses_child", {
@@ -146,7 +148,8 @@ describe("subagent view pulls no job data (opencode-sidebar 工票01)", () => {
   });
 });
 
-describe("subagent poll timer (opencode-sidebar 工票01)", () => {
+// 工票01：子代理视图不起轮询表；根会话不受影响（对照用例钉住不过度设门）。
+describe("subagent poll timer", () => {
   test("polling never starts for a subagent session", (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
     let refreshes = 0;

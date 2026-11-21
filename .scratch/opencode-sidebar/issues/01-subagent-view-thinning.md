@@ -25,3 +25,5 @@ Status: ready-for-agent
 - webview：App 级真实 DOM 断言——子代理视图下 `.diff-head` / `.subagent-strip` / `.queue-head` 均不出现（有数据也不出现）；根会话视图下照常出现（新 `test/subagent-view.test.tsx`，沿 subagent-nav 的 jsdom + createRoot + act 支架）。
 
 ## Comments
+
+- 2026-11-21 实施完成（98f9f09）：四条测试缝全落地，全量 470 用例绿。双轴评审：Spec 轴零缺陷；Standards 轴判断性意见「测试支架与 subagent-nav.test.tsx 重复」——subagent-nav spec 已有「真实 DOM 测试脚手架可提取共享 helper」的延后项，本次不为单文件做半吊子提取，维持延后；「app.tsx 门条件收敛为局部布尔」已采纳（`inSubagentView`，评审修正提交）。ADR-0007 补修订注（子代理视图不轮询）。
