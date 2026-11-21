@@ -13,13 +13,15 @@
 ## 功能
 
 - **聊天面板**（默认在辅助侧边栏，可随意拖动）：流式回复、Markdown 渲染、思考过程与工具调用卡片可折叠展开。
-- **会话树**：按日期分组，支持打开 / 重命名 / 删除 / Fork / 导出。
+- **会话历史**：只列主会话，按日期分组，支持打开 / 重命名 / 删除 / Fork / 导出；子代理会话不进菜单，在聊天流里观察。
+- **完整转写**：长会话向上滚动会补载更早的消息，导出始终包含整段对话。
 - **图片附件**：每条消息可粘贴或拖拽最多 6 张图片。
 - **Rewind 回滚**：回退到任意消息之前（连同文件修改一起回滚）。
-- **原生 Diff**：代码修改直接用 VS Code 的 diff 编辑器查看，支持按文件「保留 / 回滚」。
+- **原生 Diff**：代码修改直接用 VS Code 的 diff 编辑器查看，支持按文件回滚；已回滚的文件在该会话内不再出现。
+- **子代理**：运行中的子代理列在输入框上方并带状态（黄 = 等权限，红 = 失败）；点击行可进入该子代理，左上返回箭头回到上级会话。子代理视图不显示 diff / 排队 / 子代理三条列表。
 - **权限卡片**：Allow once / Always allow / Deny，基于 opencode 的权限 API。
 - **模型与模式选择器**：opencode 里配置的所有 provider（包括 `opencode-go/*` 订阅模型）、推理力度（effort）变体、原生 agent（build / plan / 自定义 agent），`Shift+Tab` 循环切换。
-- **上下文**：`@` 模糊搜索附加文件，`+` 多选文件，自动附加当前编辑器的选区。
+- **上下文**：`@` 模糊搜索附加文件，`+` 多选文件，自动附加当前编辑器的选区；输入框下方信息条的分支跟随 agent 的会话目录或 worktree。
 - **版本守卫**：连接的 server 大版本超出已验证的 v2 范围时给出非阻断警告。
 - **零账号处理**——扩展为每个窗口启动一个私有的 `opencode serve`（随机端口 + 随机密码，随窗口关闭而结束），或连接已有 server；认证完全留在你的 opencode CLI 登录态里。
 
@@ -43,7 +45,7 @@ npm run release      # 类型检查 + lint + 测试 + 编译 + VSIX
 产物在 `dist/opencode-sidebar-<version>.vsix`，安装：
 
 ```bash
-code --install-extension dist/opencode-sidebar-0.2.0.vsix
+code --install-extension dist/opencode-sidebar-<version>.vsix
 ```
 
 ## 设置
@@ -57,10 +59,15 @@ code --install-extension dist/opencode-sidebar-0.2.0.vsix
 | `opencode.notifications.turnComplete` | `true` | 一轮对话结束时通知。 |
 | `opencode.notifications.permissionRequest` | `true` | agent 请求权限时通知。 |
 | `opencode.notifications.errors` | `false` | agent 或 server 报错时通知。 |
+| `opencode.composer.submitKey` | `enter` | 发送按键：`enter` 或 `ctrlEnter`（macOS 为 ⌘Enter）。 |
+| `opencode.composer.showContextBar` | `true` | 显示输入框下方的信息条（分支、路径、上下文用量）。 |
 | `opencode.diffList.maxVisibleRows` | `5` | 改动文件列表展开时超出多少行后出现滚动条。 |
+| `opencode.ui.preferredLocation` | `sidebar` | **OpenCode: Open** 与状态栏按钮的落点：`sidebar` 或 `editor`。 |
+| `opencode.startup.autoOpen` | `false` | 打开工作区时自动打开聊天面板。 |
 
 聊天面板标题栏的齿轮按钮会打开设置面板，在同一处编辑上述设置以及 opencode
-服务端自己的配置（`opencode.json`）。
+服务端自己的配置（`opencode.json`）——包括 `experimental.subagent_depth`
+（默认 1，禁止子代理再派生子代理的开关）。
 
 ## 快捷键
 
@@ -68,7 +75,8 @@ code --install-extension dist/opencode-sidebar-0.2.0.vsix
 | --- | --- |
 | `Ctrl/Cmd+Shift+'` | 聚焦聊天面板 |
 | `Shift+Tab`（输入框内） | 循环切换 agent 模式 |
-| `Enter` / `Shift+Enter` | 发送 / 换行 |
+| `Enter` | 光标在末尾时发送；光标在正文中间时确认 `/` 或 `@` 补全（发送键见 `opencode.composer.submitKey`） |
+| `Shift+Enter` | 换行 |
 
 ## 开发
 

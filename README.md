@@ -13,13 +13,15 @@ A [VS Code](https://code.visualstudio.com) extension that puts a full [opencode]
 ## Features
 
 - **Chat panel** (secondary sidebar, movable anywhere) with streaming replies, markdown, collapsible thinking and tool cards.
-- **Sessions tree** grouped by date with open / rename / delete / fork / export.
+- **Session history** — main sessions grouped by date with open / rename / delete / fork / export; subagent sessions stay out of the menu and are watched in the chat.
+- **Complete transcript** — scrolling up backfills older messages of a long session, and export always writes the whole conversation.
 - **Image attachments** — paste or drag up to 6 images per message.
 - **Rewind** — revert a session to just before any message (file changes included).
-- **Native diffs** — changes open in VS Code's diff editor; keep or revert per file.
+- **Native diffs** — changes open in VS Code's diff editor; revert per file, and a reverted file stays dismissed in that session.
+- **Subagents** — running subagents are listed above the composer with their state (yellow = waiting on permission, red = failed); click a row to watch that subagent, and a back chevron returns to its parent. The subagent view hides the diff, queue and subagent strips.
 - **Permission cards** — Allow once / Always allow / Deny, powered by opencode's permission API.
 - **Model & mode pickers** — every provider configured in opencode (including `opencode-go/*` subscription models), reasoning-effort variants, and the native agents (build / plan / custom). `Shift+Tab` cycles modes.
-- **Context** — `@` to fuzzy-attach files, `+` for a multi-file picker, auto-attach of the active editor selection.
+- **Context** — `@` to fuzzy-attach files, `+` for a multi-file picker, auto-attach of the active editor selection, and a context strip whose branch follows the agent's session directory or worktree.
 - **Version guard** — warns (non-blocking) if the connected server's major version is outside the tested v2 range.
 - **Zero account handling** — the extension spawns a private `opencode serve` per window (random port + random password, killed with the window) or connects to an existing server; auth stays in your opencode CLI login.
 
@@ -57,11 +59,16 @@ code --install-extension dist/opencode-sidebar-<version>.vsix
 | `opencode.notifications.turnComplete` | `true` | Notify when a turn finishes. |
 | `opencode.notifications.permissionRequest` | `true` | Notify when the agent asks for permission. |
 | `opencode.notifications.errors` | `false` | Notify when the agent or the server reports an error. |
+| `opencode.composer.submitKey` | `enter` | Key that sends from the composer: `enter` or `ctrlEnter` (⌘Enter on macOS). |
+| `opencode.composer.showContextBar` | `true` | Show the info bar under the composer (branch, path, context usage). |
 | `opencode.diffList.maxVisibleRows` | `5` | Rows the expanded changed-files list shows before it scrolls. |
+| `opencode.ui.preferredLocation` | `sidebar` | Where **OpenCode: Open** and the status bar button point: `sidebar` or `editor`. |
+| `opencode.startup.autoOpen` | `false` | Open the chat panel when a workspace opens. |
 
 The gear button in the chat header opens a settings panel. It edits these
 settings together with the opencode server's own configuration
-(`opencode.json`), in one place.
+(`opencode.json`), in one place — including `experimental.subagent_depth`
+(default 1), the switch that stops a subagent from spawning further subagents.
 
 ## Keyboard shortcuts
 
@@ -69,7 +76,8 @@ settings together with the opencode server's own configuration
 | --- | --- |
 | `Ctrl/Cmd+Shift+'` | Focus the chat |
 | `Shift+Tab` (in composer) | Cycle agent modes |
-| `Enter` / `Shift+Enter` | Send / newline |
+| `Enter` | Send when the cursor is at the end; confirm a `/` or `@` completion when it is mid-text (see `opencode.composer.submitKey`) |
+| `Shift+Enter` | Newline |
 
 ## Development
 
