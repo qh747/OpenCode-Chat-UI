@@ -106,6 +106,40 @@ describe("first paint", () => {
     assert.doesNotMatch(html, /model-picker/);
   });
 
+  test("models present but the model ref unresolvable keeps the panel dimmed", () => {
+    // spec：模型引用必须能在 models 里解析出名字——解析不到时不解锁，
+    // 等 10s 超时兜底（静态渲染不跑定时器，因此保持 booting）。
+    const orphanCatalog: Catalog = {
+      agents: [{ id: "build", name: "Build", mode: "primary", hidden: false }],
+      models: [{ providerID: "opencode", modelID: "deepseek", name: "DeepSeek V4.1 Flash" }],
+      commands: [],
+      skills: [],
+      recentModels: [],
+      defaultModel: { providerID: "opencode", id: "removed-model" },
+    };
+    const state = apply([
+      { kind: "state", state: "connected", version: "1.2.3" },
+      {
+        kind: "snapshot",
+        snapshot: {
+          title: "Fix the thing",
+          agent: "build",
+          busy: false,
+          messages: [],
+          pending: [],
+          diffs: [],
+          catalog: orphanCatalog,
+          workspacePath: "h:\\MyCode\\opencode-plugin",
+          queue: [],
+          queuePaused: false,
+        },
+      },
+    ]);
+    const html = render(state);
+    assert.match(html, /class="app booting"/);
+    assert.doesNotMatch(html, /model-picker/);
+  });
+
   test("a connection error is shown immediately without the boot layer", () => {
     const state = apply([{ kind: "state", state: "error", error: "spawn failed" }]);
     const html = render(state);

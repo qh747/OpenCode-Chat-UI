@@ -6,7 +6,7 @@ function state(overrides: Partial<EnterState>): EnterState {
   return {
     text: "",
     caret: 0,
-    shift: false,
+    shiftKey: false,
     submitKey: "enter",
     ctrlKey: false,
     metaKey: false,
@@ -43,14 +43,19 @@ describe("resolveEnter 决策表（光标在末尾才发送）", () => {
     );
   });
 
-  test("命令行空、光标末尾、命令语法：直接执行（带参或裸命令）", () => {
-    assert.deepEqual(
-      resolveEnter(state({ text: "/review hello world", caret: 19, menu: "commands", rows: 0 })),
-      { action: "execute", command: "review", args: "hello world" },
-    );
+  test("命令行空、光标末尾、裸命令：直接执行", () => {
     assert.deepEqual(
       resolveEnter(state({ text: "/unknown", caret: 8, menu: "commands", rows: 0 })),
       { action: "execute", command: "unknown", args: "" },
+    );
+  });
+
+  test("带参命令（/cmd args）的触发段已被空格终止：菜单不开，走发送路径执行", () => {
+    // 生产里 menu 不可能为 commands（空格杀死触发段）——此形态经无菜单分支发送，
+    // 由 doSend 的命令拆分执行；见 composer-enter.test.tsx 的真 DOM 用例。
+    assert.deepEqual(
+      resolveEnter(state({ text: "/review hello world", caret: 19, rows: 0 })),
+      { action: "send" },
     );
   });
 
@@ -89,11 +94,11 @@ describe("resolveEnter 决策表（光标在末尾才发送）", () => {
   });
 
   test("Shift+Enter 恒为换行（任何位置、菜单开关）", () => {
-    assert.deepEqual(resolveEnter(state({ text: "abc", caret: 1, shift: true, rows: 0 })), {
+    assert.deepEqual(resolveEnter(state({ text: "abc", caret: 1, shiftKey: true, rows: 0 })), {
       action: "newline",
     });
     assert.deepEqual(
-      resolveEnter(state({ text: "/rev", caret: 4, shift: true, menu: "commands", rows: 2, activeIndex: 0 })),
+      resolveEnter(state({ text: "/rev", caret: 4, shiftKey: true, menu: "commands", rows: 2, activeIndex: 0 })),
       { action: "newline" },
     );
   });

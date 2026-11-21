@@ -198,12 +198,19 @@ export function App({ state, send, composerHandleRef }: Props) {
   // 考深度缺失。10s 超时兜底放行，坏服务器不得把用户锁死在加载层；连接报错
   // 立即绕过（横幅才是重点）。
   const modelsReady = state.catalog.models.length > 0;
-  const modelRefReady = !!(state.model ?? state.catalog.defaultModel);
+  // 「可解析」按 spec 字面：引用不仅存在，还要能在 models 里解析出名字
+  // （解析不到时 ModelPicker 会以裸 id 上屏）；极端形态靠 10s 兜底放行。
+  const modelRef = state.model ?? state.catalog.defaultModel;
+  const modelRefReady =
+    !!modelRef &&
+    state.catalog.models.some((m) => m.providerID === modelRef.providerID && m.modelID === modelRef.id);
   const bootReady =
     state.connection === "connected" && state.hydrated && modelsReady && modelRefReady;
   const [bootTimedOut, setBootTimedOut] = useState(false);
   useEffect(() => {
-    if (state.connection !== "connected" || bootReady) {
+    // 10s 兜底对 starting 与 connected 一视同仁：坏服务器不得把用户锁死在
+    // 加载层（报错另有立即绕过）；连接状态翻转会重开一轮窗口。
+    if (state.connection === "error" || bootReady) {
       setBootTimedOut(false);
       return;
     }
@@ -221,6 +228,8 @@ export function App({ state, send, composerHandleRef }: Props) {
       setBarGone(false);
       return;
     }
+    // 900ms 覆盖 styles.css 里 .boot-bar.done 的过渡（0.3s 走满 + 0.35s 延迟
+    // 后 0.45s 淡出，总计 ~0.8s）；两处是耦合常量，改一处需同步另一处。
     const timer = setTimeout(() => setBarGone(true), 900);
     return () => clearTimeout(timer);
   }, [booting]);

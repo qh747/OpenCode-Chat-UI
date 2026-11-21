@@ -5,12 +5,12 @@ import { ComposerDraftStore } from "./composerDrafts";
 import { ContextBar } from "./ContextBar";
 import type { ContextBarProps } from "./ContextBar";
 import { BUILTIN_COMMANDS, commandTail, filterCommands, filterSkills, mergeMentions, splitCommandInput } from "../src/util/commands";
-import type { CommandInfoLike, MentionOption, SkillOption } from "../src/util/commands";
+import type { CommandInfoLike, CommandTail, MentionOption, SkillOption } from "../src/util/commands";
 import type { CommandInfo, SkillInfo } from "../src/opencode/types";
 import type { AttachmentKind, AttachmentPreview, EditorFile } from "../src/webview/protocol";
 import { resolveEnter } from "../src/util/enter-keys";
 import type { SubmitKey } from "../src/util/composer-keys";
-import { mentionTail } from "../src/util/mention-trigger";
+import { mentionTail, type MentionTail } from "../src/util/mention-trigger";
 import { t, type MessageKey } from "../src/util/i18n";
 
 const MAX_IMAGES = 6;
@@ -36,6 +36,21 @@ const BUILTIN_DESCRIPTIONS: Record<string, MessageKey> = {
   fork: "builtin.fork",
   export: "builtin.export",
 };
+
+/** `/` 与 `@` 的触发优先级仲裁（spec 分支 5，三处调用点共用这一个公式）：
+ *  `@` 尾部活跃且 `/` 在其后输入（atIndex 更大）时，命令菜单让位给文件菜单
+ *  （如 `@路径/里的斜杠`）；其余——`/` 在前（含整段以 `/` 开头，与旧的
+ *  startsWith 行为一致）或没有 `@` 尾部——命令菜单优先。 */
+function commandsWin(
+  slash: CommandTail | undefined,
+  mention: MentionTail | undefined,
+  mentionActive: boolean,
+): boolean {
+  if (!slash) {
+    return false;
+  }
+  return !(mentionActive && mention !== undefined && slash.atIndex > mention.atIndex);
+}
 
 interface ComposerProps {
   dispatch: Dispatch;
@@ -158,17 +173,13 @@ export function Composer({
   }, [sessionID]);
 
   /** 光标前缀内的尾部 `/` 触发（spec 分支 5：任意光标位置都能唤起命令菜单）。
-   *  与 `@` 同时命中时的优先级：`@` 已活跃且 `/` 在其后输入（atIndex 更大）时
-   *  让位给文件菜单（如 `@路径/里的斜杠`）；反之 `/` 在前（含整段以 `/` 开头）
-   *  时命令菜单优先，与旧的 startsWith 行为一致。 */
+   *  与 `@` 同时命中时的优先级见 commandsWin。 */
   const commandTailInfo = composing ? undefined : commandTail(text, caret);
   /** 光标前缀内的尾部 `@` 触发；渲染期随 text/caret 重算，永不会与文本脱节。 */
   const mentionTailInfo = composing ? undefined : mentionTail(text, caret);
   const mentionActive =
     mentionTailInfo !== undefined && suppressedAt !== mentionTailInfo.atIndex;
-  const commandMode =
-    commandTailInfo !== undefined &&
-    !(mentionActive && commandTailInfo.atIndex > mentionTailInfo.atIndex);
+  const commandMode = commandsWin(commandTailInfo, mentionTailInfo, mentionActive);
   const mentionOpen = mentionActive && !commandMode;
   const commandQuery = commandMode && commandTailInfo ? commandTailInfo.query : "";
   const commandList = (() => {
@@ -320,9 +331,9 @@ export function Composer({
     }
     const next = mentionTail(value, selectionStart ?? value.length);
     const slash = commandTail(value, selectionStart ?? value.length);
-    // `/` 触发更晚（atIndex 更大）时命令菜单优先，不必拉文件结果（与渲染期
-    // 的优先级公式一致）；其余情况照常请求，菜单开不开由优先级裁决。
-    if (next && suppressedAt !== next.atIndex && !(slash && slash.atIndex > next.atIndex)) {
+    // 优先级仲裁与渲染期共用 commandsWin：`/` 更晚输入时命令菜单优先，不必
+    // 拉文件结果；其余情况照常请求，菜单开不开由仲裁裁决。
+    if (next && suppressedAt !== next.atIndex && !commandsWin(slash, next, true)) {
       requestMention(next.query);
     }
   };
@@ -355,14 +366,20 @@ export function Composer({
     setCaret(pos);
   };
 
+  /** 在触发段 [atIndex, caret) 原位替换为 insert：返回插入后的光标位置。 */
+  const spliceTrigger = (tail: { atIndex: number; caret: number }, insert: string): number => {
+    const pos = tail.atIndex + insert.length;
+    setTextAtCaret(text.slice(0, tail.atIndex) + insert + text.slice(tail.caret), pos);
+    return pos;
+  };
+
   /** 接受命令：在触发段（`/query`）原位替换为 `/<name> `，保留前后正文。 */
   const acceptCommand = (name: string) => {
-    const insert = `/${name} `;
     const tail = composing ? undefined : commandTail(text, caret);
     if (tail) {
-      setTextAtCaret(text.slice(0, tail.atIndex) + insert + text.slice(tail.caret), tail.atIndex + insert.length);
+      spliceTrigger(tail, `/${name} `);
     } else {
-      setTextAtCaret(insert, insert.length);
+      setTextAtCaret(`/${name} `, name.length + 2);
     }
     textareaRef.current?.focus();
   };
@@ -371,14 +388,13 @@ export function Composer({
    *  name, is what the server resolves) and suppresses the file picker that
    *  the fresh `@` tail would otherwise open. */
   const acceptSkill = (skill: SkillOption) => {
-    const insert = `@${skill.id} `;
     const tail = composing ? undefined : commandTail(text, caret);
     if (tail) {
-      setTextAtCaret(text.slice(0, tail.atIndex) + insert + text.slice(tail.caret), tail.atIndex + insert.length);
+      spliceTrigger(tail, `@${skill.id} `);
       // 刚插入的 `@` 在拼接起点；抑制它，避免新尾部再次弹开文件补全。
       setSuppressedAt(tail.atIndex);
     } else {
-      setTextAtCaret(insert, insert.length);
+      setTextAtCaret(`@${skill.id} `, skill.id.length + 2);
       setSuppressedAt(0);
     }
     textareaRef.current?.focus();
@@ -579,7 +595,7 @@ export function Composer({
         menu: commandMode ? "commands" : mentionOpen ? "mentions" : undefined,
         rows: commandMode ? commandList.length + skillRows.length : mentionRows.length,
         activeIndex: active?.index,
-        shift: event.shiftKey,
+        shiftKey: event.shiftKey,
         submitKey,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
@@ -777,7 +793,7 @@ export function Composer({
             const el = event.currentTarget;
             const next = mentionTail(el.value, el.selectionStart ?? undefined);
             const slash = commandTail(el.value, el.selectionStart ?? undefined);
-            if (next && suppressedAt !== next.atIndex && !(slash && slash.atIndex > next.atIndex)) {
+            if (next && suppressedAt !== next.atIndex && !commandsWin(slash, next, true)) {
               requestMention(next.query);
             }
           }}

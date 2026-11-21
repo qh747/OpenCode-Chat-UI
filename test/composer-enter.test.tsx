@@ -180,6 +180,22 @@ describe("composer enter decisions (real DOM)", () => {
     root.unmount();
   });
 
+  test("末尾带参命令（触发段已被空格终止）：Enter 经发送路径执行命令", () => {
+    setup();
+    act(() => {
+      typeInto(textarea(), "/review hello", 13);
+    });
+    act(() => {
+      pressEnter(textarea());
+    });
+    assert.ok(
+      sent.some((m) => m.kind === "runCommand" && m.command === "review"),
+      `带参命令应经 doSend 的拆分执行: ${JSON.stringify(sent)}`,
+    );
+    assert.equal(textarea().value, "");
+    root.unmount();
+  });
+
   test("末尾的完整命令：Enter 直接执行命令语法", () => {
     setup();
     act(() => {

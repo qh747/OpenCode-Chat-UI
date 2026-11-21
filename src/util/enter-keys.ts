@@ -32,42 +32,42 @@ export interface EnterState {
   rows: number;
   /** 高亮行下标。 */
   activeIndex?: number;
-  shift: boolean;
+  /** 修饰键：形状与 shouldSend 的入参一致，便于直传。 */
+  shiftKey: boolean;
   submitKey: SubmitKey;
   ctrlKey: boolean;
   metaKey: boolean;
 }
 
 function sendOrNewline(s: EnterState): EnterAction {
-  return shouldSend(s.submitKey, { shiftKey: s.shift, ctrlKey: s.ctrlKey, metaKey: s.metaKey })
-    ? { action: "send" }
-    : { action: "newline" };
+  return shouldSend(s.submitKey, s) ? { action: "send" } : { action: "newline" };
 }
 
 export function resolveEnter(s: EnterState): EnterAction {
   // Shift+Enter 恒为换行：不拦截，交给浏览器原生行为（与旧实现一致）。
-  if (s.shift) {
+  if (s.shiftKey) {
     return { action: "newline" };
   }
   const caret = s.caret ?? s.text.length;
   const atEnd = caret >= s.text.length;
   const acceptable = s.menu !== undefined && s.rows > 0 && (s.activeIndex ?? 0) < s.rows;
   // 有高亮行：任何光标位置都优先确认补全，绝不发送。
+  // （不变量：菜单开着必有 active 行——由 Composer 的同步 effect 保证。）
   if (acceptable) {
     return { action: "accept" };
   }
   if (s.menu === "commands") {
-    // 行空（查无此令）：中途不动作；末尾的命令语法仍执行，
-    // 正文中间的 `/` 查无匹配则按普通消息发送。
+    // 行空（查无此令）：中途不动作。末尾的裸命令 `/cmd` 直接执行；带参形态
+    // `/cmd args` 的触发段已被空格终止（菜单根本不开），走发送路径由 doSend
+    // 的命令拆分执行；正文中间的 `/` 查无匹配按普通消息发送。
     if (!atEnd) {
       return { action: "none" };
     }
-    if (s.text.startsWith("/")) {
-      const { command, arguments: args } = splitCommandInput(s.text);
+    if (s.text.startsWith("/") && !s.text.includes(" ")) {
+      const { command } = splitCommandInput(s.text);
       if (command) {
-        return { action: "execute", command, args };
+        return { action: "execute", command, args: "" };
       }
-      return { action: "none" };
     }
     return sendOrNewline(s);
   }

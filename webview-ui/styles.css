@@ -65,6 +65,8 @@ body {
   animation: none;
   width: 100%;
   opacity: 0;
+  /* 0.3s 走满 + 0.35s 延迟后 0.45s 淡出，总计 ~0.8s——app.tsx 的 900ms 卸载
+     定时器覆盖这段过渡，两处是耦合常量，改一处需同步另一处。 */
   transition: width 0.3s ease, opacity 0.45s ease 0.35s;
 }
 @keyframes boot-slide {

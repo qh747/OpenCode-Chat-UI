@@ -58,6 +58,15 @@ A history row's status derived from the root session and its folded subagent chi
 **Rewind point**
 A user message used as the boundary for a revert: everything after it (messages and their file changes) is rolled back via the server's staged revert.
 
+**Trigger tail**
+The caret-prefix tail match that opens a completion menu: an `@` followed by a space-free run up to the caret opens the file mentions, a `/` (any caret position) opens the command/skill list. When both fire, the trigger typed later loses to an already-active `@` tail. A space always kills the tail; the trade-off is that slashes inside URLs and paths also fire the `/` menu.
+
+**Enter decision**
+The composer's Enter behaviour: a completion menu with a highlighted row is accepted at the caret (splicing the trigger region in place, surrounding text kept) wherever the caret is; a bare Enter in mid-text does nothing; only caret-at-end Enter sends or runs a command. Pinned by ADR-0015.
+
+**Boot layer**
+The panel's first-paint state: the panel renders from frame one but stays dimmed and inert behind a thin indeterminate progress bar until ready — connected, first snapshot applied, and the catalog's model list resolvable. A 10s timeout releases it regardless; a connection error bypasses it straight to the banner.
+
 ## Integration surface
 
 **opencode server**
