@@ -7,7 +7,14 @@ import { initialState, reducer } from "../webview-ui/state";
 import type { ChatState } from "../webview-ui/state";
 import type { Catalog, HostToWeb, Snapshot } from "../src/webview/protocol";
 import { prependDelta, shouldRequestEarlier, TOP_THRESHOLD } from "../webview-ui/earlier";
-import type { MessageInfo } from "../src/opencode/types";
+import { setLocale } from "../src/util/i18n";
+import type { MessageInfo, ModelRef } from "../src/opencode/types";
+
+// 静态渲染断言按 en 字典逐字比对；锁定 locale,不受其他测试文件的副作用影响。
+setLocale("en");
+
+const CLAUDE: ModelRef = { providerID: "opencode", id: "claude" };
+const GPT: ModelRef = { providerID: "opencode", id: "gpt" };
 
 const catalog: Catalog = {
   agents: [],
@@ -22,6 +29,14 @@ const user = (id: string, created: number): MessageInfo => ({
   id,
   time: { created },
   text: id,
+});
+
+const assistant = (id: string, model?: ModelRef, text?: string): MessageInfo => ({
+  type: "assistant",
+  id,
+  time: { created: 1 },
+  content: text ? [{ type: "text", text }] : [],
+  ...(model ? { model } : {}),
 });
 
 function snapshot(overrides: Partial<Snapshot> = {}): HostToWeb {
@@ -120,15 +135,40 @@ describe("transcript history markers", () => {
     assert.match(html, /history-loading/);
   });
 
-  test("once the beginning is loaded a start marker closes the history (acceptance 3)", () => {
-    const html = render([user("u1", 100)], false, false);
+  test("once the beginning is loaded the start marker names the session's model (acceptance 3)", () => {
+    const html = render([user("u1", 100), assistant("a1", CLAUDE)], false, false);
     assert.match(html, /history-start/);
+    assert.match(html, /Model: opencode\/claude/);
+  });
+
+  test("a transcript whose assistant messages carry no model shows no start marker", () => {
+    const html = render([user("u1", 100), assistant("a1")], false, false);
+    assert.doesNotMatch(html, /history-start/);
   });
 
   test("neither marker while the top has not been reached and nothing is loading", () => {
-    const html = render([user("u1", 100)], true, false);
+    const html = render([user("u1", 100), assistant("a1", CLAUDE)], true, false);
     assert.doesNotMatch(html, /history-loading/);
     assert.doesNotMatch(html, /history-start/);
+  });
+
+  test("a model change inserts a switch marker above the first reply of the new model", () => {
+    const html = render(
+      [assistant("a1", CLAUDE, "first reply"), user("u2", 200), assistant("a2", GPT, "second reply")],
+      false,
+      false,
+    );
+    const firstReply = html.indexOf("first reply");
+    const marker = html.indexOf("Switched to model: opencode/gpt");
+    const secondReply = html.indexOf("second reply");
+    assert.ok(firstReply >= 0 && marker > firstReply, "the marker sits below the old model's reply");
+    assert.ok(marker < secondReply, "the marker sits above the new model's first reply");
+  });
+
+  test("switch markers show while older pages are still loading; the start marker does not", () => {
+    const html = render([assistant("a1", CLAUDE), assistant("a2", GPT)], true, false);
+    assert.match(html, /Switched to model: opencode\/gpt/);
+    assert.doesNotMatch(html, /Model: opencode\/claude/);
   });
 });
 

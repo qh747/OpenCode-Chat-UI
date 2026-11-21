@@ -10,6 +10,12 @@ The readable conversation record the chat panel renders: one row per user prompt
 **Load-earlier**
 Backfilling the transcript's older messages on demand as the reader reaches the top. What has been backfilled is append-only: a refresh or a turn end never drops loaded history, and prepending a page keeps the reader's place stable. The history closes only when the server says the beginning is reached. Distinct from export, which always covers the whole session in one pass.
 
+**Model timeline**
+The transcript's own record of which model produced what: the start marker at the very top names the model the session opened with, and a switch marker sits directly above the first reply of every changed model — switching back marks again. It is derived purely from the model ref each assistant message carries; a message without one is skipped, not treated as a change, and a variant change alone is not a switch. Distinct from the session's current model, which is the picker's latest setting shown in the session info panel, not the per-message history.
+
+**Jump-to-bottom pill**
+The floating ↓ button at the transcript's bottom edge: two notches of downward wheel (touchpads count by actual scroll distance) while away from the bottom surface it, clicking it scrolls to the latest content, and reaching the bottom or a session switch hides it. An upward wheel resets the count but not a pill already shown. Distinct from the stick-to-bottom rule, which keeps the view pinned while content grows — the pill only exists once the user has scrolled away.
+
 **Session**
 One conversation thread with the agent, scoped to a project directory. Identified by a server-assigned ID; has a title, cost, token usage and timestamps. Created lazily on first message or explicitly via "New Session".
 

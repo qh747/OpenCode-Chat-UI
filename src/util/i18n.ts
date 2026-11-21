@@ -244,7 +244,9 @@ const en = {
 
   // transcript history
   historyLoading: "Loading earlier messages…",
-  historyStart: "Start of conversation",
+  jumpToLatest: "Jump to latest",
+  modelAtStart: "Model: {model}",
+  modelSwitched: "Switched to model: {model}",
 };
 
 const zhCn: Record<MessageKey, string> = {
@@ -480,7 +482,9 @@ const zhCn: Record<MessageKey, string> = {
 
   // transcript history
   historyLoading: "正在加载更早的消息…",
-  historyStart: "已到会话开头",
+  jumpToLatest: "回到底部",
+  modelAtStart: "模型: {model}",
+  modelSwitched: "已切换模型: {model}",
 };
 
 /** All copy, per locale. `en` owns the canonical key set. */

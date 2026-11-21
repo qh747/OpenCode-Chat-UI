@@ -477,6 +477,33 @@ body {
   margin: 0 8px 4px;
   padding-bottom: 8px;
 }
+/* 「回到底部」胶囊（jump-bottom）：悬浮在 transcript 底沿的小圆钮——
+   sticky 挂在滚动容器内容末尾,内容多高都贴着视口下沿,不推移任何条带。 */
+.jump-bottom {
+  position: sticky;
+  bottom: 10px;
+  align-self: center;
+  flex: none;
+  z-index: 10;
+  margin-top: 4px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.jump-bottom:hover {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-fg);
+}
 .msg-failure {
   font-family: var(--mono);
   font-size: 11px;

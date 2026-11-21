@@ -3,6 +3,7 @@ import type { ChatState } from "./state";
 import type { WebToHost } from "../src/webview/protocol";
 import { t } from "../src/util/i18n";
 import { prependDelta, shouldRequestEarlier } from "./earlier";
+import { isAtBottom, updateJumpWheel, type JumpWheelDecision } from "./jump-bottom";
 import { MessageList, ConversationErrors } from "./MessageList";
 import { Composer } from "./Composer";
 import { DiffList, PermissionCard, Welcome } from "./Cards";
@@ -35,6 +36,9 @@ export function App({ state, send, composerHandleRef }: Props) {
   const programmaticScroll = useRef(false);
   /** 用户最后一次真实滚动位置的 scrollTop；未滚动过为 undefined。 */
   const lastUserScroll = useRef<number | undefined>(undefined);
+  /** 「回到底部」胶囊：滚轮累计（ref,不触发渲染）与显示状态（state）。 */
+  const jumpWheel = useRef<JumpWheelDecision>({ delta: 0, show: false });
+  const [jumpDown, setJumpDown] = useState(false);
   /** 上一次渲染的列表度量：用于识别「更早消息被前插」。 */
   const listMetrics = useRef<{ firstId: string | undefined; height: number }>({
     firstId: undefined,
@@ -139,6 +143,12 @@ export function App({ state, send, composerHandleRef }: Props) {
       send({ kind: "loadEarlier" });
     }
   }, [state.messages, state.hasEarlier, state.loadingEarlier, send]);
+
+  // 会话切换：胶囊隐没、滚轮累计清零,不带入下一个会话。
+  useEffect(() => {
+    jumpWheel.current = { delta: 0, show: false };
+    setJumpDown(false);
+  }, [state.sessionID]);
 
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
   // 子代理视图（GLOSSARY「Subagent view」）：三条列表的显示规则共用这一个
@@ -389,8 +399,13 @@ export function App({ state, send, composerHandleRef }: Props) {
             return;
           }
           const el = event.currentTarget;
-          stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          stickToBottom.current = isAtBottom(el);
           lastUserScroll.current = el.scrollTop;
+          if (stickToBottom.current) {
+            // 到底即隐没胶囊并清零滚轮累计：重现需要重新滚满两格（jump-bottom）。
+            jumpWheel.current = { delta: 0, show: false };
+            setJumpDown(false);
+          }
           if (
             shouldRequestEarlier({
               hasEarlier: state.hasEarlier,
@@ -400,6 +415,17 @@ export function App({ state, send, composerHandleRef }: Props) {
           ) {
             send({ kind: "loadEarlier" });
           }
+        }}
+        onWheel={(event) => {
+          // 滚轮是用户操作：向下累计,满两格当量显示胶囊;向上滚清零累计;
+          // 已在底部不计数且直接隐没（规则见 jump-bottom 的纯函数）。
+          const next = updateJumpWheel(
+            jumpWheel.current,
+            event.deltaY,
+            isAtBottom(event.currentTarget),
+          );
+          jumpWheel.current = next;
+          setJumpDown(next.show);
         }}
       >
         {!hasMessages && state.connection !== "error" ? (
@@ -417,6 +443,34 @@ export function App({ state, send, composerHandleRef }: Props) {
           />
         )}
         <ConversationErrors errors={state.errors} />
+        {jumpDown && hasMessages && (
+          <button
+            type="button"
+            className="jump-bottom"
+            onClick={() => {
+              const list = listRef.current;
+              if (list) {
+                programmaticScroll.current = true;
+                list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+              }
+              jumpWheel.current = { delta: 0, show: false };
+              setJumpDown(false);
+            }}
+            aria-label={t("jumpToLatest")}
+            title={t("jumpToLatest")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              <path
+                d="m19 12-7 7-7-7"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       {hasMessages && state.pending.map((request) => (

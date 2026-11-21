@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Markdown } from "./Markdown";
 import type {
   AssistantContent,
@@ -15,6 +15,7 @@ import {
 } from "../src/util/message-attachments";
 import { stripTrailingMarkers } from "../src/util/dcp-markers";
 import { t, type MessageKey } from "../src/util/i18n";
+import { firstAssistantModel, modelLabel, modelSwitches } from "./model-markers";
 
 /** How a tool call reads in the transcript. */
 const TOOL_VERBS: Record<string, MessageKey> = {
@@ -448,36 +449,52 @@ export function MessageList({
 }: Props) {
   const [preview, setPreview] = useState<AttachmentItem | undefined>(undefined);
   const visible = messages.filter((m) => m.type === "user" || m.type === "assistant");
+  // 模型时间线（model-markers）：顶部行显示会话开始用的模型；中途换模型
+  // 的提示行插在新模型第一条 assistant 消息正上方,按消息 id 查找。
+  const startModel = firstAssistantModel(messages);
+  const switchByMessageId = new Map(
+    modelSwitches(messages).map((marker) => [marker.messageId, marker]),
+  );
   return (
     <>
       <div className="message-list" id="message-list">
         {loadingEarlier && <div className="history-loading">{t("historyLoading")}</div>}
-        {!loadingEarlier && !hasEarlier && visible.length > 0 && (
-          <div className="history-start">{t("historyStart")}</div>
+        {!loadingEarlier && !hasEarlier && visible.length > 0 && startModel && (
+          <div className="history-start">{t("modelAtStart", { model: modelLabel(startModel) })}</div>
         )}
-        {visible.map((message) =>
-          message.type === "user" ? (
-            <UserMessage
-              key={message.id}
-              message={message}
-              onRewind={onRewind}
-              onOpenFile={onOpenFile}
-              onOpenUrl={onOpenUrl}
-              onCopyCode={onCopyCode}
-              onPreviewImage={setPreview}
-            />
-          ) : (
-            <AssistantMessage
-              key={message.id}
-              message={message}
-              streaming={
-                busy && message.type === "assistant" && !(message as AssistantMessage).finish
-              }
-              onOpenUrl={onOpenUrl}
-              onCopyCode={onCopyCode}
-            />
-          ),
-        )}
+        {visible.map((message) => {
+          if (message.type === "user") {
+            return (
+              <UserMessage
+                key={message.id}
+                message={message}
+                onRewind={onRewind}
+                onOpenFile={onOpenFile}
+                onOpenUrl={onOpenUrl}
+                onCopyCode={onCopyCode}
+                onPreviewImage={setPreview}
+              />
+            );
+          }
+          const switched = switchByMessageId.get(message.id);
+          return (
+            <Fragment key={message.id}>
+              {switched && (
+                <div className="history-start">
+                  {t("modelSwitched", { model: modelLabel(switched.model) })}
+                </div>
+              )}
+              <AssistantMessage
+                message={message}
+                streaming={
+                  busy && message.type === "assistant" && !(message as AssistantMessage).finish
+                }
+                onOpenUrl={onOpenUrl}
+                onCopyCode={onCopyCode}
+              />
+            </Fragment>
+          );
+        })}
         {busy && (
           <div className="typing">
             <span className="dot" />
