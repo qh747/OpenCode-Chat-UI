@@ -36,6 +36,11 @@
 - **类型收窄**：`MessageInfo` 的第三变体 `{type: string; id: string}` 无法被判别式 `!==` 排除（其 `type` 是 string），`modelSwitches` 用类型谓词 `isAssistant` 统一收窄。
 - **scrollTo 断言语义**：点击传给 `scrollTo` 的是内容总高（`scrollHeight`），由浏览器钳制到底部；测试断言传参而非预计算的底部位置（首版断言写错已修正）。
 - **钉底判定收编**：`onScroll` 里的字面 `40` 换成共享 `isAtBottom(el)`，与胶囊共用一个阈值语义。
+- **评审收尾（Standards/Spec 两轴，2026-11-22）**：`hidePill()` 收敛三处胶囊重置三元组；共享测试工厂 `test/fixtures.ts`（Standards #2）；反转测试补修订出处注释（Standards #1，硬违规已修）；`.history-start` 类名保留（Q10 选型）但 CSS 注释写明双用途；测试头注释日期勘误；GLOSSARY 词条语病修正。
+- **评审补记的三条行为事实（记录，不改行为）**：
+  1. 胶囊渲染条件含 `hasMessages`——spec 外的良性防御：挡住会话切换瞬窗「胶囊还在、消息已清空」的一帧。
+  2. Q13 的 240 当量按**像素口径**（`deltaMode 0`）；VS Code webview 即 Chromium 恒为像素，line 模式宿主不支持（`updateJumpWheel` 注释已写明前提）。
+  3. 点击的平滑滚动是全库首个**连发 scroll 事件**的程序滚动：一次性 `programmaticScroll` 旗标只吞第一个，动画期后续事件按用户滚动处理（`stickToBottom`/`lastUserScroll` 随动画更新）。行为收敛无害——动画结束到底、不会误触 loadEarlier，happy path 已由测试锁定；若未来引入第二处 smooth 滚动，旗标需升级为时间窗/计数语义。
 
 ## What was implemented
 

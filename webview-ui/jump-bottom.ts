@@ -7,7 +7,10 @@
 /** 「接近底部」的阈值（px），与 transcript 钉底判定共用一个语义。 */
 export const BOTTOM_THRESHOLD = 40;
 
-/** 向下滚轮累计到这个量（约两格）就显示胶囊。 */
+/**
+ * 向下滚轮累计到这个量（约两格）就显示胶囊。口径是像素（deltaMode 0，
+ * Chromium 的默认）；VS Code webview 即 Chromium,line 模式宿主不在支持范围。
+ */
 export const JUMP_WHEEL_DELTA = 240;
 
 export function isAtBottom(input: {

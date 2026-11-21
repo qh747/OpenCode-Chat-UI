@@ -8,13 +8,11 @@ import type { ChatState } from "../webview-ui/state";
 import type { Catalog, HostToWeb, Snapshot } from "../src/webview/protocol";
 import { prependDelta, shouldRequestEarlier, TOP_THRESHOLD } from "../webview-ui/earlier";
 import { setLocale } from "../src/util/i18n";
-import type { MessageInfo, ModelRef } from "../src/opencode/types";
+import { user, assistant, CLAUDE, GPT } from "./fixtures";
+import type { MessageInfo } from "../src/opencode/types";
 
 // 静态渲染断言按 en 字典逐字比对；锁定 locale,不受其他测试文件的副作用影响。
 setLocale("en");
-
-const CLAUDE: ModelRef = { providerID: "opencode", id: "claude" };
-const GPT: ModelRef = { providerID: "opencode", id: "gpt" };
 
 const catalog: Catalog = {
   agents: [],
@@ -23,21 +21,6 @@ const catalog: Catalog = {
   skills: [],
   recentModels: [],
 };
-
-const user = (id: string, created: number): MessageInfo => ({
-  type: "user",
-  id,
-  time: { created },
-  text: id,
-});
-
-const assistant = (id: string, model?: ModelRef, text?: string): MessageInfo => ({
-  type: "assistant",
-  id,
-  time: { created: 1 },
-  content: text ? [{ type: "text", text }] : [],
-  ...(model ? { model } : {}),
-});
 
 function snapshot(overrides: Partial<Snapshot> = {}): HostToWeb {
   return {
@@ -135,6 +118,10 @@ describe("transcript history markers", () => {
     assert.match(html, /history-loading/);
   });
 
+  // 语义反转红分类（CODING_STANDARDS）：本测试锁的是被反转的世界观，
+  // 断言已随新世界观翻转——顶部行不再无条件显示「已到会话开头」，而是
+  // 显示会话开始模型、无 model 整行不显示。修订出处：
+  // .scratch/model-markers-jump-bottom/spec.md（grilling Q11，用户确认）。
   test("once the beginning is loaded the start marker names the session's model (acceptance 3)", () => {
     const html = render([user("u1", 100), assistant("a1", CLAUDE)], false, false);
     assert.match(html, /history-start/);

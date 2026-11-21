@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import type { ChatState } from "./state";
 import type { WebToHost } from "../src/webview/protocol";
 import { t } from "../src/util/i18n";
@@ -39,6 +39,11 @@ export function App({ state, send, composerHandleRef }: Props) {
   /** 「回到底部」胶囊：滚轮累计（ref,不触发渲染）与显示状态（state）。 */
   const jumpWheel = useRef<JumpWheelDecision>({ delta: 0, show: false });
   const [jumpDown, setJumpDown] = useState(false);
+  /** 胶囊的统一隐没路径：清零滚轮累计并撤下显示——到底、点击、会话切换共用。 */
+  const hidePill = useCallback(() => {
+    jumpWheel.current = { delta: 0, show: false };
+    setJumpDown(false);
+  }, []);
   /** 上一次渲染的列表度量：用于识别「更早消息被前插」。 */
   const listMetrics = useRef<{ firstId: string | undefined; height: number }>({
     firstId: undefined,
@@ -146,9 +151,8 @@ export function App({ state, send, composerHandleRef }: Props) {
 
   // 会话切换：胶囊隐没、滚轮累计清零,不带入下一个会话。
   useEffect(() => {
-    jumpWheel.current = { delta: 0, show: false };
-    setJumpDown(false);
-  }, [state.sessionID]);
+    hidePill();
+  }, [state.sessionID, hidePill]);
 
   const hasMessages = state.messages.some((m) => m.type === "user" || m.type === "assistant");
   // 子代理视图（GLOSSARY「Subagent view」）：三条列表的显示规则共用这一个
@@ -402,9 +406,8 @@ export function App({ state, send, composerHandleRef }: Props) {
           stickToBottom.current = isAtBottom(el);
           lastUserScroll.current = el.scrollTop;
           if (stickToBottom.current) {
-            // 到底即隐没胶囊并清零滚轮累计：重现需要重新滚满两格（jump-bottom）。
-            jumpWheel.current = { delta: 0, show: false };
-            setJumpDown(false);
+            // 到底即隐没胶囊：重现需要重新滚满两格（jump-bottom）。
+            hidePill();
           }
           if (
             shouldRequestEarlier({
@@ -453,8 +456,7 @@ export function App({ state, send, composerHandleRef }: Props) {
                 programmaticScroll.current = true;
                 list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
               }
-              jumpWheel.current = { delta: 0, show: false };
-              setJumpDown(false);
+              hidePill();
             }}
             aria-label={t("jumpToLatest")}
             title={t("jumpToLatest")}

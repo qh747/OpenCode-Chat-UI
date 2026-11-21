@@ -463,7 +463,9 @@ body {
   gap: 6px;
   margin-top: 10px;
 }
-/* transcript history: the backfill indicator and the closed-history marker */
+/* transcript history: 回填指示行与会话标记行。.history-start 双用途
+   （spec model-markers-jump-bottom Q10 显式选型复用同一样式）：列表顶部的
+   会话开始行（显示会话开始模型）与消息流中的模型切换行。 */
 .history-loading,
 .history-start {
   display: flex;

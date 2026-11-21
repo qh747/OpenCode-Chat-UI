@@ -1,4 +1,5 @@
-// 「回到底部」胶囊（spec 2025-11 规划·功能2）的交互测试。
+// 「回到底部」胶囊（spec .scratch/model-markers-jump-bottom/spec.md，2026-11-22·功能2）
+// 的交互测试。
 // 静态渲染跑不到滚轮,这里沿用 subagent-nav 的真实 DOM 反馈环
 // （jsdom + createRoot + act）,直接断言用户操作：两格滚轮出现胶囊、
 // 上滚重置计数、点击回底并隐没、到底自动隐没、会话切换重置。
@@ -13,7 +14,7 @@ import { act } from "react-dom/test-utils";
 import { App } from "../webview-ui/app";
 import { initialState, type ChatState } from "../webview-ui/state";
 import type { Catalog, WebToHost } from "../src/webview/protocol";
-import type { MessageInfo } from "../src/opencode/types";
+import { user, assistant } from "./fixtures";
 
 const CATALOG: Catalog = {
   agents: [{ id: "build", name: "Build", mode: "primary", hidden: false }],
@@ -23,14 +24,6 @@ const CATALOG: Catalog = {
   recentModels: [],
   defaultModel: { providerID: "opencode", id: "deepseek" },
 };
-
-const userMsg = (id: string): MessageInfo => ({ type: "user", id, time: { created: 1 }, text: id });
-const assistantMsg = (id: string): MessageInfo => ({
-  type: "assistant",
-  id,
-  time: { created: 1 },
-  content: [{ type: "text", text: "reply" }],
-});
 
 // 伪造一个可滚动、不在底部的 transcript：内容 2000px,视口 500px。
 const FAKE_HEIGHT = 2000;
@@ -45,7 +38,7 @@ function appState(extra: Partial<ChatState> = {}): ChatState {
     catalogLoaded: true,
     sessionID: "ses_a",
     catalog: CATALOG,
-    messages: [userMsg("u1"), assistantMsg("a1")],
+    messages: [user("u1"), assistant("a1", undefined, "reply")],
     ...extra,
   };
 }

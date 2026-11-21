@@ -1,5 +1,6 @@
-// 「回到底部」胶囊（spec 2025-11 规划·功能2）的判定测试：到底检测与
-// 滚轮累计——纯函数缝,不经 DOM。断言全部使用独立字面量,不重算实现。
+// 「回到底部」胶囊（spec .scratch/model-markers-jump-bottom/spec.md，2026-11-22·功能2）
+// 的判定测试：到底检测与滚轮累计——纯函数缝,不经 DOM。
+// 断言全部使用独立字面量,不重算实现。
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import { isAtBottom, JUMP_WHEEL_DELTA, updateJumpWheel } from "../webview-ui/jump-bottom";
