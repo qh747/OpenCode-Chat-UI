@@ -28,6 +28,7 @@
 - **Q5 嵌套观察 = 预防性**（未见过真实嵌套）。
 - **Q6 插件姿态 = Server config panel 加一行**「Subagent depth / 派生深度」，写 `experimental.subagent_depth`，显示 explicit value + 缺省回落 1。键在 `experimental.*` 下、官方可能变动——写错键无害，失败软着陆。不注入、不代管、不写 README 之外的文档。
 - **Q7 改名范围 = 只改显示名**：市场 ID `quhan.opencode-panel` 不动（保安装/更新链）；GitHub 仓库名不动（用户确认仓库名与此无关）。
+  - **修订（2026-11-21 晚，用户推翻）**：ID 一并更名 → **`quhan.opencode-sidebar`**。依据：实际安装基数 ≈ 0（市场上架 4 安装，且用户确认无旧用户）；旧条目 `quhan.opencode-panel` 由用户在发布者后台自行下架。新条目版本从 0.4.23 起算（旧 ID 从未发布过 0.4.23，无同号冲突）。
 - **Q9/Q10 定名 = OpenCode Sidebar**（朴素 UI 名词 + 首词 OpenCode 承担官方语感；README 既有 "Community integration, not an official opencode product" 声明压住冒充风险）。
 
 ## What was implemented

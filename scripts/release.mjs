@@ -18,7 +18,7 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const version = pkg.version;
 const outDir = path.join(root, "dist");
 // 产物文件名跟显示名走（opencode-sidebar-<version>.vsix）：文件名是给人看
-// 的，市场身份由 pkg.name（扩展 ID quhan.opencode-panel）决定，不动。
+// 的，市场身份由 pkg.name（扩展 ID quhan.opencode-sidebar）决定。
 const artifactName = pkg.displayName.toLowerCase().replace(/\s+/g, "-");
 const outFile = path.join(outDir, `${artifactName}-${version}.vsix`);
 
