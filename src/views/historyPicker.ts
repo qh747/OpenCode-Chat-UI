@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { groupSessionsByDate } from "../util/sessions";
+import { displaySessionTitle, groupSessionsByDate, sortByCreatedDesc } from "../util/sessions";
 import { t } from "../util/i18n";
 import type { OpencodeHost } from "../host";
 import type { SessionInfo } from "../opencode/types";
@@ -39,12 +39,17 @@ export async function showHistoryPicker(host: OpencodeHost, actions: HistoryActi
   // jump list, and folding structure into it would break arrow-key navigation.
   // The webview history menu is where the parent/child shape lives (Q20).
   const roots = page.data.filter((session) => session.parentID === undefined);
-  for (const [label, list] of groupByDate(roots)) {
+  // 客户端创建序（spec Q7，session-stability 工单 02）：与 webview 历史菜单
+  // 同序——排序、分桶、时间 description 三处一致，位置不随活动跳动。
+  const ordered = sortByCreatedDesc(roots, (session) => session.time.created);
+  for (const [label, list] of groupByDate(ordered)) {
     items.push({ label, kind: vscode.QuickPickItemKind.Separator });
     for (const session of list) {
       items.push({
-        label: session.title || "Untitled",
-        description: relativeTime(session.time.updated),
+        // 自动标题本地化（spec Q11a）：命中显示 t("newSession")，原样降级其他。
+        label: displaySessionTitle(session.title, "Untitled"),
+        // 时间列读创建时间（spec Q7），与排序自洽。
+        description: relativeTime(session.time.created),
         detail: session.id,
         sessionId: session.id,
         buttons: [

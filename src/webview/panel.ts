@@ -30,6 +30,7 @@ import {
   deriveSessionStatus,
   groupHistoryRowsByDate,
   rootSessions,
+  sortByCreatedDesc,
 } from "../util/sessions";
 import type { HistoryRow } from "../util/sessions";
 import { GitStatusProvider, readGitHead } from "../git";
@@ -590,6 +591,10 @@ export class ChatController implements vscode.Disposable {
     if (!client) {
       return undefined;
     }
+    // 点按即反馈（spec Q10a，工单 03）：首个网络 await 前发轻量状态消息，
+    // 慢网/服务器僵死时用户立即看到点击已生效；落地/报错后成对清除。
+    // 30s 超时值不动（spec：改短治标不治本且误伤慢网）。
+    this.post({ kind: "creatingSession", creating: true });
     const pendingAgent = this.pendingAgent;
     const pendingModel = this.pendingModel;
     this.pendingAgent = undefined;
@@ -607,6 +612,11 @@ export class ChatController implements vscode.Disposable {
       this.worktree = undefined;
       this.parentSessionID = undefined;
       this.messages = [];
+      // 离开一个会话必须清它的回填历史（session-stability 工票 01）：
+      // 旧会话滚顶回填的 earlierMessages 若不清,会经 renderableTranscript
+      // 合进新会话快照——标题换了,消息流还是旧会话的。switchSession、
+      // rewindTo 与回滚点变化三处已有同样的调用。
+      this.resetLoadedHistory();
       this.resetStreams();
       this.pending = [];
       this.diffs = [];
@@ -633,11 +643,15 @@ export class ChatController implements vscode.Disposable {
         await this.safeCall(() => client.setModel(sessionId, pendingModel));
       }
       await this.refreshSessionMeta();
+      // 落地：撤反馈，快照随即将头部翻到新会话。
+      this.post({ kind: "creatingSession", creating: false });
       this.postSnapshot();
       return this.sessionId;
     } catch (error) {
       this.pendingAgent = pendingAgent;
       this.pendingModel = pendingModel;
+      // 报错：先撤反馈再报横幅，「创建中」不悬空。
+      this.post({ kind: "creatingSession", creating: false });
       this.post({ kind: "error", message: errorMessage(error) });
       return undefined;
     }
@@ -937,12 +951,14 @@ export class ChatController implements vscode.Disposable {
   /**
    * 会话删除即丢弃其会话侧状态(spec Q10/Q19):队列(未发送消息不再有效,
    * 暂存附件一并释放)与驻留记忆(删除的会话不得留下幽灵记忆)。删除的若
-   * 正是显示会话,连表单一起清——表单属于显示态;别的会话的表单不能动。
+   * 正是显示会话,连表单与回填历史一起清——两者同属显示态,快照不得带
+   * 已删会话的旧内容(session-stability 工票 01);别的会话的显示态不动。
    */
   private dropSessionState(id: string | undefined): void {
     this.dropQueueState(id);
     if (id === this.sessionId) {
       this.clearForms();
+      this.resetLoadedHistory();
     }
     this.sessionDismissed.drop(id);
   }
@@ -1323,7 +1339,9 @@ export class ChatController implements vscode.Disposable {
       }));
       // 行颜色只由主会话自身状态决定（ADR-0016）：子会话已从菜单消失，
       // 不再聚合折叠子代理的状态。
-      const rootRows = rootSessions(rows);
+      // 客户端创建序重排（spec Q7，session-stability 工单 02）：服务器只能
+      // 按 updated 排序返回，行位随活动跳动；本地改按 created 倒序，位置不再移动。
+      const rootRows = rootSessions(sortByCreatedDesc(rows, (row) => row.created));
       this.post({ kind: "history", groups: groupHistoryRowsByDate(rootRows) });
     });
   }
@@ -1981,6 +1999,12 @@ export class ChatController implements vscode.Disposable {
     const sessionID = this.sessionId;
     await this.safeCall(async () => {
       const result = await client.pendingPermissions(this.host.folderPath);
+      // 会话守卫(session-stability 工票 01):晚到的答案若来自用户已离开
+      // 的会话,丢弃——不得落宿主态、随下一张快照以新会话的名义扇出
+      // (镜像 refreshMessages 的 pollSessionCurrent 捕获-比对模式)。
+      if (!this.pollSessionCurrent(sessionID)) {
+        return;
+      }
       const previous = this.pending.length;
       this.pending = result.data.filter((p) => p.sessionID === sessionID);
       this.post({ kind: "permissions", sessionID, pending: this.pending });
@@ -2011,6 +2035,11 @@ export class ChatController implements vscode.Disposable {
     const sessionID = this.sessionId;
     await this.safeCall(async () => {
       const result = await client.sessionForms(sessionID);
+      // 会话守卫同 refreshPermissions:晚到的表单不得进新会话的宿主态
+      // (session-stability 工票 01),B 的页面永不出现 A 的提问卡。
+      if (!this.pollSessionCurrent(sessionID)) {
+        return;
+      }
       this.forms = result.data.filter((f) => f.sessionID === sessionID);
       this.post({ kind: "forms", sessionID, forms: this.forms });
     });

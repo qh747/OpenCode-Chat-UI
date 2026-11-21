@@ -23,6 +23,7 @@ const en = {
 
   // header / session surfaces
   newSession: "New session",
+  creatingSession: "Creating session…",
   settingsTitle: "Settings",
   serverConfigEntry: "Server configuration",
   historyTitle: "Session history",
@@ -264,6 +265,7 @@ const zhCn: Record<MessageKey, string> = {
 
   // header / session surfaces
   newSession: "新会话",
+  creatingSession: "创建中…",
   settingsTitle: "设置",
   serverConfigEntry: "服务器配置",
   historyTitle: "会话历史",

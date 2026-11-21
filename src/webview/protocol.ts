@@ -184,6 +184,9 @@ export type HostToWeb =
   | { kind: "editors"; editors: EditorFile[] }
   | { kind: "attachmentPreview"; preview: AttachmentPreview }
   | { kind: "error"; message: string }
+  /** 点 + 后、新会话落地前的轻量反馈（spec Q10a）：成对发送，
+   *  落地/报错后必清；30s HTTP 超时值不动（慢网是合法场景）。 */
+  | { kind: "creatingSession"; creating: boolean }
   | { kind: "fileResults"; requestId: string; results: { path: string; name: string }[]; sessionID?: string }
   | { kind: "pickedPaths"; requestId: string; paths: string[]; sessionID?: string };
 

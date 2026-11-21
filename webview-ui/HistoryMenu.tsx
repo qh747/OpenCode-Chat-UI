@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "./state";
 import type { HistoryGroup } from "../src/webview/protocol";
-import { relativeSessionTime } from "../src/util/sessions";
+import { relativeSessionTime, displaySessionTitle } from "../src/util/sessions";
 import type { HistoryRow } from "../src/util/sessions";
 import { t } from "../src/util/i18n";
 
@@ -69,14 +69,18 @@ export function HistoryMenu({ dispatch, groups, currentSessionId, onOpen, initia
         <button
           className={`history-row${session.id === currentSessionId ? " is-current" : ""}`}
           onClick={() => switchTo(session.id)}
-          title={session.title}
+          title={displaySessionTitle(session.title, t("untitled"))}
         >
           {/* 状态直接用标题颜色表达，不再渲染独立圆点（spec 分支 1）；
-              行状态就是该会话自身的状态（ADR-0016），不聚合子代理。 */}
+              行状态就是该会话自身的状态（ADR-0016），不聚合子代理。
+              服务器自动标题本地化（spec Q11a）：命中显示 t("newSession")，
+              原始 ISO 串不在文本与 tooltip 露出。 */}
           <span className={`history-title status-${session.status}`}>
-            {session.title || t("untitled")}
+            {displaySessionTitle(session.title, t("untitled"))}
           </span>
-          <span className="history-time">{relativeSessionTime(session.updated)}</span>
+          {/* 时间列读创建时间（spec Q7）：与行序（created 倒序）自洽，
+              活动不改变行位也不改变这一列。 */}
+          <span className="history-time">{relativeSessionTime(session.created)}</span>
         </button>
         <div className="history-actions">
           <button

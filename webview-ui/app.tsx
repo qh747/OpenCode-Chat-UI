@@ -10,6 +10,7 @@ import { DiffList, PermissionCard, Welcome } from "./Cards";
 import { Dropdown } from "./Dropdown";
 import { ModelPicker } from "./ModelPicker";
 import { HistoryMenu } from "./HistoryMenu";
+import { displaySessionTitle } from "../src/util/sessions";
 import { QueueStrip } from "./QueueStrip";
 import { QuestionForm } from "./QuestionForm";
 import { SubagentStrip } from "./SubagentStrip";
@@ -342,9 +343,17 @@ export function App({ state, send, composerHandleRef }: Props) {
             </g>
           </svg>
         )}
-        <span className="header-title" title={state.title}>
-          {state.title ?? t("newSession")}
+        <span
+          className="header-title"
+          title={displaySessionTitle(state.title, t("newSession"))}
+        >
+          {displaySessionTitle(state.title, t("newSession"))}
         </span>
+        {state.creatingSession ? (
+          // 点 + 后、新会话落地前的轻量内联反馈（spec Q10a，工票 03）：
+          // 头部小字提示，落地/报错即撤；30s 超时不动（慢网是合法场景）。
+          <span className="header-creating">{t("creatingSession")}</span>
+        ) : null}
         <span className="spacer" />
         <button className="icon-btn" onClick={() => send({ kind: "openSettings" })} title={t("settingsTitle")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">

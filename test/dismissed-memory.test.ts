@@ -93,6 +93,9 @@ function deleteController(current: string) {
     sessionQueues: new SessionQueues(),
     sessionDismissed: new SessionDismissed(),
     stagedImages: new Map<string, unknown>(),
+    // 真 dropSessionState 会清显示会话的回填历史(session-stability 工票
+    // 01);本文件主题是驻留记忆,桩为 no-op 即可,断言不涉及回填。
+    resetLoadedHistory: () => {},
     client: () => ({ deleteSession: async () => {} }),
     safeCall: async (fn: () => unknown) => {
       await fn();
@@ -120,6 +123,8 @@ function eventController(current: string) {
     sessionQueues: new SessionQueues(),
     sessionDismissed: new SessionDismissed(),
     stagedImages: new Map<string, unknown>(),
+    // 同 deleteController:真 dropSessionState 现在会清回填历史,主题无关,桩 no-op。
+    resetLoadedHistory: () => {},
     dropSessionState: proto.dropSessionState,
     dropQueueState: proto.dropQueueState,
     clearForms: () => {},

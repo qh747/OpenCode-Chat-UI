@@ -65,3 +65,6 @@ import "./tokens.test";
 import "./message-pages.test";
 import "./history-backfill.test";
 import "./earlier-store.test";
+import "./session-stability.test";
+import "./history-order.test";
+import "./session-creating.test";

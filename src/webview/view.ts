@@ -70,10 +70,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   resolveWebviewView(view: vscode.WebviewView): void {
     view.webview.options = { enableScripts: true, localResourceRoots: [this.extensionUri] };
     view.webview.html = buildWebviewHtml(view.webview, this.extensionUri);
-    view.onDidDispose(() => {
-      /* sink disposed via registered disposable */
-    });
-    bridgeWebview(this.controller, view.webview, () => {});
+    // 保留 bridgeWebview 的 Disposable（审计附带 3，session-stability 工单 03）：
+    // 侧栏视图反复显示/销毁曾把返回值丢弃——sink 只增不减，长期使用积累
+    // 失效广播目标。视图销毁时成对拆除（镜像 openChatTab 的先例）。
+    const sub = bridgeWebview(this.controller, view.webview, () => {});
+    view.onDidDispose(() => sub.dispose());
   }
 }
 

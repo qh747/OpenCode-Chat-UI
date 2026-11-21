@@ -76,6 +76,8 @@ export interface ChatState {
   submitKey: SubmitKey;
   showContextBar: boolean;
   maxVisibleDiffRows: number;
+  /** 点 + 后、新会话落地前为 true——头部内联「创建中」反馈（spec Q10a）。 */
+  creatingSession: boolean;
 }
 
 export const initialState: ChatState = {
@@ -105,6 +107,7 @@ export const initialState: ChatState = {
   maxVisibleDiffRows: 5,
   hasEarlier: false,
   loadingEarlier: false,
+  creatingSession: false,
 };
 
 function applySnapshot(state: ChatState, snapshot: Snapshot): ChatState {
@@ -395,6 +398,8 @@ export function reducer(state: ChatState, message: HostToWeb): ChatState {
       };
     case "history":
       return { ...state, historyGroups: message.groups };
+    case "creatingSession":
+      return { ...state, creatingSession: message.creating };
     default:
       return state;
   }

@@ -97,11 +97,13 @@ describe("rootSessions", () => {
 describe("groupHistoryRowsByDate", () => {
   const day = 24 * 60 * 60 * 1000;
 
-  test("buckets rows by their own updated time, newest first", () => {
+  test("buckets rows by their own created time, newest first", () => {
+    // 世界观随 spec Q7（session-stability 工单 02）翻新：分桶键 updated→created，
+    // 老会话刚有活动（updated=now）也留在更早桶；断言原文保持不动。
     const tenDaysAgo = Date.now() - 10 * day;
     const groups = groupHistoryRowsByDate([
-      row({ id: "ses_stale", updated: tenDaysAgo }),
-      row({ id: "ses_fresh", updated: Date.now() }),
+      row({ id: "ses_stale", created: tenDaysAgo, updated: Date.now() }),
+      row({ id: "ses_fresh", created: Date.now(), updated: Date.now() }),
     ]);
 
     assert.equal(groups.length, 2);

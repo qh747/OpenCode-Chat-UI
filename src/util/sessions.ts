@@ -36,12 +36,23 @@ export function deriveSessionStatus(
   return "idle";
 }
 
-/** Date-group a session list (newest first within groups). */
+/**
+ * 客户端创建序重排（spec Q7，session-stability 工单 02）：服务器
+ * `GET /api/session` 只能按 `time.updated` 排序返回，行位会随活动跳动；
+ * 拉取后统一改按 created 倒序——新建的排最前，位置此后不再移动。
+ * 返回新数组，不改入参；created 相同时保持传入序（sort 稳定）。
+ */
+export function sortByCreatedDesc<T>(items: T[], createdOf: (item: T) => number): T[] {
+  return [...items].sort((a, b) => createdOf(b) - createdOf(a));
+}
+
+/** 按创建时间对会话列表分桶；桶序随传入序，调用方先用
+ * `sortByCreatedDesc` 排好（spec Q7）。 */
 export function groupSessionsByDate(sessions: SessionInfo[]): {
   label: string;
   sessions: SessionInfo[];
 }[] {
-  return groupByDate(sessions, (session) => session.time.updated);
+  return groupByDate(sessions, (session) => session.time.created);
 }
 
 /**
@@ -53,17 +64,19 @@ export function rootSessions(rows: HistoryRow[]): HistoryRow[] {
   return rows.filter((row) => row.parentID === undefined);
 }
 
-/** Date-group history rows by their own updated time（无折叠——ADR-0016）。 */
+/** 按创建时间对历史行分桶（无折叠——ADR-0016；分桶键=created，
+ * spec Q7：老会话刚有活动也不迁桶。桶内顺序=传入顺序，
+ * 调用方先用 `sortByCreatedDesc` 重排）。 */
 export function groupHistoryRowsByDate(rows: HistoryRow[]): {
   label: string;
   sessions: HistoryRow[];
 }[] {
-  return groupByDate(rows, (row) => row.updated);
+  return groupByDate(rows, (row) => row.created);
 }
 
 function groupByDate<T>(
   items: T[],
-  updatedOf: (item: T) => number,
+  timeOf: (item: T) => number,
 ): {
   label: string;
   sessions: T[];
@@ -72,7 +85,7 @@ function groupByDate<T>(
   const dayMs = 24 * 60 * 60 * 1000;
   const buckets = new Map<string, T[]>();
   for (const item of items) {
-    const updated = updatedOf(item);
+    const updated = timeOf(item);
     const age = now - updated;
     let key: string;
     if (age < dayMs && new Date(updated).getDate() === new Date(now).getDate()) {
@@ -121,6 +134,23 @@ export interface HistoryRow {
   created: number;
   updated: number;
   status: SessionRunStatus;
+}
+
+/**
+ * 服务器自动标题识别（spec Q11a，session-stability 工票 03）：服务器对新
+ * 会话起 `New session - <ISO 时间戳>` 的英文自动标题（v2.3.0 活体实测），
+ * 显示层命中时统一显示 t("newSession")，不命中原样降级、不改服务器数据。
+ * 窄正则：只认这个精确形状（任一 ISO 秒精度），手起的近似名（无时间戳
+ * 部分）不误伤。title 空缺回落 fallback。
+ */
+export function displaySessionTitle(title: string | undefined, fallback: string): string {
+  if (
+    title !== undefined &&
+    /^New session - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(title)
+  ) {
+    return t("newSession");
+  }
+  return title || fallback;
 }
 
 export function relativeSessionTime(timestamp: number): string {

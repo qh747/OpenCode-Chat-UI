@@ -64,6 +64,9 @@ The display mode while a session with a parent is on screen: the header's decora
 **Row status**
 A history row's status is the status of the session on that row alone: blocked (yellow, waiting on the user), working (green), failed (red), idle (uncolored). Subagent sessions never appear in the history menu, and their states never paint a root row — a delegating session reads uncolored while its subagent works. Delegation activity lives in the chat's subagent strip instead. Pinned by ADR-0016, which supersedes the aggregated rule of ADR-0010.
 
+**History order**
+The rule that the session lists — the webview history menu and the session picker — rank sessions by creation time: newest-created first, date buckets keyed on creation, and the row's time column reading the creation time so order and time agree. A session keeps its row position forever; activity changes neither the place nor the bucket, and a new session appears at the top and stays there. Distinct from the server's listing order, which ranks by latest activity.
+
 **Rewind point**
 A user message used as the boundary for a revert: everything after it (messages and their file changes) is rolled back via the server's staged revert.
 
