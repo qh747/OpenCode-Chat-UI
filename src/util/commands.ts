@@ -60,6 +60,36 @@ export function splitCommandInput(text: string): { command: string; arguments: s
 }
 
 /**
+ * 光标前缀内的尾部 `/` 触发（spec 分支 5：任意光标位置的 `/` 都能唤起命令/
+ * skills 菜单，不再要求整段文本以 `/` 开头）。与 mention-trigger.ts 的
+ * mentionTail 同款形状：只对光标前缀做尾部匹配——`/` 之后直到光标处不能
+ * 有空格或另一个 `/`。已知取舍：URL 与「3/4」里的 `/` 也会触发，靠空格、
+ * 查询无匹配或 Esc（仅 @ 有抑制）收场；这是「任意位置触发」的代价。
+ */
+export interface CommandTail {
+  /** `/` 之后的查询词（到光标为止），可能为空串。 */
+  query: string;
+  /** 触发字符 `/` 在全文中的下标。 */
+  atIndex: number;
+  /** 检测时使用的光标位置（已钳制进文本范围）。 */
+  caret: number;
+}
+
+/**
+ * 在 `text` 的 `caret` 前缀内寻找尾部 `/` 触发。`caret` 缺省为文本末尾；
+ * 越界值会被钳制。命中返回 `CommandTail`，否则 `undefined`（不触发）。
+ */
+export function commandTail(text: string, caret?: number): CommandTail | undefined {
+  const end =
+    caret === undefined ? text.length : Math.max(0, Math.min(caret, text.length));
+  const match = /\/([^\s/]*)$/.exec(text.slice(0, end));
+  if (!match) {
+    return undefined;
+  }
+  return { query: match[1] ?? "", atIndex: match.index, caret: end };
+}
+
+/**
  * Group models for the picker: Recent first (dedup, most-recent first),
  * then providers in the order opencode-go, opencode, then the rest.
  */

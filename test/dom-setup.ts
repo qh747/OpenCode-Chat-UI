@@ -24,5 +24,7 @@ dom.window.TextEvent = dom.window.Event as unknown as typeof TextEvent;
 globalAny.TextEvent = dom.window.TextEvent;
 // React 18 的 act() 需要显式声明测试环境。
 globalAny.IS_REACT_ACT_ENVIRONMENT = true;
+// jsdom 没有 scrollIntoView（Composer 的高亮行滚动 effect 会用到）。
+dom.window.Element.prototype.scrollIntoView = (() => {}) as never;
 
 export { dom };

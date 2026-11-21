@@ -190,26 +190,53 @@ export function App({ state, send, composerHandleRef }: Props) {
   const [effortOpen, setEffortOpen] = useState(false);
   const [sessionInfoOpen, setSessionInfoOpen] = useState(false);
 
-  // The first snapshot carries everything the panel needs — catalog, title,
-  // git, messages — while the state/catalog messages before it describe only
-  // part of the screen. Painting those would show a half-built panel that then
-  // pops in piece by piece, so hold the very first paint until it lands. On a
-  // connection error the banner is the point, so show it right away.
-  if (!state.hydrated && state.connection !== "error") {
-    return null;
-  }
+  // 加载层（spec 分支 7，变体 C）：面板从第一帧就渲染，但就绪前整体置灰不可
+  // 点，顶部一条不定进度条；就绪后进度条走满淡出、解除置灰。就绪判据：已连
+  // 接 + 首快照已应用 + 模型列表非空 + 模型引用可解析——目录竞态会让首个快照
+  // 携带空 catalog（宿主在 server 注册表就绪前拉取，见 src/host.ts 的注释），
+  // 旧的两道门（hydrated/catalogLoaded）放行后模型名会以兜底「模型」上屏、思
+  // 考深度缺失。10s 超时兜底放行，坏服务器不得把用户锁死在加载层；连接报错
+  // 立即绕过（横幅才是重点）。
+  const modelsReady = state.catalog.models.length > 0;
+  const modelRefReady = !!(state.model ?? state.catalog.defaultModel);
+  const bootReady =
+    state.connection === "connected" && state.hydrated && modelsReady && modelRefReady;
+  const [bootTimedOut, setBootTimedOut] = useState(false);
+  useEffect(() => {
+    if (state.connection !== "connected" || bootReady) {
+      setBootTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setBootTimedOut(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [state.connection, bootReady]);
+  const booted = state.connection === "error" || bootReady || bootTimedOut;
+  const booting = !booted;
+
+  // 进度条：加载中不定滑动；揭示后走满并淡出，随后卸载；报错不显示（渲染
+  // 条件而非 effect，静态渲染/首帧即正确）。
+  const [barGone, setBarGone] = useState(false);
+  useEffect(() => {
+    if (booting) {
+      setBarGone(false);
+      return;
+    }
+    const timer = setTimeout(() => setBarGone(true), 900);
+    return () => clearTimeout(timer);
+  }, [booting]);
 
   // The connection reports "connected" before the catalog is posted, so gating
   // each picker on its own data makes them pop in one at a time. They all read
   // from the same catalog, so waiting for it renders the whole row — mode,
-  // model and effort — in a single commit.
+  // model and effort — in a single commit. 加载层置灰期间不渲染药丸：防止空
+  // catalog 上屏时「模型」兜底字样闪现；超时兜底放行后才按现状降级显示。
   const catalogReady = state.connection === "connected" && state.catalogLoaded;
 
   // 返回按钮的目标（subagent-nav）：只在子代理会话里提供；本地 const
   // 让 JSX 闭包里的窄化成立，也避免在渲染中途读到漂移的 state。
   const parentSessionID = state.isSubagentSession ? state.parentSessionID : undefined;
 
-  const pickers = catalogReady ? (
+  const pickers = catalogReady && booted ? (
     <>
       <Dropdown
         value={agent ?? ""}
@@ -246,7 +273,10 @@ export function App({ state, send, composerHandleRef }: Props) {
   ) : null;
 
   return (
-    <div className="app">
+    <div className={`app${booting ? " booting" : ""}`}>
+      {!barGone && state.connection !== "error" && (
+        <div className={`boot-bar${booting ? "" : " done"}`} aria-hidden="true" />
+      )}
       <div className="header">
         {/* 子代理视图：装饰 logo 让位给返回按钮（Q7）——左上角、icon-btn
             同规格，不加行高；点击走与历史菜单相同的 switchSession（Q1）。 */}

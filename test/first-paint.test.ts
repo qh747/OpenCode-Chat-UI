@@ -31,20 +31,25 @@ function render(state: ChatState): string {
 }
 
 describe("first paint", () => {
-  test("nothing is painted while the connection is still starting", () => {
+  test("the panel paints dimmed (boot layer) while the connection is still starting", () => {
     const state = apply([{ kind: "state", state: "starting", version: "1.2.3" }]);
-    assert.equal(render(state), "");
+    const html = render(state);
+    assert.match(html, /class="app booting"/);
+    assert.match(html, /boot-bar/);
   });
 
-  test("nothing is painted when the catalog lands before the snapshot", () => {
+  test("the panel paints dimmed when the catalog lands before the snapshot", () => {
     const state = apply([
       { kind: "state", state: "connected", version: "1.2.3" },
       { kind: "catalog", catalog },
     ]);
-    assert.equal(render(state), "");
+    const html = render(state);
+    assert.match(html, /class="app booting"/);
+    // 快照未到（未水合）：加载层不该露出药丸行
+    assert.doesNotMatch(html, /model-picker/);
   });
 
-  test("the first snapshot paints the whole panel in one commit", () => {
+  test("the first snapshot with a full catalog undims the panel in one commit", () => {
     const state = apply([
       { kind: "state", state: "connected", version: "1.2.3" },
       { kind: "catalog", catalog },
@@ -72,10 +77,40 @@ describe("first paint", () => {
     assert.match(html, /class="composer"/);
     assert.match(html, /model-picker/);
     assert.match(html, /class="ctx-bar"/);
+    assert.doesNotMatch(html, /booting/);
   });
 
-  test("a connection error is shown without waiting for a snapshot", () => {
+  test("an empty-catalog snapshot (the host's catalog race) keeps the panel dimmed", () => {
+    const emptyCatalog: Catalog = { agents: [], models: [], commands: [], skills: [], recentModels: [] };
+    const state = apply([
+      { kind: "state", state: "connected", version: "1.2.3" },
+      {
+        kind: "snapshot",
+        snapshot: {
+          title: "Fix the thing",
+          agent: "build",
+          busy: false,
+          messages: [],
+          pending: [],
+          diffs: [],
+          catalog: emptyCatalog,
+          workspacePath: "h:\\MyCode\\opencode-plugin",
+          queue: [],
+          queuePaused: false,
+        },
+      },
+    ]);
+    const html = render(state);
+    assert.match(html, /class="app booting"/);
+    // 目录竞态：空的模型列表不得以「模型」兜底字样上屏
+    assert.doesNotMatch(html, /model-picker/);
+  });
+
+  test("a connection error is shown immediately without the boot layer", () => {
     const state = apply([{ kind: "state", state: "error", error: "spawn failed" }]);
-    assert.match(render(state), /spawn failed/);
+    const html = render(state);
+    assert.match(html, /spawn failed/);
+    assert.doesNotMatch(html, /booting/);
+    assert.doesNotMatch(html, /boot-bar/);
   });
 });

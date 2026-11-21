@@ -4,11 +4,12 @@ import type { ChipInput, ComposerHandle } from "./composerTypes";
 import { ComposerDraftStore } from "./composerDrafts";
 import { ContextBar } from "./ContextBar";
 import type { ContextBarProps } from "./ContextBar";
-import { BUILTIN_COMMANDS, filterCommands, filterSkills, mergeMentions, splitCommandInput } from "../src/util/commands";
+import { BUILTIN_COMMANDS, commandTail, filterCommands, filterSkills, mergeMentions, splitCommandInput } from "../src/util/commands";
 import type { CommandInfoLike, MentionOption, SkillOption } from "../src/util/commands";
 import type { CommandInfo, SkillInfo } from "../src/opencode/types";
 import type { AttachmentKind, AttachmentPreview, EditorFile } from "../src/webview/protocol";
-import { shouldSend, type SubmitKey } from "../src/util/composer-keys";
+import { resolveEnter } from "../src/util/enter-keys";
+import type { SubmitKey } from "../src/util/composer-keys";
 import { mentionTail } from "../src/util/mention-trigger";
 import { t, type MessageKey } from "../src/util/i18n";
 
@@ -156,8 +157,20 @@ export function Composer({
     // text/chips 读自 ref，故意不进依赖：切换时取"当时的"草稿而非跟随重渲。
   }, [sessionID]);
 
-  const commandMode = text.startsWith("/");
-  const commandQuery = commandMode ? text.slice(1) : "";
+  /** 光标前缀内的尾部 `/` 触发（spec 分支 5：任意光标位置都能唤起命令菜单）。
+   *  与 `@` 同时命中时的优先级：`@` 已活跃且 `/` 在其后输入（atIndex 更大）时
+   *  让位给文件菜单（如 `@路径/里的斜杠`）；反之 `/` 在前（含整段以 `/` 开头）
+   *  时命令菜单优先，与旧的 startsWith 行为一致。 */
+  const commandTailInfo = composing ? undefined : commandTail(text, caret);
+  /** 光标前缀内的尾部 `@` 触发；渲染期随 text/caret 重算，永不会与文本脱节。 */
+  const mentionTailInfo = composing ? undefined : mentionTail(text, caret);
+  const mentionActive =
+    mentionTailInfo !== undefined && suppressedAt !== mentionTailInfo.atIndex;
+  const commandMode =
+    commandTailInfo !== undefined &&
+    !(mentionActive && commandTailInfo.atIndex > mentionTailInfo.atIndex);
+  const mentionOpen = mentionActive && !commandMode;
+  const commandQuery = commandMode && commandTailInfo ? commandTailInfo.query : "";
   const commandList = (() => {
     const builtin = BUILTIN_COMMANDS.map((c) => {
       const descriptionKey = BUILTIN_DESCRIPTIONS[c.name];
@@ -174,13 +187,7 @@ export function Composer({
   const skillRows = commandMode
     ? filterSkills(skills, commandQuery.replace(/\s+.*$/, ""))
     : [];
-  /** 光标前缀内的尾部 `@` 触发；渲染期随 text/caret 重算，永不会与文本脱节。 */
-  const mentionTailInfo = composing ? undefined : mentionTail(text, caret);
   const mentionQuery = mentionTailInfo?.query;
-  const mentionOpen =
-    mentionTailInfo !== undefined &&
-    !commandMode &&
-    suppressedAt !== mentionTailInfo.atIndex;
 
   const mentionRows = useMemo<MentionRow[]>(() => {
     if (!mentionOpen) {
@@ -312,7 +319,10 @@ export function Composer({
       return;
     }
     const next = mentionTail(value, selectionStart ?? value.length);
-    if (next && !value.startsWith("/") && suppressedAt !== next.atIndex) {
+    const slash = commandTail(value, selectionStart ?? value.length);
+    // `/` 触发更晚（atIndex 更大）时命令菜单优先，不必拉文件结果（与渲染期
+    // 的优先级公式一致）；其余情况照常请求，菜单开不开由优先级裁决。
+    if (next && suppressedAt !== next.atIndex && !(slash && slash.atIndex > next.atIndex)) {
       requestMention(next.query);
     }
   };
@@ -333,8 +343,27 @@ export function Composer({
     textareaRef.current?.focus();
   };
 
+  /** 受控输入的编程式更新：先同步 DOM 值与选区，再提交 state。React 重渲时
+   *  发现值已一致便不再写 DOM，光标因此得以停在插入位置（拼接补全的关键）。 */
+  const setTextAtCaret = (next: string, pos: number) => {
+    const el = textareaRef.current;
+    if (el) {
+      el.value = next;
+      el.setSelectionRange(pos, pos);
+    }
+    setText(next);
+    setCaret(pos);
+  };
+
+  /** 接受命令：在触发段（`/query`）原位替换为 `/<name> `，保留前后正文。 */
   const acceptCommand = (name: string) => {
-    setText(`/${name} `);
+    const insert = `/${name} `;
+    const tail = composing ? undefined : commandTail(text, caret);
+    if (tail) {
+      setTextAtCaret(text.slice(0, tail.atIndex) + insert + text.slice(tail.caret), tail.atIndex + insert.length);
+    } else {
+      setTextAtCaret(insert, insert.length);
+    }
     textareaRef.current?.focus();
   };
 
@@ -342,9 +371,16 @@ export function Composer({
    *  name, is what the server resolves) and suppresses the file picker that
    *  the fresh `@` tail would otherwise open. */
   const acceptSkill = (skill: SkillOption) => {
-    setText(`@${skill.id} `);
-    // 刚插入的 `@` 在下标 0；抑制它，避免新尾部再次弹开文件补全。
-    setSuppressedAt(0);
+    const insert = `@${skill.id} `;
+    const tail = composing ? undefined : commandTail(text, caret);
+    if (tail) {
+      setTextAtCaret(text.slice(0, tail.atIndex) + insert + text.slice(tail.caret), tail.atIndex + insert.length);
+      // 刚插入的 `@` 在拼接起点；抑制它，避免新尾部再次弹开文件补全。
+      setSuppressedAt(tail.atIndex);
+    } else {
+      setTextAtCaret(insert, insert.length);
+      setSuppressedAt(0);
+    }
     textareaRef.current?.focus();
   };
 
@@ -352,8 +388,7 @@ export function Composer({
     // 按触发信息精确移除 `@query`（光标不在文末时也不能多删）。
     if (mentionTailInfo) {
       const { atIndex, caret: tailCaret } = mentionTailInfo;
-      setText((current) => current.slice(0, atIndex) + current.slice(tailCaret));
-      setCaret(atIndex);
+      setTextAtCaret(text.slice(0, atIndex) + text.slice(tailCaret), atIndex);
     }
     if (row.group === "selected" && row.path) {
       addChip({ path: row.path, name: row.name, kind: "selection", range: row.range });
@@ -534,41 +569,41 @@ export function Composer({
       return;
     }
     if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-      // Command and mention confirmation stays on bare Enter regardless of
-      // the send keystroke; only sending the message itself is configurable.
-      if (commandMode && !event.shiftKey) {
-        event.preventDefault();
-        // With arguments typed ("/review hello") Enter executes directly;
-        // bare "/name" accepts the highlighted suggestion into the input.
-        if (text.includes(" ")) {
-          const { command, arguments: args } = splitCommandInput(text);
-          if (command) {
-            onRunCommand(command, args);
-            setText("");
-            setActive(undefined);
-          }
-          return;
-        }
-        if (acceptActive()) {
-          return;
-        }
-        const bare = splitCommandInput(text).command;
-        if (bare) {
-          onRunCommand(bare, "");
+      // 决策表见 src/util/enter-keys.ts（spec 分支 5）：有高亮行先确认补全；
+      // 光标中途绝不发送/执行/换行；末尾才发送或执行命令语法。命令与 @ 的
+      // 确认始终用裸 Enter，与发送键设置无关；中文输入法的 Enter（isComposing）
+      // 不进这里，交给输入法确认候选。
+      const decision = resolveEnter({
+        text,
+        caret,
+        menu: commandMode ? "commands" : mentionOpen ? "mentions" : undefined,
+        rows: commandMode ? commandList.length + skillRows.length : mentionRows.length,
+        activeIndex: active?.index,
+        shift: event.shiftKey,
+        submitKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+      });
+      switch (decision.action) {
+        case "newline":
+          break;
+        case "none":
+          event.preventDefault();
+          break;
+        case "accept":
+          event.preventDefault();
+          acceptActive();
+          break;
+        case "send":
+          event.preventDefault();
+          doSend();
+          break;
+        case "execute":
+          event.preventDefault();
+          onRunCommand(decision.command, decision.args);
           setText("");
           setActive(undefined);
-        }
-        return;
-      }
-      if (mentionOpen && !event.shiftKey) {
-        event.preventDefault();
-        if (acceptActive()) {
-          return;
-        }
-      }
-      if (shouldSend(submitKey, event.nativeEvent)) {
-        event.preventDefault();
-        doSend();
+          break;
       }
       return;
     }
@@ -741,7 +776,8 @@ export function Composer({
             setComposing(false);
             const el = event.currentTarget;
             const next = mentionTail(el.value, el.selectionStart ?? undefined);
-            if (next && !el.value.startsWith("/") && suppressedAt !== next.atIndex) {
+            const slash = commandTail(el.value, el.selectionStart ?? undefined);
+            if (next && suppressedAt !== next.atIndex && !(slash && slash.atIndex > next.atIndex)) {
               requestMention(next.query);
             }
           }}
