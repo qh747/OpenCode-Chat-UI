@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.24
+
+- The transcript now tells you which model produced what. The old "start of conversation" line at the top is gone; in its place a start marker names the model the session opened with, and a switch marker appears directly above the first reply every time the running model changed — switching back to an earlier model marks again. Everything is derived from the model ref each assistant message already carries, so old sessions whose messages lack the field show no marker at all rather than a wrong one, and a reasoning-effort change alone is not a switch. (Spec: `.scratch/model-markers-jump-bottom/spec.md`.)
+- Reading a long transcript no longer costs a scroll marathon. Two notches of downward wheel while away from the bottom surface a small floating ↓ pill just under the transcript — above the permission cards and the changed-files list — and clicking it smooth-scrolls to the latest content. Reaching the bottom hides it again, an upward wheel resets the count, and a session switch never carries the pill over; new messages arriving while you are reading older history do not yank you down.
+
 ## 0.4.23
 
 - The transcript now reaches the beginning of a session. `GET /api/session/{id}/message` is cursor-paginated and the panel asked for one page without following the cursor, so a long session simply began at its 50th-newest message. The initial page is now 100 messages, scrolling near the top backfills older pages behind a "loading earlier" row, and a "start of conversation" marker appears once the server answers with an empty page. Backfilled pages are append-only, so a refresh at turn end never drops them; a session switch or rewind clears them and they refill on demand. Export follows the cursor to exhaustion, so an exported transcript is always complete.
